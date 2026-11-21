@@ -27,7 +27,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=etat_major --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=etat_major --cov=scripts --cov-report=term-missing --cov-fail-under=80"
 
 [tool.ruff]
 line-length = 100
