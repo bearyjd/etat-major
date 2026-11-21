@@ -89,7 +89,10 @@ This keeps the SPEC rule that task files are editable in Obsidian or any editor.
 
 - `owner`: a single non-empty string. Zero, a list or more than one value is a validation error.
 - `status`: one of `draft`, `ready`, `blocked`, `done`. Any other value in a file is rejected, including the derived states `running`, `needs-you`, `review`, `failed`.
-- `done`: written only by a human. The file format cannot prove who wrote it, so the guard lives in the board/API layer. Agents and adapters go through an API that refuses to set `done`.
+- `done`: written only by a human. The file format cannot prove who wrote it, so the guard covers every write path, not only the API:
+  - Canonical task files stay writable by humans (Obsidian, any editor, git). Agent processes get no write access to canonical task files: they run in worktrees or sandboxes and change tasks only through the board API, which refuses to set `done`.
+  - Direct Markdown edits are checked on read. A task whose `status` is `done` is accepted only if the transition is recorded as a human decision (a human-authored commit or a board confirmation). Otherwise the reader rejects it.
+  - An import never persists `done` without human approval. An upstream `done` is held as an import error until a human approves it explicitly.
 - `acceptance`: a YAML list of non-empty strings, order significant, with no checked state.
 
 ## Acceptance criteria mapping
@@ -99,7 +102,7 @@ Between Backlog.md's checklist and our YAML `acceptance` field.
 | Direction | Rule |
 |---|---|
 | Backlog.md to ours (import) | Read the lines between `<!-- AC:BEGIN -->` and `<!-- AC:END -->`. Each `- [ ] #N text` or `- [x] #N text` becomes one list entry, `text`, in order. The `#N` prefix is dropped. |
-| Import variants | Upstream also accepts unnumbered items (`- [ ] text`, `- [x] text`) and, when the AC markers are absent, a markerless checklist under the `## Acceptance Criteria` heading. The importer handles both the same way: one entry per checklist item, in order, with the optional `#N` dropped. Any checklist line it cannot parse, or any criteria section it cannot locate, is reported as an import error. Criteria are never dropped silently. |
+| Import variants | Upstream also accepts unnumbered items (`- [ ] text`, `- [x] text`) and, when the AC markers are absent, a markerless checklist under the `## Acceptance Criteria` heading. The `#N` prefix is stripped only inside the marked block (`<!-- AC:BEGIN -->` to `<!-- AC:END -->`). In a markerless checklist, Backlog.md treats `#N` as literal text, so `- [ ] #42 remains visible` imports as `#42 remains visible`. Unnumbered items import as written. One entry per checklist item, in order. Any checklist line it cannot parse, or any criteria section it cannot locate, is reported as an import error. Criteria are never dropped silently. |
 | Checked flag on import | Discarded from the contract. It is not copied to `status`. A checked box never produces `done`. An importer may report how many were checked, for a human to review. |
 | Ours to Backlog.md (export) | Entry `i` (starting at 1) becomes `- [ ] #i text`, wrapped in the AC markers under a `## Acceptance Criteria` heading. All boxes are unchecked. |
 | Round trip | `acceptance` to checklist to `acceptance` is lossless for plain-text entries. Entries must be single-line, so line breaks are rejected at validation. |
@@ -115,4 +118,4 @@ Between Backlog.md's checklist and our YAML `acceptance` field.
 
 - Static reading of source at one commit. Backlog.md's CLI and MCP were not run.
 - The preservation of unknown frontmatter keys was read in code, not exercised end to end.
-- The only tests are doc-content checks in `tests/test_spike_doc.py`.
+- This change is docs-only and adds no tests.
