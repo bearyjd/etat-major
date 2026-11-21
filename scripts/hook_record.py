@@ -19,11 +19,14 @@ CREATE TABLE IF NOT EXISTS events (
     event TEXT NOT NULL,
     tool_name TEXT,
     cwd TEXT,
-    message TEXT
+    message TEXT,
+    notification_type TEXT
 )
 """
 
-# One row per session whose latest event wants a human. Derived, never stored.
+# Only events that establish or resolve a state count. Anything else (for
+# example an idle_prompt or auth_success Notification) is ignored, so it can
+# neither raise nor clear an alert. Derived, never stored.
 NEEDS_ME_SQL = """
 SELECT e.session_id,
        CASE e.event
@@ -33,7 +36,13 @@ SELECT e.session_id,
        END AS state,
        e.ts, e.message
 FROM events e
-WHERE e.id = (SELECT MAX(id) FROM events WHERE session_id = e.session_id)
+WHERE e.id = (
+        SELECT MAX(id) FROM events s
+        WHERE s.session_id = e.session_id
+          AND ((s.event = 'Notification'
+                AND s.notification_type IN ('permission_prompt', 'elicitation_dialog'))
+               OR s.event IN ('Stop', 'StopFailure', 'UserPromptSubmit',
+                              'PreToolUse', 'PostToolUse')))
   AND e.event IN ('Notification', 'Stop', 'StopFailure')
 ORDER BY e.id
 """
@@ -57,6 +66,7 @@ def parse_payload(raw: str) -> dict | None:
         "tool_name": data.get("tool_name"),
         "cwd": data.get("cwd"),
         "message": data.get("message"),
+        "notification_type": data.get("notification_type"),
     }
 
 
@@ -64,8 +74,9 @@ def insert_event(db_path: str, row: dict) -> None:
     with sqlite3.connect(db_path) as con:
         con.execute(SCHEMA)
         con.execute(
-            "INSERT INTO events (ts, session_id, event, tool_name, cwd, message) "
-            "VALUES (:ts, :session_id, :event, :tool_name, :cwd, :message)",
+            "INSERT INTO events "
+            "(ts, session_id, event, tool_name, cwd, message, notification_type) "
+            "VALUES (:ts, :session_id, :event, :tool_name, :cwd, :message, :notification_type)",
             row,
         )
     con.close()

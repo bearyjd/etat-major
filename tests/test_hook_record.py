@@ -22,6 +22,7 @@ NOTIFY = {
     **BASE,
     "hook_event_name": "Notification",
     "message": "Claude needs your permission to use Bash",
+    "notification_type": "permission_prompt",
 }
 STOP = {**BASE, "hook_event_name": "Stop"}
 
@@ -89,3 +90,28 @@ def test_rollup_what_needs_me(tmp_path, monkeypatch):
     with sqlite3.connect(db) as con:
         got = con.execute(hook_record.NEEDS_ME_SQL).fetchall()
     assert [(r[0], r[1]) for r in got] == [("s-alice-1", "needs-you"), ("s-alice-2", "review")]
+
+
+def needs_me(db):
+    with sqlite3.connect(db) as con:
+        return [(r[0], r[1]) for r in con.execute(hook_record.NEEDS_ME_SQL)]
+
+
+def test_auth_success_notification_is_not_an_alert(tmp_path, monkeypatch):
+    db = tmp_path / "e.db"
+    run(db, {**NOTIFY, "notification_type": "auth_success"}, monkeypatch)
+    assert needs_me(db) == []
+
+
+def test_idle_notification_keeps_review_state(tmp_path, monkeypatch):
+    db = tmp_path / "e.db"
+    run(db, STOP, monkeypatch)
+    run(db, {**NOTIFY, "notification_type": "idle_prompt"}, monkeypatch)
+    assert needs_me(db) == [("s-alice-1", "review")]
+
+
+def test_idle_notification_does_not_clear_permission_alert(tmp_path, monkeypatch):
+    db = tmp_path / "e.db"
+    run(db, NOTIFY, monkeypatch)
+    run(db, {**NOTIFY, "notification_type": "auth_success"}, monkeypatch)
+    assert needs_me(db) == [("s-alice-1", "needs-you")]
