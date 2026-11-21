@@ -110,3 +110,28 @@ def test_main_in_process(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "stdin", io.StringIO("nope"))
     assert mod.main(["--db", str(tmp_path / "x.db")]) == 2
     assert not (tmp_path / "x.db").exists()
+
+
+def test_nan_constant_rejected_without_db(tmp_path):
+    db = tmp_path / "events.db"
+    raw = '{"session_id":"s1","hook_event_name":"Stop","extra":NaN}'
+    assert run(db, raw).returncode != 0
+    assert not db.exists()
+
+
+def test_paths_and_free_text_in_metadata_rejected(tmp_path):
+    db = tmp_path / "events.db"
+    bad = [
+        {"session_id": "sk-secret token value", "hook_event_name": "Stop"},
+        {"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "/etc/passwd"},
+        {"session_id": "s1", "hook_event_name": "free text here"},
+    ]
+    for payload in bad:
+        assert run(db, json.dumps(payload)).returncode != 0
+        assert not db.exists()
+
+
+def test_mcp_tool_name_accepted(tmp_path):
+    db = tmp_path / "events.db"
+    payload = {"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "mcp__srv__do"}
+    assert run(db, json.dumps(payload)).returncode == 0

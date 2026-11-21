@@ -9,6 +9,7 @@ Exit codes: 0 recorded, 2 invalid input (no DB is created).
 import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 from datetime import UTC, datetime
@@ -22,9 +23,17 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS hook_events (
 )"""
 
 
+_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")
+_NAME_RE = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
+
+
+def _reject_constant(name: str) -> None:
+    raise ValueError(f"non-JSON constant {name!r}")
+
+
 def parse_payload(raw: str) -> tuple[str, str, str | None]:
     """Return (session_id, hook_event_name, tool_name) or raise ValueError."""
-    data = json.loads(raw)
+    data = json.loads(raw, parse_constant=_reject_constant)
     if not isinstance(data, dict):
         raise ValueError("payload must be a JSON object")
     session_id = data.get("session_id")
@@ -34,6 +43,12 @@ def parse_payload(raw: str) -> tuple[str, str, str | None]:
         raise ValueError("session_id and hook_event_name must be strings")
     if tool is not None and not isinstance(tool, str):
         raise ValueError("tool_name must be a string when present")
+    if not _ID_RE.fullmatch(session_id):
+        raise ValueError("session_id has unexpected characters")
+    if not _NAME_RE.fullmatch(event):
+        raise ValueError("hook_event_name has unexpected characters")
+    if tool is not None and not _NAME_RE.fullmatch(tool):
+        raise ValueError("tool_name has unexpected characters")
     return session_id, event, tool
 
 
