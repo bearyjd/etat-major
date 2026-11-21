@@ -1,6 +1,6 @@
 # État-major (working title)
 
-Self-hosted command center for coding agents running in tmux. It gives a strategic view (initiative > project > task) over agents, and composes existing tools instead of rebuilding them. Public repo, AGPL-3.0, French naming for projects. Owner: the repo maintainer. Full spec: docs/SPEC.md (exported from the Claude doc "État-major — Product & Technical Spec"). If this file and the spec disagree, the spec wins; tell the maintainer.
+Self-hosted command center for coding agents running in tmux. It gives a strategic view (initiative > project > task) over agents, and composes existing tools instead of rebuilding them. Public repo, AGPL-3.0, French naming for projects. Owner: the repo maintainer. Full spec: docs/SPEC.md. This repo is the source of truth; an earlier snapshot exists as a Claude doc and is not kept in sync. If this file and the spec disagree, the spec wins; tell the maintainer.
 
 ## North stars (judge every decision against these)
 1. Coding on the go: web interface to tmux from a phone, with audio input and output as an option. Phases 3 and 6; voice after.

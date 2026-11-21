@@ -1,6 +1,6 @@
 # État-major: Product & Technical Spec
 
-Last updated 2026-11-21. Working title. Status: pre-implementation. The two diagrams in the source doc (architecture and roadmap) are not reproduced here; the text below carries the same information.
+Last updated 2026-11-21. Working title. Status: pre-implementation. This file is the source of truth. It began as a Claude doc whose two diagrams (architecture and roadmap) are not reproduced here; the text below carries the same information.
 
 ## Vision
 
