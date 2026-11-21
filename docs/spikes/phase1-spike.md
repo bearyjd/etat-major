@@ -91,8 +91,10 @@ This keeps the SPEC rule that task files are editable in Obsidian or any editor.
 - `status`: one of `draft`, `ready`, `blocked`, `done`. Any other value in a file is rejected, including the derived states `running`, `needs-you`, `review`, `failed`.
 - `done`: written only by a human. The file format cannot prove who wrote it, so the guard covers every write path, not only the API:
   - Canonical task files stay writable by humans (Obsidian, any editor, git). Agent processes get no write access to canonical task files: they run in worktrees or sandboxes and change tasks only through the board API, which refuses to set `done`.
-  - Direct Markdown edits are checked on read. A task whose `status` is `done` is accepted only if the transition is recorded as a human decision (a human-authored commit or a board confirmation). Otherwise the reader rejects it.
-  - An import never persists `done` without human approval. An upstream `done` is held as an import error until a human approves it explicitly.
+  - Git author metadata is self-reported and is not proof of a human decision. A worktree alone gives no write isolation, and a human-approved merge can carry an agent-authored status change. Neither counts as approval.
+  - `done` reaches canonical state only with an authenticated human approval of that specific task transition (task id, from status, to `done`). This holds for every path: a direct edit, a merge, a board action and an import. The reader rejects any `done` without a matching approval record.
+  - An approval is consumed by the transition it names. Re-reading an approved transition is idempotent and changes nothing. If a task is reopened (any status other than `done`) and later marked `done` again, it needs a fresh approval.
+  - An import never persists `done` without that approval. An upstream `done` is held as an import error until a human approves it explicitly.
 - `acceptance`: a YAML list of non-empty strings, order significant, with no checked state.
 
 ## Acceptance criteria mapping
@@ -113,6 +115,10 @@ Between Backlog.md's checklist and our YAML `acceptance` field.
 - The next units implement the task schema in `etat_major` with pydantic v2 (frontmatter parse and validation, plus the import and export mapping above).
 - The SPEC's open question about Backlog.md is closed by this decision. `CLAUDE.md` says "Backlog.md, unless its format cannot carry acceptance criteria and owner". The format can carry both only by convention, so the exception applies. The maintainer should confirm the CLAUDE.md wording.
 - Unit **u4** covers the hook recorder and the roll-up query. The event schema is out of scope here.
+
+## Open questions
+
+- How is a human approval authenticated (signed commit, board session login, or another mechanism), and how is an approval record bound to a task transition? This spike only states the requirement above. Unit **u4** owns it, through the `approvals` table in the runtime store. Unit **u2** owns the reader check that rejects an unapproved `done`.
 
 ## Limits of this spike
 
