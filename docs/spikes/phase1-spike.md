@@ -99,6 +99,7 @@ Between Backlog.md's checklist and our YAML `acceptance` field.
 | Direction | Rule |
 |---|---|
 | Backlog.md to ours (import) | Read the lines between `<!-- AC:BEGIN -->` and `<!-- AC:END -->`. Each `- [ ] #N text` or `- [x] #N text` becomes one list entry, `text`, in order. The `#N` prefix is dropped. |
+| Import variants | Upstream also accepts unnumbered items (`- [ ] text`, `- [x] text`) and, when the AC markers are absent, a markerless checklist under the `## Acceptance Criteria` heading. The importer handles both the same way: one entry per checklist item, in order, with the optional `#N` dropped. Any checklist line it cannot parse, or any criteria section it cannot locate, is reported as an import error. Criteria are never dropped silently. |
 | Checked flag on import | Discarded from the contract. It is not copied to `status`. A checked box never produces `done`. An importer may report how many were checked, for a human to review. |
 | Ours to Backlog.md (export) | Entry `i` (starting at 1) becomes `- [ ] #i text`, wrapped in the AC markers under a `## Acceptance Criteria` heading. All boxes are unchecked. |
 | Round trip | `acceptance` to checklist to `acceptance` is lossless for plain-text entries. Entries must be single-line, so line breaks are rejected at validation. |
@@ -114,4 +115,4 @@ Between Backlog.md's checklist and our YAML `acceptance` field.
 
 - Static reading of source at one commit. Backlog.md's CLI and MCP were not run.
 - The preservation of unknown frontmatter keys was read in code, not exercised end to end.
-- No tests were added, because this unit delivers documentation only.
+- The only tests are doc-content checks in `tests/test_spike_doc.py`.
