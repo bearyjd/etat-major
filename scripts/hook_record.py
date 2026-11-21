@@ -24,7 +24,23 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS hook_events (
 
 
 _ID_RE = re.compile(r"[A-Za-z0-9_-]{1,128}")
-_NAME_RE = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
+_TOOL_RE = re.compile(r"[A-Z][A-Za-z]{0,63}|mcp__[A-Za-z0-9_-]{1,64}__[A-Za-z0-9_-]{1,64}")
+_EVENTS = frozenset(
+    {
+        "SessionStart",
+        "SessionEnd",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PermissionRequest",
+        "Notification",
+        "SubagentStart",
+        "SubagentStop",
+        "Stop",
+        "PreCompact",
+    }
+)
 
 
 def _reject_constant(name: str) -> None:
@@ -45,10 +61,10 @@ def parse_payload(raw: str) -> tuple[str, str, str | None]:
         raise ValueError("tool_name must be a string when present")
     if not _ID_RE.fullmatch(session_id):
         raise ValueError("session_id has unexpected characters")
-    if not _NAME_RE.fullmatch(event):
-        raise ValueError("hook_event_name has unexpected characters")
-    if tool is not None and not _NAME_RE.fullmatch(tool):
-        raise ValueError("tool_name has unexpected characters")
+    if event not in _EVENTS:
+        raise ValueError("hook_event_name is not a known hook event")
+    if tool is not None and not _TOOL_RE.fullmatch(tool):
+        raise ValueError("tool_name is not a tool identifier")
     return session_id, event, tool
 
 

@@ -135,3 +135,23 @@ def test_mcp_tool_name_accepted(tmp_path):
     db = tmp_path / "events.db"
     payload = {"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "mcp__srv__do"}
     assert run(db, json.dumps(payload)).returncode == 0
+
+
+def test_path_and_credential_shaped_metadata_rejected(tmp_path):
+    db = tmp_path / "events.db"
+    bad = [
+        {"session_id": "s1", "hook_event_name": "Stop", "tool_name": "notes.txt"},
+        {"session_id": "s1", "hook_event_name": "sk-ant-api03-abcdef", "tool_name": "Bash"},
+        {"session_id": "s1", "hook_event_name": "NotARealEvent"},
+        {"session_id": "s1", "hook_event_name": "Stop", "tool_name": "sk-ant-api03-abcdef"},
+    ]
+    for payload in bad:
+        assert run(db, json.dumps(payload)).returncode != 0
+        assert not db.exists()
+
+
+def test_mcp_and_builtin_tool_names_accepted(tmp_path):
+    db = tmp_path / "events.db"
+    for tool in ("Bash", "WebFetch", "mcp__github__create_issue"):
+        payload = {"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": tool}
+        assert run(db, json.dumps(payload)).returncode == 0
