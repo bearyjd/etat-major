@@ -150,6 +150,28 @@ The browser reaches the board and the web terminal over Tailscale. The runner st
 
 **Voice (north star 1, after phase 6):** the browser captures speech and plays replies. The speech-to-text and text-to-speech engines are pluggable and chosen later. Voice is a client feature and does not touch the contracts.
 
+## Recommended architecture
+
+One small control-plane service, with everything else adopted. This is a lean from the research in [RESEARCH.md](RESEARCH.md), not a final decision; a one-weekend spike (below) confirms or overturns it.
+
+| Layer | Choice | Status |
+| --- | --- | --- |
+| Execution | tmux, one Unix user per person, git worktrees (workmux), rootless containers (atelier) | Adopt |
+| Access | Tailscale; ntfy for notifications | Adopt |
+| Web terminal | Codeman first, ttyd as fallback, as a separate process; native `tmux attach` always works | Adopt, test |
+| Task files | Markdown with frontmatter in git, Backlog.md format if it can carry acceptance criteria and owner | Borrow |
+| Events | Claude Code and Codex hooks post to a local API that writes to SQLite; schema borrowed from agents-observe | Borrow |
+| Control plane | One service: reads task files and the store, computes roll-ups, serves the web UI and API. Python backend (FastAPI, SQLite), thin frontend (HTMX or a small Svelte or React app) | Build |
+| Runner | meute, a separate Python repo and client of the control-plane API; systemd timers, bounded retries, dry-run by default, fresh sessions from a handoff note, approval before merge, host-side push | Build |
+| Router | First release: one profile per task, plus the no-cross-user check | Build |
+| Voice | Phone dictation into an editable field first; engines chosen later | Later |
+
+**Why Python for the backend:** the service is mostly glue (frontmatter, SQLite in the standard library, subprocess and tmux calls, git, systemd), and the runner, hook scripts and any voice engines are Python-first. The reusable MIT projects (tmux-kanban, Lumbergh) and the overnight-runner references are Python. Components such as Codeman run as separate processes, so their language does not constrain this one. A web UI needs some JavaScript either way; a board with roll-ups, an approval inbox and terminal links does not need a heavy single-page app. No Rust daemon at first, because ttyd and Codeman already handle the PTYs; Navette stays an optional client. TypeScript end to end is defensible if a rich frontend turns out to be needed.
+
+**What is built here:** the roll-up and strategic view, the control plane, the runner glue and the multi-user isolation. Nothing found in the research does these.
+
+**Spike before committing (about a weekend):** run Codeman, create a Backlog.md-style task folder, and write a hook script that records events into SQLite. If the three fit together and one roll-up query answers "what needs me", the stack is settled.
+
 ## Strategic view
 
 The home screen answers four questions without opening a single session. Every number is computed from the task files and hook events.
@@ -240,14 +262,14 @@ These terms changed several times in 2026. Re-check them before each release.
 
 - [ ] Web terminal: adopt Agentboard or ttyd as is, or embed xterm.js directly in the board?
 - [ ] Base: fork tmux-kanban or Lumbergh, or start fresh and borrow ideas?
-- [ ] Stack: a Rust daemon (as in Navette) plus a web frontend, or Python or Node end to end?
-- [ ] Runner: merge meute into this repo, or keep it separate and talk to the board over its API?
+- [ ] Stack: current lean is a Python backend (FastAPI, SQLite) with a thin frontend; confirm with the spike. TypeScript end to end is the alternative.
+- [ ] Runner: current lean is to keep meute separate and talk to the board over its API.
 - [ ] Second user: which agent CLI and account path, and do they meet the account requirements?
 - [ ] Budgets: how to measure per-profile subscription usage when CLIs expose little usage data?
 - [ ] Repo name, license header and the demo workspace to ship with the first release.
 - [ ] Voice: which speech-to-text and text-to-speech engines, and local or cloud?
 - [ ] Overnight runs: confirm they are opt-in, and re-read the current subscription terms before phase 5.
-- [ ] Runtime store: SQLite or JSONL?
+- [ ] Runtime store: current lean is SQLite, because roll-ups need queries; JSONL is the alternative.
 - [ ] Try Codeman as the web terminal layer before writing one; confirm its license and how it handles one Unix user per person.
 - [ ] Confirm Backlog.md's file format can carry acceptance criteria and owner, or define the task contract on top of it.
 - [ ] Re-read Anthropic's current terms on `claude -p` and third-party tools before building the overnight runner.
