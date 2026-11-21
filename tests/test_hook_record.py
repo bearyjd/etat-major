@@ -1,7 +1,10 @@
 import importlib.util
 import io
 import json
+import os
+import re
 import sqlite3
+import stat
 from pathlib import Path
 
 import pytest
@@ -29,7 +32,7 @@ STOP = {**BASE, "hook_event_name": "Stop"}
 
 def rows(db: Path):
     with sqlite3.connect(db) as con:
-        return con.execute("SELECT session_id, event, tool_name, message FROM events").fetchall()
+        return con.execute("SELECT session_id, event, tool_name FROM events").fetchall()
 
 
 def run(db: Path, payload, monkeypatch) -> int:
@@ -40,7 +43,7 @@ def run(db: Path, payload, monkeypatch) -> int:
 def test_inserts_event_row(tmp_path, monkeypatch):
     db = tmp_path / "e.db"
     assert run(db, PRE_TOOL, monkeypatch) == 0
-    assert rows(db) == [("s-alice-1", "PreToolUse", "Bash", None)]
+    assert rows(db) == [("s-alice-1", "PreToolUse", "Bash")]
 
 
 def test_does_not_store_tool_input(tmp_path, monkeypatch):
@@ -51,10 +54,33 @@ def test_does_not_store_tool_input(tmp_path, monkeypatch):
     assert "SECRET" not in dump
 
 
-def test_notification_message_stored(tmp_path, monkeypatch):
+def test_notification_message_not_stored(tmp_path, monkeypatch):
     db = tmp_path / "e.db"
-    run(db, NOTIFY, monkeypatch)
-    assert rows(db)[0][3].startswith("Claude needs")
+    text = "Claude needs permission: password=hunter2-SECRET"
+    run(db, {**NOTIFY, "message": text}, monkeypatch)
+    with sqlite3.connect(db) as con:
+        dump = "".join(str(r) for r in con.execute("SELECT * FROM events"))
+        cols = [c[1] for c in con.execute("PRAGMA table_info(events)")]
+        out = "".join(str(r) for r in con.execute(hook_record.NEEDS_ME_SQL))
+    assert "hunter2" not in dump + out
+    assert "message" not in cols
+
+
+def test_new_database_is_private(tmp_path, monkeypatch):
+    old = os.umask(0o022)
+    try:
+        db = tmp_path / "e.db"
+        run(db, NOTIFY, monkeypatch)
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(db.stat().st_mode) == 0o600
+
+
+def test_spike_doc_sql_matches_executable_sql():
+    doc = (ROOT / "docs" / "spikes" / "phase1-spike.md").read_text()
+    block = re.search(r"```sql\n(.*?)```", doc, re.S).group(1)
+    norm = lambda q: re.sub(r"\s+", " ", q).strip().rstrip(";").strip()  # noqa: E731
+    assert norm(block) == norm(hook_record.NEEDS_ME_SQL)
 
 
 def test_invalid_json_returns_nonzero_and_writes_nothing(tmp_path, monkeypatch):

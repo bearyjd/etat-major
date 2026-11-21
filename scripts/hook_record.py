@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Record a Claude Code hook payload (JSON on stdin) as one row in a SQLite file.
 
-Only a small allowlist of fields is stored. Tool input, prompts and transcript
-paths are dropped on purpose: they can hold secrets or personal paths.
+Only a small allowlist of fields is stored. Tool input, prompts, free-text
+notification messages and transcript paths are dropped on purpose: they can
+hold secrets or personal paths. The database file is created with mode 0600.
 """
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 from datetime import UTC, datetime
@@ -19,7 +21,6 @@ CREATE TABLE IF NOT EXISTS events (
     event TEXT NOT NULL,
     tool_name TEXT,
     cwd TEXT,
-    message TEXT,
     notification_type TEXT
 )
 """
@@ -34,7 +35,7 @@ SELECT e.session_id,
             WHEN 'StopFailure' THEN 'failed'
             ELSE 'review'
        END AS state,
-       e.ts, e.message
+       e.ts
 FROM events e
 WHERE e.id = (
         SELECT MAX(id) FROM events s
@@ -65,18 +66,19 @@ def parse_payload(raw: str) -> dict | None:
         "event": str(event),
         "tool_name": data.get("tool_name"),
         "cwd": data.get("cwd"),
-        "message": data.get("message"),
         "notification_type": data.get("notification_type"),
     }
 
 
 def insert_event(db_path: str, row: dict) -> None:
+    # Create the file privately first; sqlite would honour the umask (often 0644).
+    os.close(os.open(db_path, os.O_CREAT | os.O_RDWR, 0o600))
     with sqlite3.connect(db_path) as con:
         con.execute(SCHEMA)
         con.execute(
             "INSERT INTO events "
-            "(ts, session_id, event, tool_name, cwd, message, notification_type) "
-            "VALUES (:ts, :session_id, :event, :tool_name, :cwd, :message, :notification_type)",
+            "(ts, session_id, event, tool_name, cwd, notification_type) "
+            "VALUES (:ts, :session_id, :event, :tool_name, :cwd, :notification_type)",
             row,
         )
     con.close()

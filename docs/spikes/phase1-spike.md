@@ -30,11 +30,11 @@ Caveat: this was read from source, not exercised. A later check could run `backl
 
 `scripts/hook_record.py --db <file>` reads one Claude Code hook JSON payload on stdin and inserts one row into `events`. Install it as a hook command, for example `python3 scripts/hook_record.py --db ~/.local/state/etat-major/events.db` (the path comes from config, never the repo). Exit 1 and a stderr message for bad JSON or a missing `session_id` or `hook_event_name`; nothing is written.
 
-Stored columns: `ts`, `session_id`, `event`, `tool_name`, `cwd`, `message`. **Deliberately not stored:** `tool_input`, prompts, `transcript_path`, so a secret in a command can never reach the store (a test asserts this). Per SPEC, hook reports are hints, and the per-session hook token is not part of this spike.
+Stored columns: `ts`, `session_id`, `event`, `tool_name`, `cwd`, `notification_type`. **Deliberately not stored:** `tool_input`, prompts, `transcript_path` and the free-text notification `message`, so a secret can never reach the store (tests assert this). The database file is created with mode 0600; keep it in a private directory. Per SPEC, hook reports are hints, and the per-session hook token is not part of this spike.
 
 ### Roll-up: "what needs me"
 
-State is derived from each session's latest event and never written. `Notification` means the agent waits on a human (`needs-you`), `Stop` means the turn ended and awaits a look (`review`), and `StopFailure` means `failed`. Any later event, such as a tool call after approval, clears the session from the list.
+State is derived from each session's latest state-relevant event and never written. A `permission_prompt` or `elicitation_dialog` `Notification` means the agent waits on a human (`needs-you`), `Stop` means the turn ended and awaits a look (`review`), and `StopFailure` means `failed`. Other notification types (`idle_prompt`, `auth_success`) are ignored. A later `UserPromptSubmit`, `PreToolUse` or `PostToolUse` clears the session from the list.
 
 ```sql
 SELECT e.session_id,
@@ -43,9 +43,15 @@ SELECT e.session_id,
             WHEN 'StopFailure' THEN 'failed'
             ELSE 'review'
        END AS state,
-       e.ts, e.message
+       e.ts
 FROM events e
-WHERE e.id = (SELECT MAX(id) FROM events WHERE session_id = e.session_id)
+WHERE e.id = (
+        SELECT MAX(id) FROM events s
+        WHERE s.session_id = e.session_id
+          AND ((s.event = 'Notification'
+                AND s.notification_type IN ('permission_prompt', 'elicitation_dialog'))
+               OR s.event IN ('Stop', 'StopFailure', 'UserPromptSubmit',
+                              'PreToolUse', 'PostToolUse')))
   AND e.event IN ('Notification', 'Stop', 'StopFailure')
 ORDER BY e.id;
 ```
