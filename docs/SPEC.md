@@ -214,6 +214,7 @@ Adopt or borrow for every layer except the cross-project roadmap, the multi-user
 | --- | --- | --- | --- |
 | Phone to tmux | Tailscale + tmux + ttyd; Termius or mosh as fallback | The most-reported setup; native `tmux attach` always works | Dropped connections on trains; AgentDeck's author says it has no authentication |
 | Web dashboard | Test [Codeman](https://github.com/Ark0N/Codeman) first | Serves real tmux sessions for Claude Code and Codex, with notifications | Author-reported daily use; multi-user isolation unconfirmed |
+| Phone client (candidate) | [Herdr](https://herdr.dev/) | Phone app opens real terminals and shows who needs you; OSC 7501 status protocol could feed the event schema | Vendor page only; agents run in its own server, not tmux, which conflicts with principle 1; no web UI or multi-user mentioned. Test at phase 3 beside Codeman and ttyd |
 | Task files | [Backlog.md](https://github.com/MrLesk/Backlog.md) | Plain files in git; one user kept it after trying many helpers | No supervision, terminals or cross-repo roadmap |
 | Worktrees | [workmux](https://workmux.dev/guide/status-tracking/) | Branch and tmux window per task, agent state from hooks | Hook coverage differs between Claude Code and Codex |
 | Events and usage | agents-observe schema, ccusage | Hook events into SQLite; local usage numbers | Token counts are approximate |
@@ -248,6 +249,7 @@ The repo is AGPL-3.0. That fixes what code can be reused and how Claude accounts
 | [Vibe Kanban](https://github.com/BloopAI/vibe-kanban) | Apache-2.0 | Compatible with AGPL-3.0, but community-maintained since the company shut down |
 | [amux](https://raw.githubusercontent.com/mixpeek/amux/main/README.md) | MIT + Commons Clause | Not usable: the Commons Clause restricts resale |
 | [Agent Kanban](https://github.com/saltbo/agent-kanban) | FSL-1.1-ALv2 | Not usable: functional source license |
+| [Herdr](https://herdr.dev/) | Apache-2.0 (per its page) | Compatible with AGPL-3.0; verify in its repo before adopting |
 | [Kanvibe](https://github.com/rookedsysc/kanvibe), [Agentboard](https://github.com/gbasin/agentboard/wiki) | Not confirmed | Check before use |
 
 **Anthropic terms, as design constraints**
