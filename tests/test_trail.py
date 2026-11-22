@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from etat_major.trail import TrailError, load_wiring
 
 FIXTURE = Path(__file__).parent / "fixtures/trail/wiring.json"
+KOTLIN_FIXTURE = FIXTURE.with_name("wiring-kotlin.json")
 FILE = "src/etat_major/taskfile.py"
 SYMBOL = f"{FILE}#_with_line"
 PRIVATE_PATH = "/" + "private/project"
@@ -30,6 +31,7 @@ def test_recorded_graph_preserves_fields_and_counts():
     assert index.coverage.languages == ("python",)
     assert index.coverage.node_kinds == {"file": 5, "class": 8, "function": 48, "method": 5}
     assert index.coverage.relations == {"calls": 82, "contains": 61, "imports": 17, "extends": 7}
+    assert index.coverage.unresolved_relations == {"imports": 17, "extends": 4}
     file = index.symbols_in(FILE)[0]
     assert (file.id, file.kind, file.path, file.start_line, file.end_line) == (
         FILE, "file", FILE, 1, 245,
@@ -51,6 +53,125 @@ def test_call_queries_return_direct_edges_in_graph_order():
         edge for edge in index.edges if edge.source == FILE and edge.relation == "calls"
     )
     assert index.callers("missing") == index.callees("missing") == ()
+
+
+def test_recorded_kotlin_graph_preserves_symbols_and_edges():
+    index = load_wiring(KOTLIN_FIXTURE)
+    assert index.coverage.node_kinds == {
+        "file": 16,
+        "class": 12,
+        "function": 21,
+        "method": 73,
+        "interface": 12,
+        "variable": 12,
+        "enum": 12,
+        "type": 2,
+    }
+    assert index.coverage.unknown_kinds == frozenset()
+    assert index.coverage.relations == {"calls": 5, "contains": 7, "imports": 8}
+    assert index.coverage.unresolved_relations == {"imports": 8}
+    assert index.module_scopes == ("feature/lanscan", "core/data", "core/scan", "app", "")
+
+
+@pytest.mark.parametrize(
+    "kind", ["interface", "type", "enum", "struct", "trait", "module", "constant", "variable"]
+)
+def test_new_symbol_kinds_round_trip_and_support_queries(tmp_path, kind):
+    file = "app/src/Example.kt"
+    symbol_id = f"{file}#Example"
+    path = write_graph(
+        tmp_path,
+        nodes=[
+            {"id": file, "path": file, "kind": "file", "span": "L1-L9"},
+            {"id": symbol_id, "path": file, "kind": kind, "span": "L2-L3"},
+        ],
+        edges=[
+            {"source": file, "target": symbol_id, "relation": "calls", "confidence": "inferred"}
+        ],
+    )
+    index = load_wiring(path)
+    _, symbol = index.symbols_in(file)
+    assert (symbol.id, symbol.kind, symbol.path, symbol.start_line, symbol.end_line) == (
+        symbol_id, kind, file, 2, 3,
+    )  # fmt: skip
+    assert index.has_symbol(symbol_id)
+    assert index.callers(symbol_id) == index.callees(file) == index.edges
+    assert index.coverage.node_kinds == {"file": 1, kind: 1}
+    assert not index.coverage.files_without_symbols
+    assert not index.coverage.unknown_kinds
+
+
+@pytest.mark.parametrize("suffix", ["", "#future"])
+def test_unknown_kind_is_retained_and_flagged(tmp_path, suffix):
+    path = write_graph(
+        tmp_path,
+        nodes=[{"id": FILE + suffix, "path": FILE, "kind": "future-kind", "span": "L1-L1"}],
+    )
+    index = load_wiring(path)
+    (symbol,) = index.symbols
+    assert (symbol.id, symbol.kind) == (FILE + suffix, "future-kind")
+    assert symbol.unknown_kind
+    assert index.coverage.node_kinds == {"future-kind": 1}
+    assert index.coverage.unknown_kinds == frozenset({"future-kind"})
+
+
+def test_backticked_kotlin_symbol_id_preserves_spaces(tmp_path):
+    file = "app/src/Example.kt"
+    symbol_id = f"{file}#Example.`test with spaces`"
+    path = write_graph(
+        tmp_path, nodes=[{"id": symbol_id, "path": file, "kind": "method", "span": "L2-L3"}]
+    )
+    assert load_wiring(path).has_symbol(symbol_id)
+
+
+def test_unresolved_targets_count_per_relation_without_dropping_edges(tmp_path):
+    path = write_graph(
+        tmp_path,
+        nodes=[{"id": FILE, "path": FILE, "kind": "file", "span": "L1-L1"}],
+        edges=[
+            {"source": FILE, "target": target, "relation": relation, "confidence": "extracted"}
+            for relation, target in [
+                ("imports", "external.one"),
+                ("imports", "external.two"),
+                ("imports", FILE),
+                ("calls", "external.three"),
+            ]
+        ],
+    )
+    index = load_wiring(path)
+    assert index.coverage.unresolved_relations == {"imports": 2, "calls": 1}
+    assert index.coverage.relations == {"imports": 3, "calls": 1}
+    assert tuple(edge.target for edge in index.edges) == (
+        "external.one", "external.two", FILE, "external.three",
+    )  # fmt: skip
+    with pytest.raises(TypeError):
+        index.coverage.unresolved_relations["imports"] = 3
+
+
+def test_module_scopes_keep_order_and_ignore_unused_metadata(tmp_path):
+    assert load_wiring(write_graph(tmp_path)).module_scopes == ()
+    path = write_graph(
+        tmp_path,
+        meta={"version": 1, "scopes": [{"prefix": "app", "label": PRIVATE_PATH}, {"prefix": ""}]},
+    )
+    index = load_wiring(path)
+    assert index.module_scopes == ("app", "")
+    assert index.coverage.module_scopes == index.module_scopes
+    assert PRIVATE_PATH not in repr(index)
+
+
+@pytest.mark.parametrize("prefix", [None, 42, PRIVATE_PATH, "..", "remote:project"])
+def test_invalid_scope_prefix_names_field_without_echoing_value(tmp_path, prefix):
+    path = write_graph(tmp_path, meta={"version": 1, "scopes": [{"prefix": prefix}]})
+    with pytest.raises(TrailError, match=r"wiring\.json.*meta\.scopes\.0\.prefix") as raised:
+        load_wiring(path)
+    assert PRIVATE_PATH not in str(raised.value)
+
+
+def test_scope_array_is_bounded(tmp_path):
+    path = write_graph(tmp_path, meta={"version": 1, "scopes": [{"prefix": ""}] * 50_001})
+    with pytest.raises(TrailError, match=r"wiring\.json.*meta\.scopes.*exceeds"):
+        load_wiring(path)
 
 
 def test_coverage_counts_file_only_nodes_and_ignores_unused_metadata(tmp_path):

@@ -1,20 +1,18 @@
 """Load research, decisions, features, and tasks from an intent workspace.
 
 File and cross-file problems are counted, with the first 200 retained as ``Issue`` objects.
-Unresolved references are reported as ``missing`` rather than raised.
-"""
+Unresolved references are reported as ``missing``."""
 
 from __future__ import annotations
 
 import errno
-import os
 import stat
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from heapq import nsmallest
 from pathlib import Path
 
+from etat_major.localfiles import directory_names, entry_mode
 from etat_major.localfiles import open_directory as _directory
 from etat_major.planning import Milestone, load_scoped_milestone, parse_vision
 from etat_major.records import (
@@ -40,6 +38,8 @@ class Issue:
     path: str
     field: str | None
     message: str
+    severity: str = "error"
+    blocking: bool = True
 
     def __str__(self) -> str:
         where = f"{self.path}: field '{self.field}'" if self.field else self.path
@@ -98,13 +98,6 @@ class WorkspaceError(TaskFileError):
     """The workspace root cannot be opened as a directory."""
 
 
-def _check_path(path: Path, fd: int) -> int:
-    info = os.stat(path.name, dir_fd=fd, follow_symlinks=False)
-    if stat.S_ISLNK(info.st_mode):
-        raise ValueError("symlink is not allowed")
-    return info.st_mode
-
-
 def _issue(root: Path, path: Path, exc: OSError | ValueError | RuntimeError) -> Issue:
     message = (exc.strerror or str(exc)) if isinstance(exc, OSError) else str(exc)
     return Issue(path.relative_to(root).as_posix(), None, message)
@@ -112,8 +105,7 @@ def _issue(root: Path, path: Path, exc: OSError | ValueError | RuntimeError) -> 
 
 def _entries(root: Path, base: Path, fd: int, issues: _IssueLog) -> Iterator[tuple[Path, int]]:
     try:
-        with os.scandir(fd) as entries:
-            names = nsmallest(_DIRECTORY_LIMIT + 1, (entry.name for entry in entries))
+        names = directory_names(fd, _DIRECTORY_LIMIT)
     except OSError as exc:
         issues.append(_issue(root, base, exc))
         return
@@ -129,7 +121,7 @@ def _entries(root: Path, base: Path, fd: int, issues: _IssueLog) -> Iterator[tup
     for name in names:
         path = base / name
         try:
-            mode = _check_path(path, fd)
+            mode = entry_mode(path, fd)
         except (OSError, ValueError) as exc:
             issues.append(_issue(root, path, exc))
             continue
@@ -165,7 +157,7 @@ def _load_dir[T](
 ) -> list[T]:
     base = root / sub
     try:
-        mode = _check_path(base, root_fd)
+        mode = entry_mode(base, root_fd)
     except FileNotFoundError:
         return []
     except (OSError, ValueError) as exc:

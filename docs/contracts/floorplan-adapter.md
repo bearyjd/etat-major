@@ -7,9 +7,40 @@ The adapter reads local artifacts. The recorded Floorplan fixture and its tool p
 
 | Reader | Accepted input | Retained data |
 | --- | --- | --- |
-| `load_graph(path)` | A UTF-8 JSON object with `schema: "floorplan/graph@1"`, a `nodes` list containing string `id` fields and a `files` list containing repository-relative string `p` fields. | Frozen sets of component ids and file paths. |
+| `load_graph(path)` | A UTF-8 `floorplan/graph@1` JSON object. | Frozen sets of component IDs and file paths. |
+| `load_graph(path, architecture=True)` | The same graph, with validation of retained architecture fields. | Frozen project name, components, files, routes and links. |
 | `load_plan(path)` | A UTF-8 JSON object with `$schema` or `schema` set to `"floorplan/plan@1"`. Both keys must agree if supplied together. A markerless plan is accepted when it has the same shape. | A frozen set of planned file paths. |
 | `load_renames(repo, old_revision, new_revision)` | A standalone Git repository with a local `.git` directory and two revisions that resolve to commits. | An immutable mapping from original repository-relative paths to renamed paths. |
+
+### Recorded graph
+
+Floorplan 0.11.0 emits the following fields in `graph.json`.
+
+| Field | Wire shape and adapter behavior |
+| --- | --- |
+| `schema` | Only `floorplan/graph@1` is accepted. |
+| `project` | An object with `name`, `summary` and `entrypoints`. The architecture reader retains `name` and also accepts a legacy project string. |
+| `meta` | Metadata includes `generatedAt`, `scanAt`, `rootName`, `audience`, `agent`, `repos` and `counts`. Each repo can carry `path`, `name`, `branch` and `head`. The adapter discards this metadata, including any absolute root or remote. |
+| `nodes` | A list of objects with `id`, nullable `parent`, `label`, `kind`, `summary`, `details`, `tags`, `paths`, `packages`, `hosts` and `stats`. Paths are globs and the list can be empty. The architecture reader retains `id` and `kind`. |
+| `files` | A list of objects with `p` (repository-relative path), `n` (owning node ID), `r` (repo), `l` (language), `loc`, `name`, `d`, `doc`, `h`, `s` (symbols), `sig` and `auto`. The architecture reader retains `p`, `n`, `l` and `loc`. |
+| `links` | A list of objects with endpoints `a` and `b`, kind `k`, weight `w` and optional `desc`, `inferred`, `labels` and `names`. The architecture reader retains `a`, `b` and `k`. |
+| `routes` | The architecture reader retains route IDs, methods, HTTP paths and optional file paths. |
+| `flows`, `tour`, `health`, `screens` | Ignored. |
+
+The plain reader collects only `nodes[].id` and `files[].p`. Both readers ignore
+extra keys at every level. Architecture links support file-to-file, file-to-node
+and node-to-node endpoints using `f:<path>` and `n:<id>`. The reader also accepts
+legacy `r:<id>` route endpoints and drops legacy external links that point at
+absolute locations or remotes.
+
+Node kinds are open to any non-empty string. Known kinds are `feature`, `test`,
+`library`, `ui`, `external`, `data`, `worker`, `infra`, `config`, `script` and
+`service`. Older nodes may omit the kind. Link kinds are open to any string.
+Known kinds are `import`, `http`, `queue`, `data`, `call` and `event`.
+RepoIndex coverage reports other values as `unknown_node_kinds` and
+`unknown_link_kinds`. Index output escapes these labels and redacts locations.
+
+### Blueprint
 
 A plan requires a `files` list whose entries have string `path`, `name` and
 `description` fields. When supplied, `source` is a string, `stack` and
@@ -17,6 +48,8 @@ A plan requires a `files` list whose entries have string `path`, `name` and
 of objects. Extra fields are ignored. Both readers discard source metadata,
 absolute roots, remotes and prose. The blueprint index also drops fields such
 as `uses` and endpoint details. Renderers escape retained text with `safe()`.
+
+### Local file and Git limits
 
 Each JSON artifact is capped at 64 MiB. Readers reject symlinks in artifact
 paths and report errors by filename and field. File paths use forward slashes

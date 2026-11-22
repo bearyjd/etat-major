@@ -1,0 +1,55 @@
+pluginManagement {
+    includeBuild("build-logic")
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    @Suppress("UnstableApiUsage")
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "NetLens"
+
+include(":app")
+include(":core:network")
+include(":core:data")
+include(":core:oui")
+include(":core:scan")
+include(":core:scan-testing")
+include(":core:data-testing")
+include(":core:network-testing")
+include(":core:billing")
+include(":core:ui")
+include(":feature:ipinfo")
+include(":feature:lanscan")
+include(":feature:devices")
+include(":feature:portscan")
+include(":feature:dns")
+include(":feature:ping")
+include(":feature:traceroute")
+include(":feature:wol")
+include(":feature:tls")
+include(":feature:whois")
+include(":feature:netlog")
+include(":feature:mdns")
+include(":feature:httptester")
+include(":feature:monitor")
+include(":feature:history")
+include(":feature:widgetsettings")
+include(":feature:posture")
+include(":feature:ipcalc")
+include(":feature:speedtest")
+include(":feature:wifi")
+include(":feature:dnsleak")
+include(":feature:wifiaudit")
+include(":feature:celltower")
+include(":feature:vpnstatus")
+include(":widget")
+include(":baselineprofile")

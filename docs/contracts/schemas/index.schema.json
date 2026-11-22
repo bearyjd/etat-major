@@ -50,13 +50,15 @@
         "coverage": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["languages", "files_indexed", "files_skipped", "architecture_only", "symbols_only"],
+          "required": ["languages", "files_indexed", "files_skipped", "architecture_only", "symbols_only", "unknown_node_kinds", "unknown_link_kinds"],
           "properties": {
             "languages": {"type": "array", "items": {"type": "string"}},
             "files_indexed": {"type": "integer", "minimum": 0},
             "files_skipped": {"anyOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
             "architecture_only": {"type": "array", "items": {"type": "string"}},
-            "symbols_only": {"type": "array", "items": {"type": "string"}}
+            "symbols_only": {"type": "array", "items": {"type": "string"}},
+            "unknown_node_kinds": {"type": "array", "items": {"type": "string"}},
+            "unknown_link_kinds": {"type": "array", "items": {"type": "string"}}
           }
         },
         "architecture": {
@@ -103,7 +105,7 @@
                 "properties": {
                   "source": {"type": "string"},
                   "target": {"type": "string"},
-                  "kind": {"enum": ["import", "http"]},
+                  "kind": {"type": "string"},
                   "layer": {"const": "architecture"},
                   "provenance": {"const": "inferred"}
                 }
@@ -155,7 +157,7 @@
                 "required": ["id", "kind", "path", "range", "layer", "provenance"],
                 "properties": {
                   "id": {"type": "string"},
-                  "kind": {"enum": ["file", "class", "function", "method"]},
+                  "kind": {"type": "string", "minLength": 1},
                   "path": {"type": "string"},
                   "range": {
                     "type": "array",

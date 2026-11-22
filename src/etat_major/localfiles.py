@@ -3,7 +3,9 @@
 import os
 import stat
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from heapq import nsmallest
+from itertools import islice
 from pathlib import Path
 from secrets import token_hex
 
@@ -31,25 +33,59 @@ def open_directory(path: Path, parent_fd: int | None = None) -> Iterator[int]:
         os.close(fd)
 
 
-def _check_file(info: os.stat_result, limit_mib: int) -> None:
+@contextmanager
+def open_relative_directory(path: Path, root_fd: int) -> Iterator[int]:
+    """Open a validated relative path from an existing directory descriptor."""
+    with ExitStack() as stack:
+        fd = root_fd
+        for part in path.parts:
+            fd = stack.enter_context(open_directory(Path(part), fd))
+        yield fd
+
+
+def directory_names(fd: int, limit: int, *, stop_at_limit: bool = False) -> list[str]:
+    """Return sorted names with an extra entry to signal an exceeded limit."""
+    with os.scandir(fd) as listing:
+        names = (entry.name for entry in listing)
+        if stop_at_limit:
+            return sorted(islice(names, limit + 1))
+        return nsmallest(limit + 1, names)
+
+
+def entry_mode(path: Path, fd: int) -> int:
+    mode = os.stat(path.name, dir_fd=fd, follow_symlinks=False).st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError("symlink is not allowed")
+    return mode
+
+
+def _check_file(info: os.stat_result, limit: int, size_error: str) -> None:
     if stat.S_ISLNK(info.st_mode):
         raise ValueError("symlink is not allowed")
     if not stat.S_ISREG(info.st_mode):
         raise ValueError("expected a regular file")
-    if info.st_size > limit_mib * 1024 * 1024:
-        raise ValueError(f"file exceeds the {limit_mib} MiB limit")
+    if info.st_size > limit:
+        raise ValueError(size_error)
 
 
 def read_text(path: Path, limit_mib: int, *, dir_fd: int | None = None) -> str:
+    return _read_text(path, limit_mib * 1024 * 1024, f"{limit_mib} MiB", dir_fd)
+
+
+def read_text_kib(path: Path, limit_kib: int, *, dir_fd: int | None = None) -> str:
+    return _read_text(path, limit_kib * 1024, f"{limit_kib} KiB", dir_fd)
+
+
+def _read_text(path: Path, limit: int, label: str, dir_fd: int | None) -> str:
     target = path if dir_fd is None else path.name
-    _check_file(os.stat(target, dir_fd=dir_fd, follow_symlinks=False), limit_mib)
+    size_error = f"file exceeds the {label} limit"
+    _check_file(os.stat(target, dir_fd=dir_fd, follow_symlinks=False), limit, size_error)
     fd = os.open(target, os.O_RDONLY | NOFOLLOW, dir_fd=dir_fd)
     with os.fdopen(fd, "rb") as stream:
-        _check_file(os.fstat(stream.fileno()), limit_mib)
-        limit = limit_mib * 1024 * 1024
+        _check_file(os.fstat(stream.fileno()), limit, size_error)
         data = stream.read(limit + 1)
         if len(data) > limit:
-            raise ValueError(f"file exceeds the {limit_mib} MiB limit")
+            raise ValueError(size_error)
     return data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
 

@@ -10,10 +10,12 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, overload
 
 from pydantic import (
     AfterValidator,
+    AliasChoices,
+    AliasPath,
     BaseModel,
     ConfigDict,
     Field,
@@ -23,10 +25,10 @@ from pydantic import (
     field_validator,
 )
 
-from etat_major.localfiles import open_directory, read_text
+from etat_major.localfiles import open_directory, read_text, read_text_kib
 from etat_major.refs import Ref, RefError, parse_ref
 from etat_major.taskfile import TaskFileError, check_recorded_array, first_error
-from etat_major.text_safety import bounded_repr
+from etat_major.text_safety import bounded_repr, public_text
 
 SUPPORTED_SCHEMA = "floorplan/graph@1"
 FLOORPLAN_COMMIT = "94f81b463b7617e06d873ac71323ce71644c8399"
@@ -118,13 +120,24 @@ def _collect(path: Path, data: dict[str, Any], key: str, field: str) -> frozense
     return frozenset(values)
 
 
-def load_graph(path: Path) -> FloorplanIndex:
+@overload
+def load_graph(path: Path, *, architecture: Literal[False] = False) -> FloorplanIndex: ...
+
+
+@overload
+def load_graph(path: Path, *, architecture: Literal[True]) -> ArchitectureDocument: ...
+
+
+def load_graph(path: Path, *, architecture: bool = False) -> FloorplanIndex | ArchitectureDocument:
+    """Read a recorded graph, with structured nodes and links when requested."""
+    if architecture:
+        return load_architecture(path)
     data = _graph_document(path)
     return FloorplanIndex(_collect(path, data, "nodes", "id"), _collect(path, data, "files", "p"))
 
 
-def _graph_document(path: Path) -> dict[str, Any]:
-    data = _read_json(path)
+def _graph_document(path: Path, *, limit_kib: int | None = None) -> dict[str, Any]:
+    data = _read_json(path, limit_kib=limit_kib)
     if "schema" not in data:
         raise FloorplanError(
             path, "schema", f"missing schema; only {SUPPORTED_SCHEMA!r} is supported"
@@ -146,10 +159,14 @@ def _reject_json_constant(_: str) -> None:
     raise ValueError("non-JSON numeric constant")
 
 
-def _read_json(path: Path) -> dict[str, Any]:
+def _read_json(path: Path, *, limit_kib: int | None = None) -> dict[str, Any]:
     try:
         with open_directory(path.parent) as fd:
-            text = read_text(path, _LIMIT_MIB, dir_fd=fd)
+            text = (
+                read_text(path, _LIMIT_MIB, dir_fd=fd)
+                if limit_kib is None
+                else read_text_kib(path, limit_kib, dir_fd=fd)
+            )
     except (OSError, UnicodeError):
         raise FloorplanError(path, "JSON", "cannot read file as UTF-8") from None
     except ValueError as exc:
@@ -210,7 +227,7 @@ class _ArchitectureItem(BaseModel):
 
 class Component(_ArchitectureItem):
     id: WireLabel
-    kind: WireLabel | None = None
+    kind: Annotated[StrictStr, Field(min_length=1)] | None = None
 
     @computed_field
     @property
@@ -233,7 +250,7 @@ class ArchitectureFile(_ArchitectureItem):
 class ArchitectureLink(_ArchitectureItem):
     source: Annotated[StrictStr, AfterValidator(_endpoint)] = Field(alias="a")
     target: Annotated[StrictStr, AfterValidator(_endpoint)] = Field(alias="b")
-    kind: Literal["import", "http"] = Field(alias="k")
+    kind: StrictStr = Field(alias="k")
 
     @computed_field
     @property
@@ -263,7 +280,9 @@ class Route(_ArchitectureItem):
 class ArchitectureDocument(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
 
-    project: WireLabel | None = None
+    project: Annotated[StrictStr, Field(min_length=1)] | None = Field(
+        default=None, validation_alias=AliasChoices(AliasPath("project", "name"), "project")
+    )
     nodes: tuple[Component, ...]
     files: tuple[ArchitectureFile, ...]
     routes: tuple[Route, ...] = ()
@@ -278,15 +297,22 @@ def _unique(path: Path, field: str, values: tuple[str, ...]) -> None:
         seen.add(value)
 
 
-def load_architecture(path: Path) -> ArchitectureDocument:
+def _external_location(link: object) -> bool:
+    if not isinstance(link, dict) or link.get("k") != "external":
+        return False
+    return any(
+        isinstance(endpoint, str) and endpoint != public_text(endpoint)
+        for endpoint in (link.get("a"), link.get("b"))
+    )
+
+
+def load_architecture(path: Path, *, limit_kib: int | None = None) -> ArchitectureDocument:
     """Read the structured fields used by RepoIndex from a bounded graph."""
-    data = _graph_document(path)
-    # External links can contain remote URLs and are outside the architecture contract.
+    data = _graph_document(path, limit_kib=limit_kib)
+    # Older exports can point external links directly at remote URLs.
     links = data.get("links")
     if isinstance(links, list):
-        data["links"] = [
-            link for link in links if not isinstance(link, dict) or link.get("k") != "external"
-        ]
+        data["links"] = [link for link in links if not _external_location(link)]
     try:
         graph = ArchitectureDocument.model_validate(data)
     except ValidationError as exc:

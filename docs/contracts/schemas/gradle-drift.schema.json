@@ -1,0 +1,379 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "ok",
+    "data",
+    "issues"
+  ],
+  "properties": {
+    "schema": {
+      "const": "etat-major/gradle-drift@1"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/data"
+        }
+      ]
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/issue"
+      }
+    }
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "field",
+        "message",
+        "severity"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ]
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "configuration",
+        "test_only",
+        "file",
+        "line"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "test_only": {
+          "type": "boolean"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declared_and_used",
+        "declared_but_unused",
+        "used_but_undeclared",
+        "modules_only_declared",
+        "modules_only_observed"
+      ],
+      "properties": {
+        "declared_and_used": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/comparison"
+          }
+        },
+        "declared_but_unused": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/comparison"
+          }
+        },
+        "used_but_undeclared": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/comparison"
+          }
+        },
+        "modules_only_declared": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "modules_only_observed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "declared_implicit": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/comparison"
+          }
+        },
+        "call_only": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/comparison"
+          }
+        },
+        "summary": {
+          "$ref": "#/$defs/summary"
+        }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "declarations",
+        "evidence_count",
+        "evidence"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "declarations": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/edge"
+              },
+              {
+                "$ref": "#/$defs/implicit_edge"
+              }
+            ]
+          }
+        },
+        "evidence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "tier": {
+          "enum": [
+            "declared_and_used",
+            "declared_implicit",
+            "import_backed",
+            "test_only",
+            "call_only",
+            "build_time_configuration",
+            "unused_candidate"
+          ]
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer",
+        "relation",
+        "provenance",
+        "confidence",
+        "count"
+      ],
+      "properties": {
+        "layer": {
+          "enum": [
+            "floorplan",
+            "trail"
+          ]
+        },
+        "relation": {
+          "enum": [
+            "import",
+            "calls",
+            "extends"
+          ]
+        },
+        "provenance": {
+          "enum": [
+            "verified",
+            "inferred"
+          ]
+        },
+        "confidence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "implicit_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "configuration",
+        "test_only",
+        "file",
+        "line",
+        "plugin_id",
+        "plugin_class",
+        "implicit"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "test_only": {
+          "type": "boolean"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "plugin_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "plugin_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "implicit": {
+          "const": true
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declared_and_used",
+        "declared_implicit",
+        "import_backed",
+        "test_only",
+        "call_only",
+        "build_time_configuration",
+        "unused_candidate",
+        "modules_only_declared",
+        "modules_only_observed"
+      ],
+      "properties": {
+        "declared_and_used": { "type": "integer", "minimum": 0 },
+        "declared_implicit": { "type": "integer", "minimum": 0 },
+        "import_backed": { "type": "integer", "minimum": 0 },
+        "test_only": { "type": "integer", "minimum": 0 },
+        "call_only": { "type": "integer", "minimum": 0 },
+        "build_time_configuration": { "type": "integer", "minimum": 0 },
+        "unused_candidate": { "type": "integer", "minimum": 0 },
+        "modules_only_declared": { "type": "integer", "minimum": 0 },
+        "modules_only_observed": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "if": {
+    "properties": {
+      "ok": {
+        "const": true
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "data": {
+        "type": "object"
+      },
+      "issues": {
+        "not": {
+          "contains": {
+            "properties": {
+              "severity": {
+                "const": "error"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "else": {
+    "properties": {
+      "issues": {
+        "minItems": 1
+      }
+    },
+    "if": {
+      "properties": { "data": { "type": "null" } }
+    },
+    "then": {
+      "properties": {
+        "issues": {
+          "contains": {
+            "properties": { "severity": { "const": "error" } }
+          }
+        }
+      }
+    }
+  }
+}

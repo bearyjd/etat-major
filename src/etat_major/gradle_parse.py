@@ -1,0 +1,349 @@
+"""Recognize a bounded literal subset of Gradle scripts."""
+
+import re
+from collections.abc import Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+from etat_major.localfiles import read_text_kib
+from etat_major.taskfile import TaskFileError
+from etat_major.workspace import Issue
+
+MAX_DEPTH = 64
+INPUT_LIMIT_KIB = 256
+_IDENT = r"[a-zA-Z_][a-zA-Z_0-9]*"
+_WORD = re.compile(_IDENT)
+PROJECT_SEGMENT = r"[a-zA-Z0-9_][a-zA-Z0-9_.-]*"
+_PROJECT = re.compile(rf":?{PROJECT_SEGMENT}(?::{PROJECT_SEGMENT})*")
+_COMMENT = re.compile(r"/\*|\*/")
+_TOKEN = re.compile(
+    rf"""(?P<skip>\s+|//[^\n]*)|(?P<comment>/\*)"""
+    r"""|(?P<opaque>\$/[\s\S]*?/\$)|(?P<quote>['"])"""
+    rf"""|(?P<word>{_IDENT})|(?P<other>.)"""
+)
+_PAIRS = {"(": ")", "[": "]", "{": "}"}
+_SLASHY = re.compile(r"/(?:[^/\\]|\\[\s\S])*/")
+_EXPRESSION_START = {"", "=", "(", "[", ",", ":", "~", "return"}
+
+
+@dataclass(frozen=True)
+class Token:
+    value: str
+    line: int
+    kind: str
+
+    @property
+    def literal(self) -> str | None:
+        if self.kind == "string" and "\\" not in self.value and "$" not in self.value:
+            return self.value[1:-1]
+        return None
+
+
+def _comment_end(text: str, start: int, file: Path) -> int:
+    depth = 1
+    for match in _COMMENT.finditer(text, start):
+        depth += 1 if match[0] == "/*" else -1
+        if depth == 0:
+            return match.end()
+        if depth > MAX_DEPTH:
+            raise TaskFileError(file, "syntax", "comment nesting limit exceeded")
+    raise TaskFileError(file, "syntax", "unterminated block comment")
+
+
+def _quoted_end(text: str, start: int, file: Path, depth: int = 0) -> tuple[int, str]:
+    char = text[start]
+    quote = char * 3 if text.startswith(char * 3, start) else char
+    index = start + len(quote)
+    raw = quote == '"""' and file.suffix == ".kts"
+    while index < len(text):
+        if text.startswith(quote, index):
+            return index + len(quote), "string" if len(quote) == 1 else "opaque"
+        if char == '"' and text.startswith("${", index):
+            index = _interpolation_end(text, index + 2, file, depth + 1)
+        elif text[index] == "\\" and not raw:
+            index += 2
+        elif text[index] == "\n" and len(quote) == 1:
+            break
+        else:
+            index += 1
+    raise TaskFileError(file, "syntax", "unterminated string")
+
+
+def _interpolation_end(text: str, index: int, file: Path, depth: int) -> int:
+    nesting = 1
+    while index < len(text):
+        if depth + nesting > MAX_DEPTH:
+            raise TaskFileError(file, "syntax", "string interpolation nesting limit exceeded")
+        char = text[index]
+        if char in {"'", '"'}:
+            index, _ = _quoted_end(text, index, file, depth + nesting)
+            continue
+        if text.startswith("/*", index):
+            index = _comment_end(text, index + 2, file)
+            continue
+        if text.startswith("//", index):
+            index = text.find("\n", index)
+            if index < 0:
+                break
+            continue
+        nesting += (char == "{") - (char == "}")
+        index += 1
+        if nesting == 0:
+            return index
+    raise TaskFileError(file, "syntax", "unterminated string interpolation")
+
+
+def _tokens(text: str, file: Path) -> Iterator[Token]:
+    offset, line = 0, 1
+    previous = ""
+    while offset < len(text):
+        match = _TOKEN.match(text, offset)
+        if match is None:
+            raise TaskFileError(file, "syntax", f"line {line}: invalid token")
+        end, kind = match.end(), match.lastgroup
+        value = match[0]
+        if kind == "comment":
+            end = _comment_end(text, end, file)
+        elif kind != "skip":
+            if kind == "quote":
+                end, kind = _quoted_end(text, offset, file)
+                value = text[offset:end]
+            elif value == "$" and text.startswith("$/", offset):
+                raise TaskFileError(file, "syntax", f"line {line}: unterminated string")
+            if (
+                value == "/"
+                and previous in _EXPRESSION_START
+                and (slashy := _SLASHY.match(text, offset))
+            ):
+                end, kind, value = slashy.end(), "opaque", slashy[0]
+            previous = value
+            yield Token(value, line, kind or "other")
+        line += text.count("\n", offset, end)
+        offset = end
+
+
+@dataclass(frozen=True)
+class Script:
+    file: Path
+    tokens: tuple[Token, ...]
+    closing: tuple[int, ...]
+
+    def issue(self, field: str, index: int, message: str, *, blocking: bool = True) -> Issue:
+        return Issue(
+            self.file.as_posix(),
+            field,
+            f"line {self.tokens[index].line}: {message}",
+            severity="warning",
+            blocking=blocking,
+        )
+
+    def siblings(self, start: int, stop: int) -> Iterator[int]:
+        while start < stop:
+            yield start
+            start = self.closing[start] + 1
+
+    def values(self, start: int, stop: int) -> tuple[str, ...]:
+        return tuple(token.value for token in self.tokens[start:stop])
+
+    def arguments(self, start: int, stop: int) -> Iterator[tuple[int, int]]:
+        for i in self.siblings(start, stop):
+            if self.tokens[i].value == ",":
+                yield start, i
+                start = i + 1
+        if start < stop:
+            yield start, stop
+
+    def statement_start(self, index: int) -> bool:
+        if index == 0:
+            return True
+        previous, current = self.tokens[index - 1 : index + 1]
+        if previous.value in {"{", "}", ";"}:
+            return True
+        if previous.line == current.line or previous.value in {
+            ".",
+            "=",
+            ",",
+            "+",
+            "-",
+            "/",
+            ":",
+            "else",
+            "do",
+        }:
+            return False
+        if previous.value == ")":
+            depth = 1
+            for i in range(index - 2, -1, -1):
+                depth += (self.tokens[i].value == ")") - (self.tokens[i].value == "(")
+                if not depth:
+                    return i == 0 or self.tokens[i - 1].value not in {
+                        "if",
+                        "for",
+                        "while",
+                        "when",
+                        "catch",
+                    }
+        return True
+
+
+def read_script(directory: Path, base: str, fd: int) -> tuple[Path, str] | None:
+    for name in (f"{base}.gradle.kts", f"{base}.gradle"):
+        file = directory / name
+        try:
+            return file, read_text_kib(file, INPUT_LIMIT_KIB, dir_fd=fd)
+        except FileNotFoundError:
+            continue
+        except (OSError, UnicodeError):
+            raise TaskFileError(file, "file", "cannot read script as UTF-8") from None
+        except ValueError as exc:
+            raise TaskFileError(file, "file", str(exc)) from None
+    return None
+
+
+def parse_script(text: str, file: Path) -> Script:
+    tokens = tuple(_tokens(text, file))
+    closing = list(range(len(tokens)))
+    stack: list[int] = []
+    for i, token in enumerate(tokens):
+        if token.value in _PAIRS:
+            stack.append(i)
+            if len(stack) > MAX_DEPTH:
+                raise TaskFileError(file, "syntax", f"line {token.line}: nesting limit exceeded")
+        elif token.value in _PAIRS.values():
+            if not stack or _PAIRS[tokens[stack[-1]].value] != token.value:
+                raise TaskFileError(file, "syntax", f"line {token.line}: mismatched delimiters")
+            closing[stack.pop()] = i
+    if stack:
+        raise TaskFileError(file, "syntax", f"line {tokens[stack[-1]].line}: unclosed delimiter")
+    return Script(file, tokens, tuple(closing))
+
+
+def project_id(literal: str | None) -> str | None:
+    if literal == ":":
+        return literal
+    if literal is not None and _PROJECT.fullmatch(literal):
+        return ":" + literal.lstrip(":")
+    return None
+
+
+def _direct_project(script: Script, start: int, stop: int) -> str | None:
+    tokens = script.tokens
+    if script.values(start, start + 2) != ("project", "("):
+        return None
+    if script.closing[start + 1] != stop - 1:
+        return None
+    for a, b in script.arguments(start + 2, stop - 1):
+        if b - a >= 2 and script.values(a, a + 2) in {("path", ":"), ("path", "=")}:
+            return project_id(tokens[a + 2].literal) if b == a + 3 else None
+        if a == start + 2 and b == a + 1:
+            return project_id(tokens[a].literal)
+    return None
+
+
+def _accessor(values: tuple[str, ...]) -> str | None:
+    if len(values) >= 3 and values[1::2] == (".",) * (len(values) // 2):
+        if len(values) % 2 == 1 and all(_WORD.fullmatch(word) for word in values[2::2]):
+            return ".".join(values[2::2])
+    return None
+
+
+def _unwrap(script: Script, start: int, stop: int) -> tuple[int, int, bool]:
+    fixtures = False
+    while script.values(start, start + 2) == ("testFixtures", "("):
+        if script.closing[start + 1] != stop - 1:
+            break
+        start, stop = start + 2, stop - 1
+        fixtures = True
+    return start, stop, fixtures
+
+
+@dataclass(frozen=True)
+class Request:
+    target: str | None
+    accessor: bool
+    configuration: str
+    test_only: bool
+    index: int
+
+
+def _request(script: Script, config: str, start: int, stop: int, index: int) -> Request | None:
+    start, stop, fixtures = _unwrap(script, start, stop)
+    if start >= stop:
+        return None
+    value = script.tokens[start].value
+    if value not in {"project", "projects", "testFixtures"}:
+        return None
+    target = (
+        _accessor(script.values(start, stop))
+        if value == "projects"
+        else _direct_project(script, start, stop)
+    )
+    test_only = fixtures or config.lower().startswith(("test", "androidtest"))
+    return Request(target, value == "projects", config, test_only, index)
+
+
+def statement_end(script: Script, start: int, stop: int) -> int:
+    tokens = script.tokens
+    for i in script.siblings(start, stop):
+        if tokens[i].value == ";":
+            return i
+        if i > start and tokens[i].line > tokens[i - 1].line:
+            if tokens[i].value not in {".", "{"} and tokens[i - 1].value not in {".", ","}:
+                return i
+    return stop
+
+
+def _configuration(script: Script, start: int, stop: int, *, convention: bool) -> Request | None:
+    token = script.tokens[start]
+    config = token.literal if convention and token.kind == "string" else token.value
+    arg = start + 1
+    if arg >= stop or not config or not _WORD.fullmatch(config):
+        return None
+    if script.tokens[arg].value == "(":
+        close = script.closing[arg]
+        args = iter(script.arguments(arg + 1, close))
+        first = next(args, None)
+        if config == "add" and first is not None:
+            a, b = first
+            config = (script.tokens[a].literal or "") if b == a + 1 else ""
+            first = next(args, None)
+        if first and _WORD.fullmatch(config):
+            return _request(script, config, *first, start)
+        return None
+    return _request(script, config, arg, stop, start)
+
+
+def dependency_requests(script: Script) -> Iterator[Request]:
+    tokens = script.tokens
+    for i in script.siblings(0, len(tokens)):
+        if script.values(i, i + 2) != ("dependencies", "{"):
+            continue
+        if i and tokens[i - 1].value == ".":
+            continue
+        yield from dependency_block_requests(script, i + 1)
+
+
+def dependency_block_requests(
+    script: Script, block: int, *, convention: bool = False
+) -> Iterator[Request]:
+    end = script.closing[block]
+    start = block + 1
+    while start < end:
+        stop = statement_end(script, start, end)
+        if start < stop:
+            request = _configuration(script, start, stop, convention=convention)
+            if request is not None:
+                yield request
+            elif _has_project_reference(script, start, stop):
+                yield Request(None, False, "", False, start)
+        start = stop + (stop < end and script.tokens[stop].value == ";")
+
+
+def _has_project_reference(script: Script, start: int, stop: int) -> bool:
+    tokens = script.tokens
+    return any(
+        (tokens[i].value, tokens[i + 1].value)
+        in {("project", "("), ("projects", "."), ("findProject", "(")}
+        and (i == start or tokens[i - 1].value != ".")
+        for i in range(start, stop - 1)
+    )

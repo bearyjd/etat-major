@@ -323,6 +323,6 @@ def test_workspace_cap_keeps_lexically_first_entries(tmp_path, monkeypatch):
             yield iter(sorted(entries, key=lambda entry: entry.name, reverse=True))
 
     monkeypatch.setattr(workspace, "_DIRECTORY_LIMIT", 2)
-    monkeypatch.setattr(workspace.os, "scandir", reversed_entries)
+    monkeypatch.setattr(os, "scandir", reversed_entries)
     issues = load_workspace(tmp_path).issues
     assert [issue.path for issue in issues] == ["research", "research/1.md", "research/2.md"]

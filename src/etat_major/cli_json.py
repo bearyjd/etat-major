@@ -7,7 +7,7 @@ from dataclasses import fields, is_dataclass
 from etat_major.records import Decision
 from etat_major.refs import Ref
 from etat_major.taskfile import TaskFileError
-from etat_major.text_safety import public_source_url, public_text
+from etat_major.text_safety import public_source_url, public_text, safe
 from etat_major.trace import ARCHITECTURE_PROBLEM_STATES, Trace
 from etat_major.workspace import Issue, feature_ref
 
@@ -17,6 +17,8 @@ COMMAND_NAMES = {
     "index": "index",
     "progress": "progress",
     "workspace": "workspace-validate",
+    "gradle-deps": "gradle-deps",
+    "gradle-drift": "gradle-drift",
 }
 
 
@@ -32,12 +34,12 @@ def json_format_requested(argv: list[str]) -> bool:
     return bool(formats and formats[-1] == "json")
 
 
-def issue_data(issue: Issue, severity: str = "error") -> dict[str, str]:
+def issue_data(issue: Issue, severity: str | None = None) -> dict[str, str]:
     return {
         "path": public_text(issue.path),
         "field": public_text(issue.field or "file"),
         "message": public_text(issue.message),
-        "severity": severity,
+        "severity": issue.severity if severity is None else severity,
     }
 
 
@@ -62,6 +64,8 @@ def json_result(
 
 def json_error(command: str, error: TaskFileError) -> int:
     issue = Issue(error.filename, error.field_name, error.message)
+    if command in {"gradle-deps", "gradle-drift"}:
+        issue = Issue(safe(error.filename), safe(error.field_name), safe(error.message))
     return json_result(command, 2, issues=(issue,))
 
 

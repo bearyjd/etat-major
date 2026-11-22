@@ -1,17 +1,114 @@
 {
   "schema": "floorplan/graph@1",
-  "project": "etat-major",
+  "project": {
+    "name": "etat-major",
+    "summary": "",
+    "entrypoints": []
+  },
+  "meta": {
+    "generatedAt": "2026-11-22T14:05:59.838Z",
+    "scanAt": "2026-11-22T14:05:59.625Z",
+    "rootName": "etat-major",
+    "audience": "developers",
+    "agent": "claude",
+    "repos": [
+      {
+        "path": ".",
+        "name": "etat-major",
+        "branch": "main",
+        "head": ""
+      }
+    ],
+    "counts": {
+      "files": 2,
+      "loc": 265,
+      "unassigned": 0
+    }
+  },
   "nodes": [
-    {"id": "validation", "kind": "dir"},
-    {"id": "future", "kind": "dir"}
+    {
+      "id": "validation",
+      "parent": null,
+      "label": "Validation",
+      "kind": "library",
+      "summary": "",
+      "details": "",
+      "tags": [],
+      "paths": [],
+      "packages": [],
+      "hosts": [],
+      "stats": {
+        "files": 1,
+        "loc": 245
+      }
+    },
+    {
+      "id": "future",
+      "parent": null,
+      "label": "Future",
+      "kind": "library",
+      "summary": "",
+      "details": "",
+      "tags": [],
+      "paths": [],
+      "packages": [],
+      "hosts": [],
+      "stats": {
+        "files": 1,
+        "loc": 20
+      }
+    }
   ],
   "files": [
-    {"p": "src/etat_major/taskfile.py", "n": "validation", "l": "python", "loc": 245},
-    {"p": "app/entry.py", "n": "future", "l": "python", "loc": 20}
+    {
+      "p": "src/etat_major/taskfile.py",
+      "n": "validation",
+      "r": "etat-major",
+      "l": "python",
+      "loc": 245,
+      "name": "taskfile",
+      "d": "",
+      "auto": true,
+      "h": "",
+      "sig": []
+    },
+    {
+      "p": "app/entry.py",
+      "n": "future",
+      "r": "etat-major",
+      "l": "python",
+      "loc": 20,
+      "name": "entry",
+      "d": "",
+      "auto": true,
+      "h": "",
+      "sig": []
+    }
   ],
-  "routes": [{"id": "r:0", "method": "GET", "path": "/health", "file": "app/entry.py"}],
+  "routes": [
+    {
+      "id": "r:0",
+      "method": "GET",
+      "path": "/health",
+      "file": "app/entry.py"
+    }
+  ],
   "links": [
-    {"a": "f:app/entry.py", "b": "f:src/etat_major/taskfile.py", "k": "import"},
-    {"a": "f:src/etat_major/taskfile.py", "b": "r:0", "k": "http"}
-  ]
+    {
+      "a": "f:app/entry.py",
+      "b": "f:src/etat_major/taskfile.py",
+      "k": "import",
+      "w": 1
+    },
+    {
+      "a": "f:src/etat_major/taskfile.py",
+      "b": "r:0",
+      "k": "http",
+      "w": 1
+    }
+  ],
+  "flows": [],
+  "tour": [],
+  "health": {},
+  "screens": []
 }
