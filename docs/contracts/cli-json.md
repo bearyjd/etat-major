@@ -12,6 +12,10 @@ command results and errors. Help uses the regular CLI help format.
 | `progress` | [`etat-major/progress@1`](schemas/progress.schema.json) | [ProgressEvidence](progress-evidence.md) report and optional evaluation date |
 | `gradle deps --root DIR` | [`etat-major/gradle-deps@1`](schemas/gradle-deps.schema.json) | [Gradle modules and declarations](gradle-adapter.md) |
 | `gradle drift --root DIR --graph FILE` | [`etat-major/gradle-drift@1`](schemas/gradle-drift.schema.json) | [Dependency and module comparisons](gradle-adapter.md) with evidence counts |
+| `components validate --workspace DIR` | [`etat-major/components-validate@1`](schemas/components-validate.schema.json) | Empty object. Component model validation results appear in `issues`. |
+| `components map --workspace DIR --project P --path FILE` | [`etat-major/components-map@1`](schemas/components-map.schema.json) | The project, queried path, owning component ID or null, ancestor IDs nearest first, and tied IDs sorted by ID |
+| `components coverage --workspace DIR --project P --graph FILE` | [`etat-major/components-coverage@1`](schemas/components-coverage.schema.json) | The project, sorted owned and unowned Floorplan file paths, and percentage owned |
+| `components seed --root DIR --project P --out FILE` | [`etat-major/components-seed@1`](schemas/components-seed.schema.json) | The project, the created file's basename, and the proposed component IDs in file order. Use `--proposal-for FILE` in place of `--out FILE` to propose additions to an existing model. |
 | `workspace validate --workspace D` | [`etat-major/workspace-validate@1`](schemas/workspace-validate.schema.json) | Empty object. Validation results appear in `issues`. |
 
 Each schema uses JSON Schema Draft 2020-12 and can be validated locally.
@@ -49,6 +53,12 @@ inside the report.
 Gradle includes usable partial results alongside build-file diagnostics.
 Candidate drift produces exit 1 and a summary issue, with individual
 differences in `data`.
+
+Component validation reports errors with exit 1. Map and coverage can return
+data with diagnostics for other workspace component files. An unavailable
+selected model, invalid graph, or unavailable seed destination returns exit 2.
+Ownership ties are warnings and count as unowned paths. Coverage uses distinct
+recorded paths and is 0 percent when the Floorplan file list is empty.
 
 ## Stability and input handling
 

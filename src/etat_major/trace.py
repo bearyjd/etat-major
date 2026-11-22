@@ -1,13 +1,14 @@
 """Compute the research-to-code trace of one feature (docs/TRACEABILITY.md).
 
 Pure and read-only: nothing is stored. Link states (``gap``, ``built``, ``existing``,
-``stale``, ``unverified``, ``missing``) are derived against optional Floorplan and Trail indexes.
+``stale``, ``unverified``, ``missing``) are derived against optional component models and indexes.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from etat_major.floorplan import FloorplanIndex
 from etat_major.overlay import resolve_file_path
@@ -16,6 +17,9 @@ from etat_major.refs import Ref
 from etat_major.text_safety import bounded_repr
 from etat_major.trail import SymbolIndex
 from etat_major.workspace import Workspace, link_warnings, linked_decisions
+
+if TYPE_CHECKING:
+    from etat_major.components import ComponentModel
 
 ARCHITECTURE_PROBLEM_STATES = frozenset({"stale", "gap"})
 
@@ -66,6 +70,8 @@ class ArchLine:
     relation: str
     state: str
     provenance: str = "human"
+    paths: tuple[str, ...] | None = None
+    ancestors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -138,6 +144,8 @@ def _arch_state(
     renames: Mapping[str, str] | None,
     trail: SymbolIndex | None,
 ) -> str:
+    if link.ref.kind == "component":
+        return "unverified"
     if link.ref.kind == "trail":
         if trail is None:
             return "unverified"
@@ -151,6 +159,23 @@ def _arch_state(
     if link.relation == "new":
         return "built" if present else "gap"
     return "existing" if present else "stale"
+
+
+def _architecture_line(
+    link: ArchitectureLink,
+    graph: FloorplanIndex | None,
+    renames: Mapping[str, str] | None,
+    trail: SymbolIndex | None,
+    components: Mapping[str, ComponentModel] | None,
+) -> ArchLine:
+    ref, relation = link.ref, link.relation
+    if ref.kind != "component" or components is None:
+        return ArchLine(ref, relation, _arch_state(link, graph, renames, trail))
+    model = components.get(ref.project or "")
+    if model is not None and (component := model.get(ref.id)) is not None:
+        chain = tuple(parent.id for parent in model.ancestors_of(ref.id))
+        return ArchLine(ref, relation, "existing", paths=component.paths, ancestors=chain)
+    return ArchLine(ref, relation, "stale")
 
 
 def _research_ids(feature: Feature, linked: tuple[Decision, ...]) -> list[str]:
@@ -199,6 +224,7 @@ def trace_feature(
     *,
     renames: Mapping[str, str] | None = None,
     trail: SymbolIndex | None = None,
+    components: Mapping[str, ComponentModel] | None = None,
 ) -> Trace:
     if ref.kind != "feature":
         raise TraceError(f"expected a feature reference, got {bounded_repr(str(ref))}")
@@ -215,8 +241,7 @@ def trace_feature(
         research=research,
         decisions=decisions,
         architecture=tuple(
-            ArchLine(a.ref, a.relation, _arch_state(a, graph, renames, trail))
-            for a in feature.architecture
+            _architecture_line(a, graph, renames, trail, components) for a in feature.architecture
         ),
         acceptance=tuple(AcceptanceLine(a.id, a.text) for a in feature.acceptance),
         links=tuple(LinkLine(r, "unverified") for r in (*feature.tasks, *feature.milestones)),

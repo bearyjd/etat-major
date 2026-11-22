@@ -107,8 +107,13 @@
               "ref": {"type": "string"},
               "relation": {"enum": ["new", "modifies", "uses"]},
               "state": {"enum": ["gap", "built", "existing", "stale", "unverified"]},
-              "provenance": {"const": "human"}
-            }
+              "provenance": {"const": "human"},
+              "paths": {"type": "array", "items": {"type": "string"}},
+              "ancestors": {"type": "array", "items": {"type": "string"}}
+            },
+            "if": {"properties": {"ref": {"pattern": "^component:"}, "state": {"const": "existing"}}},
+            "then": {"required": ["paths", "ancestors"]},
+            "else": {"properties": {"paths": false, "ancestors": false}}
           }
         },
         "acceptance": {

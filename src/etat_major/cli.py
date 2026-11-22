@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from etat_major.cli_json import (
     trace_data,
     trace_issues,
 )
+from etat_major.components import ComponentModel, load_component_directory, load_components
+from etat_major.components_cli import components_parser, run_components
 from etat_major.evidence import ArchitectureIndexes, load_progress
 from etat_major.evidence_render import progress_data, render_text
 from etat_major.floorplan import load_graph
@@ -75,6 +78,7 @@ def _parser() -> argparse.ArgumentParser:
     trace.add_argument("--workspace", type=Path, required=True, help="intent workspace directory")
     trace.add_argument("--graph", type=Path, help="Floorplan graph.json (floorplan/graph@1)")
     trace.add_argument("--trail", type=Path, help="Trail wiring.json (version 1)")
+    trace.add_argument("--components", type=Path, help="component model file or directory")
     index = sub.add_parser(
         "index", help="export an architecture and symbol snapshot", **help_options
     )
@@ -90,6 +94,7 @@ def _parser() -> argparse.ArgumentParser:
     dlist.add_argument("--workspace", type=Path, required=True)
     _research_parser(sub.add_parser("research", help="prepare and import manual research"))
     _gradle_parser(sub.add_parser("gradle", help="inspect recorded Gradle dependencies"))
+    components_parser(sub.add_parser("components", help="inspect and seed component models"))
     progress = sub.add_parser("progress", help="derive progress from local Git and recorded PRs")
     for flag in ("workspace", "repo", "prs", "releases"):
         progress.add_argument(f"--{flag}", type=Path, required=True)
@@ -157,6 +162,32 @@ def _load_indexes(args: argparse.Namespace) -> ArchitectureIndexes:
     )
 
 
+def _trace_component_inputs(
+    path: Path | None,
+) -> tuple[dict[str, ComponentModel] | None, tuple[Issue, ...]]:
+    if path is None:
+        return None, ()
+    try:
+        return load_component_directory(path)
+    except NotADirectoryError:
+        model, issues = load_components(path)
+        return {model.project: model} if model else {}, issues
+    except (OSError, ValueError):
+        return {}, (Issue(path.name or "components", "file", "cannot open component source"),)
+
+
+def _escaped_component_issues(issues: tuple[Issue, ...]) -> tuple[Issue, ...]:
+    return tuple(
+        replace(
+            issue,
+            path=safe(issue.path),
+            field=safe(issue.field or "file"),
+            message=safe(issue.message),
+        )
+        for issue in issues
+    )
+
+
 def _trace(args: argparse.Namespace) -> int:
     try:
         ref = parse_ref(args.ref)
@@ -166,8 +197,16 @@ def _trace(args: argparse.Namespace) -> int:
         raise TaskFileError(Path("trace"), "ref", "expected a feature reference")
     indexes = _load_indexes(args)
     ws = load_workspace(args.workspace)
+    components, component_issues = _trace_component_inputs(args.components)
+    if args.format == "json":
+        component_issues = _escaped_component_issues(component_issues)
+    if any(issue.severity == "error" for issue in component_issues):
+        if args.format == "json":
+            return json_result(args.command, USAGE, issues=component_issues)
+        _print_issues(component_issues, 0)
+        return USAGE
     try:
-        trace = trace_feature(ws, indexes.graph, ref, trail=indexes.trail)
+        trace = trace_feature(ws, indexes.graph, ref, trail=indexes.trail, components=components)
     except TraceError as exc:
         raise TaskFileError(Path("trace"), "ref", str(exc)) from None
     status = PROBLEMS if trace.has_problems or ws.issues else OK
@@ -177,10 +216,11 @@ def _trace(args: argparse.Namespace) -> int:
             args.command,
             status,
             trace_data(trace, ws.omitted_issues),
-            issues=ws.issues + trace_issues(trace),
+            issues=ws.issues + trace_issues(trace) + component_issues,
             warnings=warnings,
         )
     _print_issues(ws.issues, ws.omitted_issues)
+    _print_warnings(component_issues)
     sys.stdout.write(render_trace(trace))
     return status
 
@@ -294,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
         "progress": _progress,
         "workspace": _workspace_validate,
         "gradle": run_gradle,
+        "components": run_components,
     }
     try:
         return handlers[args.command](args)
@@ -309,6 +350,13 @@ def _result_command(argv: list[str]) -> str:
         return ""
     if argv[0] == "gradle":
         return "gradle-drift" if argv[1:2] == ["drift"] else "gradle-deps"
+    if argv[0] == "components":
+        action = argv[1] if len(argv) > 1 else ""
+        return (
+            f"components-{action}"
+            if action in ("map", "coverage", "seed")
+            else "components-validate"
+        )
     return argv[0]
 
 

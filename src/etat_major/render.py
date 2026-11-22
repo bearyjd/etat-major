@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from etat_major.text_safety import public_source_url, public_text, safe
-from etat_major.trace import DecisionLine, ResearchLine, Trace
+from etat_major.trace import ArchLine, DecisionLine, ResearchLine, Trace
 
 
 def _research(r: ResearchLine) -> list[str]:
@@ -26,6 +26,15 @@ def _decision(d: DecisionLine) -> list[str]:
     return lines
 
 
+def _architecture(a: ArchLine) -> list[str]:
+    lines = [f"  {public_text(str(a.ref))}  {a.relation}  {a.state}  {a.provenance}"]
+    if a.paths is not None:
+        lines.extend(f"    path: {path}" for path in a.paths)
+        chain = " -> ".join(a.ancestors) or "(none)"
+        lines.append(f"    ancestors: {chain}")
+    return lines
+
+
 def render_trace(trace: Trace) -> str:
     f = trace.feature
     out = [f"feature:{f.project}/{f.id}  {f.status}  human  {public_text(f.title)}"]
@@ -36,12 +45,9 @@ def render_trace(trace: Trace) -> str:
     out.append("DECISIONS")
     out += [line for d in trace.decisions for line in _decision(d)] or ["  (none)  unverified"]
     out.append("ARCHITECTURE")
-    out += [
-        f"  {public_text(str(a.ref))}  {a.relation}  {a.state}  {a.provenance}"
-        for a in trace.architecture
+    out += [line for a in trace.architecture for line in _architecture(a)] or [
+        "  (none)  unverified"
     ]
-    if not trace.architecture:
-        out.append("  (none)  unverified")
     out.append("ACCEPTANCE")
     out += [
         f"  {public_text(a.id)}  {a.state}  {a.provenance}  {public_text(a.text)}"

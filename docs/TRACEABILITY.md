@@ -22,9 +22,10 @@ workspace/
   decisions/0012-add-latency-graph.md        # Decision
   features/netlens/0031-latency-graph.md     # Feature
   tasks/netlens/0042-...md                   # Task (existing contract)
+  components/netlens.yaml                  # Reviewed component model
 ```
 
-**Reference grammar.** Every cross-reference is `<kind>:<id>`. Project-scoped records (`feature`, `task`, `milestone`) use `<project>/<n>`, for example `feature:netlens/0031`, `task:netlens/0042`, `milestone:netlens/m3`. `research` and `decision` ids are global (`research:0007`, `decision:0012`). A finding inside research is `research:0007#f1`. Code references are prefixed by layer: `fp:n:<component>` or `fp:f:<path>` (Floorplan), `trail:<path>#<symbol>` (Trail). Loaders reject any other spelling.
+**Reference grammar.** Every cross-reference is `<kind>:<id>`. Project-scoped records use `<project>/<id>`, for example `feature:netlens/0031`, `task:netlens/0042`, `milestone:netlens/m3` and `component:netlens/ui.hostdetail`. Component IDs follow the [reviewed component contract](contracts/components.md). `research` and `decision` ids are global (`research:0007`, `decision:0012`). A finding inside research is `research:0007#f1`. Code references are prefixed by layer: `fp:n:<component>` or `fp:f:<path>` (Floorplan), `trail:<path>#<symbol>` (Trail). Loaders reject any other spelling.
 
 File paths in code references are repository-relative. Trail paths may contain spaces. Use ASCII `/` between non-empty segments. Leading `~`, drive-letter prefixes, dot segments, backslashes and Unicode slash lookalikes are invalid.
 
@@ -108,7 +109,7 @@ acceptance:
   - id: a2
     text: Graph is covered by an automated test.
 architecture:               # ArchitectureLink records
-  - ref: fp:n:ui.hostdetail            # existing component this feature changes
+  - ref: component:netlens/ui.hostdetail # reviewed component this feature changes
     relation: modifies                 # new | modifies | uses
   - ref: fp:f:app/src/main/kotlin/net/Latency.kt
     relation: new
@@ -120,6 +121,8 @@ Embedded in a Feature or a Task, never a separate file. Stored fields: `ref` (la
 
 - `new`: ref absent is a **gap** (planned, not yet built); ref present is **built**.
 - `modifies` or `uses`: ref present is **existing** (not evidence of progress); ref absent is **stale** (the link points at code that no longer exists, or was renamed; the rename reconciler in Phase 2 resolves renames, until then a rename reads stale).
+
+In a Feature, `component:<project>/<id>` resolves against Git-backed component intent. Pass `--components` with a project YAML file or a directory of project YAML files. A present component is **existing** for any relation and the trace lists its paths and ancestor IDs, nearest parent first. An absent component is **stale**. Omit `--components` to leave these links **unverified**.
 
 **Precedence.** A Feature's ArchitectureLinks are the authoritative statement of planned architecture. A Floorplan `plan.json` blueprint is a generated view of the `new` links (it cannot reference existing code); it is never edited as the source.
 

@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ok", "data", "issues"],
+  "properties": {
+    "schema": {"const": "etat-major/components-coverage@1"},
+    "ok": {"type": "boolean"},
+    "data": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}}
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "field", "message", "severity"],
+      "properties": {
+        "path": {"type": "string"},
+        "field": {"type": "string"},
+        "message": {"type": "string"},
+        "severity": {"enum": ["error", "warning"]}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "owned", "unowned", "percentage"],
+      "properties": {
+        "project": {"type": "string"},
+        "owned": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "unowned": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "percentage": {"type": "number", "minimum": 0, "maximum": 100}
+      }
+    }
+  },
+  "if": {"properties": {"ok": {"const": true}}},
+  "then": {
+    "properties": {
+      "data": {"type": "object"},
+      "issues": {"not": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+    }
+  },
+  "else": {
+    "properties": {"issues": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+  }
+}
