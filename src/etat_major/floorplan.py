@@ -25,7 +25,7 @@ from pydantic import (
 
 from etat_major.localfiles import open_directory, read_text
 from etat_major.refs import Ref, RefError, parse_ref
-from etat_major.taskfile import TaskFileError, first_error
+from etat_major.taskfile import TaskFileError, check_recorded_array, first_error
 from etat_major.text_safety import bounded_repr
 
 SUPPORTED_SCHEMA = "floorplan/graph@1"
@@ -137,6 +137,8 @@ def _graph_document(path: Path) -> dict[str, Any]:
         raise FloorplanError(
             path, "schema", f"unsupported schema{detail}; only {SUPPORTED_SCHEMA!r} is supported"
         )
+    for field in ("nodes", "files", "routes", "links"):
+        check_recorded_array(path, field, data.get(field), error=FloorplanError)
     return data
 
 
@@ -167,6 +169,8 @@ def load_plan(path: Path) -> FloorplanPlan:
     for key in ("$schema", "schema"):
         if key in data and data[key] != PLAN_SCHEMA:
             raise FloorplanError(path, key, f"expected {PLAN_SCHEMA}")
+    for field in ("files", "stack", "assumptions", "questions", "endpoints"):
+        check_recorded_array(path, field, data.get(field), error=FloorplanError)
     try:
         plan = _PlanDocument.model_validate(data)
     except ValidationError as exc:

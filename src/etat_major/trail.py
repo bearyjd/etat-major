@@ -20,7 +20,7 @@ from pydantic import (
 
 from etat_major.localfiles import open_directory, read_text
 from etat_major.refs import RefError, parse_ref
-from etat_major.taskfile import TaskFileError, Text, first_error
+from etat_major.taskfile import TaskFileError, Text, check_recorded_array, first_error
 
 TRAIL_VERSION = "0.30.5"
 _LIMIT_MIB = 64
@@ -193,6 +193,9 @@ def _read_wiring(path: Path) -> _Wiring:
     version = meta.get("version") if isinstance(meta, dict) else None
     if type(version) is not int or version != 1:
         raise TrailError(path, "meta.version", "only integer version 1 is supported")
+    for field in ("nodes", "edges"):
+        check_recorded_array(path, field, data.get(field), error=TrailError)
+    check_recorded_array(path, "meta.languages", meta.get("languages"), error=TrailError)
     try:
         return _Wiring.model_validate(data)
     except ValidationError as exc:

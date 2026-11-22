@@ -309,6 +309,13 @@ def _field_name(value: str) -> str:
     return "frontmatter"
 
 
+def check_recorded_array(
+    path: Path, field: str, rows: object, *, error: type[TaskFileError] = TaskFileError
+) -> None:
+    if isinstance(rows, list) and len(rows) > 50_000:
+        raise error(path, field, "array exceeds 50000 entries")
+
+
 def first_error(path: Path, exc: ValidationError) -> TaskFileError:
     err = exc.errors(include_input=False, include_url=False)[0]
     field = _field_name(".".join(str(p) for p in err["loc"]))

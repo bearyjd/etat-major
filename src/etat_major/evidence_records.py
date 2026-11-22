@@ -21,13 +21,14 @@ from pydantic import (
 )
 
 from etat_major.localfiles import open_directory, read_text
-from etat_major.taskfile import TaskFileError, first_error
+from etat_major.taskfile import TaskFileError, check_recorded_array, first_error
 from etat_major.text_safety import is_control
 
 _TASK_KEY = r"[a-z0-9][a-z0-9_-]*/[0-9]+"
 _KEY = re.compile(_TASK_KEY)
 _BODY_LINK = re.compile(rf"^[ \t]*Task:[ \t]*({_TASK_KEY})[ \t]*$", re.MULTILINE)
-_BRANCH_ID = re.compile(r"(?=-([0-9]+)-.)")
+_BRANCH_ID = re.compile(r"-([0-9]+)(?=-.)")
+_BRANCH_PREFIX = re.compile(r"[a-z0-9][a-z0-9_-]*")
 OID_PATTERN = r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
 Oid = Annotated[StrictStr, Field(pattern=OID_PATTERN)]
 TaskKey = Annotated[StrictStr, Field(pattern=rf"^{_TASK_KEY}$")]
@@ -151,6 +152,12 @@ def _load_rows[T: BaseModel](path: Path, adapter: TypeAdapter[tuple[T, ...]]) ->
         data = json.loads(raw, object_pairs_hook=_json_object, parse_constant=_reject_constant)
     except (ValueError, RecursionError):
         raise TaskFileError(path, "json", "expected valid JSON with unique keys") from None
+    check_recorded_array(path, "json", data)
+    if isinstance(data, list) and adapter is _PR_ROWS:
+        for index, row in enumerate(data):
+            if isinstance(row, dict):
+                field = "statusCheckRollup"
+                check_recorded_array(path, f"{index}.{field}", row.get(field))
     try:
         return adapter.validate_python(data)
     except ValidationError as exc:
@@ -158,8 +165,11 @@ def _load_rows[T: BaseModel](path: Path, adapter: TypeAdapter[tuple[T, ...]]) ->
         raise TaskFileError(path, location.field or "json", "invalid recorded value") from None
 
 
+_PR_ROWS = TypeAdapter(tuple[PullRequest, ...])
+
+
 def load_prs(path: Path) -> tuple[PullRequest, ...]:
-    rows = _load_rows(path, TypeAdapter(tuple[PullRequest, ...]))
+    rows = _load_rows(path, _PR_ROWS)
     seen = set()
     for index, row in enumerate(rows):
         if row.number in seen:
@@ -173,16 +183,25 @@ def load_releases(path: Path) -> tuple[Release, ...]:
 
 
 def branch_task(branch: str, known: Set[str]) -> str | None:
-    if not branch.startswith("task/") or any(char in branch for char in "\r\n"):
+    if len(branch) > 255 or not branch.startswith("task/") or any(c in branch for c in "\r\n"):
         return None
     name = branch.removeprefix("task/")
-    candidates = [
-        key
-        for match in _BRANCH_ID.finditer(name)
-        if _KEY.fullmatch(key := f"{name[: match.start()]}/{match[1]}")
-    ]
-    matches = [key for key in candidates if key in known] or candidates
-    return matches[0] if len(matches) == 1 else None
+    prefix = _BRANCH_PREFIX.match(name)
+    if prefix is None:
+        return None
+    first = known_key = None
+    ambiguous = False
+    for match in _BRANCH_ID.finditer(name):
+        if match.end() > prefix.end():
+            break
+        key = f"{name[:match.start()]}/{match[1]}"
+        ambiguous |= first is not None
+        first = first or key
+        if key in known:
+            if known_key is not None:
+                return None
+            known_key = key
+    return known_key or (None if ambiguous else first)
 
 
 def resolve_task_keys(
