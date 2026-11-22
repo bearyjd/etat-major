@@ -21,5 +21,7 @@ def bounded_repr(value: object) -> str:
     """Quote at most 80 source characters for display in a diagnostic."""
     if isinstance(value, str):
         return repr(value[:80]) + ("…" if len(value) > 80 else "")
-    representation = safe(repr(value))
+    if value is not None and not isinstance(value, (bool, int, float)):
+        return f"<{type(value).__name__[:78]}>"
+    representation = repr(value)
     return representation[:80] + ("…" if len(representation) > 80 else "")

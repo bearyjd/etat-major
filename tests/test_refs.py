@@ -105,3 +105,10 @@ def test_ref_error_bounds_unknown_kind_and_input():
     assert "x" * 80 in message
     assert "x" * 81 not in message
     assert "\x1b" not in message
+
+
+def test_non_string_ref_diagnostic_does_not_render_container_contents():
+    with pytest.raises(RefError, match="reference must be a string") as exc:
+        parse_ref([["invalid reference content"]])  # type: ignore[arg-type]
+    assert "<list>" in str(exc.value)
+    assert "invalid reference content" not in str(exc.value)

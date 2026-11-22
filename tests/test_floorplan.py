@@ -1,5 +1,6 @@
 import json
 import shutil
+from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,7 @@ def test_missing_schema(tmp_path):
 def test_root_and_remote_not_retained(tmp_path):
     meta = {"root": "/abs/root/secret-repo", "repos": [{"remote": "git@host.example:x/y.git"}]}
     idx = load_graph(graph_with(tmp_path, meta=meta))
+    assert {f.name for f in fields(idx)} == {"node_ids", "file_paths"}
     blob = repr(idx) + repr(vars(idx) if hasattr(idx, "__dict__") else "")
     assert "secret-repo" not in blob and "host.example" not in blob
     assert not any("secret" in n or "example" in n for n in idx.node_ids | idx.file_paths)
@@ -91,3 +93,26 @@ def test_not_json_and_not_object(tmp_path):
 def test_fixture_copy_untouched(tmp_path):
     shutil.copy(FIXTURE, tmp_path / "g.json")
     assert load_graph(tmp_path / "g.json").has_node("net.scan")
+
+
+def test_deep_json_is_reported_as_invalid(tmp_path):
+    path = tmp_path / "deep.json"
+    path.write_text("[" * 100000 + "]" * 100000)
+    with pytest.raises(FloorplanError, match="deep.json.*JSON"):
+        load_graph(path)
+
+
+def test_graph_size_limit_before_reading(tmp_path):
+    path = tmp_path / "large.json"
+    with path.open("wb") as stream:
+        stream.truncate(64 * 1024 * 1024 + 1)
+    with pytest.raises(FloorplanError, match="large.json.*64 MiB"):
+        load_graph(path)
+
+
+def test_graph_error_bounds_schema_value(tmp_path):
+    value = "x" * 1000
+    with pytest.raises(FloorplanError) as exc:
+        load_graph(graph_with(tmp_path, schema=value))
+    assert "x" * 81 not in str(exc.value)
+    assert "x" * 79 in str(exc.value)

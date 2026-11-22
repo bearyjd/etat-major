@@ -1,6 +1,9 @@
+import re
+from datetime import date
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from etat_major.records import (
     load_decision,
@@ -9,21 +12,24 @@ from etat_major.records import (
 )
 from etat_major.refs import Ref
 from etat_major.taskfile import TaskFileError
+from etat_major.workspace import load_workspace
 
-RESEARCH = """---
+SOURCE_URL = "https://example.org/thread/123"
+
+RESEARCH = f"""---
 id: 0007
 title: What do network-tool users complain about?
 status: reviewed
 provenance: ai-generated
 sources:
-  - url: https://example.org/thread/123
+  - url: {SOURCE_URL}
     date: 2026-09-14
     kind: reddit
     evidence: firsthand
 findings:
   - id: f1
     text: Users report slow scans.
-    source: https://example.org/thread/123
+    source: {SOURCE_URL}
     confidence: medium
   - id: f2
     text: Some say the UI is dated.
@@ -110,6 +116,56 @@ def test_finding_source_not_in_sources_is_unsourced(tmp_path):
     )
     r = load_research(write(tmp_path, "0007-net.md", text))
     assert r.is_unsourced(r.findings[0])
+
+
+@pytest.mark.parametrize("evidence", ["", "    evidence: null\n", "    evidence: firsthand\n"])
+def test_unsourced_findings_require_explicit_unverified(tmp_path, evidence):
+    text = sub(RESEARCH, "    evidence: unverified\n", evidence)
+    fail(load_research, write(tmp_path, "0007-net.md", text), "findings.1.evidence", "unverified")
+
+
+@pytest.mark.parametrize("use_finding", [False, True])
+@pytest.mark.parametrize(
+    "suffix",
+    [r"\x81", r"\x85", r"\u202eabc", r"\u200b"],
+)
+def test_research_rejects_invalid_urls(tmp_path, use_finding, suffix):
+    field, key = ("findings.0.source", "source") if use_finding else ("sources.0.url", "url")
+    text = sub(RESEARCH, f"{key}: {SOURCE_URL}", f'{key}: "{SOURCE_URL}{suffix}"')
+    fail(load_research, write(tmp_path, "0007-net.md", text), field, "URL")
+
+
+def test_research_preserves_valid_url_verbatim(tmp_path):
+    scheme, _, rest = SOURCE_URL.partition("://")
+    host, _, _ = rest.partition("/")
+    url = f"{scheme}://{host.upper()}:443/caf%C3%A9?query=alpha%20beta#Section"
+    text = RESEARCH.replace(SOURCE_URL, url)
+    record = load_research(write(tmp_path, "0007-net.md", text))
+    assert record.sources[0].url == record.findings[0].source == url
+
+
+def test_research_documented_optional_fields_are_typed_and_frozen(tmp_path):
+    text = sub(
+        RESEARCH,
+        "status: reviewed\n",
+        "status: reviewed\nproject: netlens\ncollected_by: chatgpt\ncollected_on: 2026-11-21\n",
+    )
+    text = sub(text, "confidence: medium\n", "confidence: medium\n    conflicts_with: [f2]\n")
+    record = load_research(write(tmp_path, "0007-net.md", text))
+    assert (record.project, record.collected_by, record.collected_on) == (
+        "netlens",
+        "chatgpt",
+        date(2026, 11, 21),
+    )
+    assert record.findings[0].conflicts_with == ("f2",)
+    with pytest.raises(ValidationError, match="frozen"):
+        record.findings[0].conflicts_with = ()  # type: ignore[misc]
+
+
+def test_decision_revisit_date_is_typed(tmp_path):
+    text = sub(DECISION, "decided_by: human\n", "decided_by: human\nrevisit_on: 2027-03-01\n")
+    record = load_decision(write(tmp_path, "0012-graph.md", text))
+    assert record.revisit_on == date(2027, 3, 1)
 
 
 def test_research_is_frozen(tmp_path):
@@ -271,3 +327,25 @@ def test_feature_trail_ref_and_optionals(tmp_path):
 
 def test_unreadable_file(tmp_path):
     fail(load_feature, tmp_path / "0031-x.md", None, "cannot read")
+
+
+def test_traceability_yaml_examples_load_as_workspace(tmp_path):
+    docs = Path(__file__).resolve().parents[1] / "docs/TRACEABILITY.md"
+    text = docs.read_text(encoding="utf-8")
+    examples = (
+        ("ResearchArtifact", "research/0007-example.md"),
+        ("Decision", "decisions/0012-example.md"),
+        ("Feature", "features/netlens/0031-example.md"),
+    )
+    for heading, relative_path in examples:
+        match = re.search(rf"^### {heading}\n\n```yaml\n(.*?)^```$", text, re.MULTILINE | re.DOTALL)
+        assert match is not None, f"Missing fenced YAML for {heading}"
+        entry = tmp_path / relative_path
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        entry.write_text(f"---\n{match[1]}---\n", encoding="utf-8")
+
+    workspace = load_workspace(tmp_path)
+    assert workspace.issues == ()
+    assert [record.id for record in workspace.research] == ["0007"]
+    assert [record.id for record in workspace.decisions] == ["0012"]
+    assert [(record.project, record.id) for record in workspace.features] == [("netlens", "0031")]

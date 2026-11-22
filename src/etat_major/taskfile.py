@@ -22,6 +22,9 @@ from pydantic import (
     field_validator,
 )
 
+from etat_major.localfiles import read_text
+from etat_major.text_safety import bounded_repr
+
 INTENT_STATUSES = ("draft", "ready", "blocked", "done")
 DERIVED_STATUSES = ("running", "needs-you", "review", "failed")
 
@@ -34,6 +37,7 @@ class TaskFileError(ValueError):
     def __init__(self, path: Path, field: str | None, message: str) -> None:
         self.path = path
         self.field = field
+        self.message = message
         where = f"{path.name}: field '{field}'" if field else path.name
         super().__init__(f"{where}: {message}")
 
@@ -140,9 +144,11 @@ def split_frontmatter(text: str, path: Path) -> tuple[dict[str, Any], str]:
     try:
         meta = yaml.load(m.group(1) or "", Loader=_Loader)  # noqa: S506 - safe subclass
     except _KeyError as exc:
-        raise TaskFileError(path, exc.key, exc.message) from None
-    except yaml.YAMLError as exc:
-        raise TaskFileError(path, None, f"invalid YAML frontmatter: {exc}") from exc
+        raise TaskFileError(path, _brief(exc.key), exc.message) from None
+    # Explicit YAML scalar tags can fail inside their constructors.
+    except (yaml.YAMLError, ValueError, LookupError, AttributeError, RecursionError) as exc:
+        detail = getattr(exc, "problem", None) or str(exc)
+        raise TaskFileError(path, None, f"invalid YAML frontmatter: {_brief(detail)}") from exc
     if not isinstance(meta, dict):
         raise TaskFileError(path, None, "frontmatter must be a YAML mapping")
     return meta, text[m.end() :]
@@ -193,15 +199,27 @@ def scan_markup(body: str) -> tuple[str, ...]:
     return tuple(f"line {n}: raw HTML or script markup in body" for n in sorted(lines))
 
 
-def _first_error(path: Path, exc: ValidationError) -> TaskFileError:
+def _brief(value: str) -> str:
+    return value if len(value) <= 80 else value[:80] + "…"
+
+
+def first_error(path: Path, exc: ValidationError) -> TaskFileError:
     err = exc.errors()[0]
-    field = ".".join(str(p) for p in err["loc"]) or None
+    field = _brief(".".join(str(p) for p in err["loc"])) or None
     msg = err["msg"].removeprefix("Value error, ")
     return TaskFileError(path, field, msg)
 
 
-def _load(path: Path, model: type[Any]) -> Any:
-    if "drafts" in path.parts:
+def load_frontmatter_model[T: BaseModel](
+    path: Path,
+    model: type[T],
+    *,
+    filename_prefix: bool = False,
+    include_body: bool = False,
+    dir_fd: int | None = None,
+) -> T:
+    """Read and validate a bounded Markdown record with optional filename and body checks."""
+    if include_body and "drafts" in path.parts:
         raise TaskFileError(
             path,
             None,
@@ -209,36 +227,46 @@ def _load(path: Path, model: type[Any]) -> Any:
             "not task files; set status: draft on a normal task instead",
         )
     try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise TaskFileError(path, None, f"cannot read file: {exc}") from exc
+        text = read_text(path, 1, dir_fd=dir_fd)
+    except (OSError, ValueError) as exc:
+        detail = exc.strerror if isinstance(exc, OSError) else str(exc)
+        raise TaskFileError(path, None, f"cannot read file: {_brief(detail or str(exc))}") from exc
     meta, body = split_frontmatter(text, path)
+    if include_body:
+        meta = {**meta, "body": body, "warnings": scan_markup(body)}
     try:
-        return model.model_validate({**meta, "body": body, "warnings": scan_markup(body)})
+        record = model.model_validate(meta)
     except ValidationError as exc:
-        raise _first_error(path, exc) from exc
+        raise first_error(path, exc) from exc
+    if filename_prefix:
+        prefix = path.name.split("-", 1)[0].removesuffix(".md")
+        if (ident := record.id) != prefix:
+            raise TaskFileError(
+                path,
+                "id",
+                f"id {bounded_repr(ident)} does not match filename prefix {bounded_repr(prefix)}",
+            )
+    return record
 
 
 def _require_stem(path: Path, value: str, label: str) -> None:
     if value != path.stem:
-        raise TaskFileError(path, "id", f"id '{value}' must equal the filename ({label})")
+        raise TaskFileError(
+            path, "id", f"id {bounded_repr(value)} must equal the filename ({label})"
+        )
 
 
 def parse_task(path: Path) -> Task:
-    task = _load(path, Task)
-    prefix = path.name.split("-", 1)[0].removesuffix(".md")
-    if task.id != prefix:
-        raise TaskFileError(path, "id", f"id '{task.id}' does not match filename prefix '{prefix}'")
-    return task
+    return load_frontmatter_model(path, Task, filename_prefix=True, include_body=True)
 
 
 def parse_project(path: Path) -> Project:
-    project = _load(path, Project)
+    project = load_frontmatter_model(path, Project, include_body=True)
     _require_stem(path, project.id, "without .md")
     return project
 
 
 def parse_initiative(path: Path) -> Initiative:
-    initiative = _load(path, Initiative)
+    initiative = load_frontmatter_model(path, Initiative, include_body=True)
     _require_stem(path, initiative.id, "without .md")
     return initiative

@@ -17,17 +17,18 @@ from pydantic import (
     Field,
     StrictInt,
     StrictStr,
-    ValidationError,
     ValidationInfo,
     field_validator,
 )
 
 from etat_major.refs import Ref, parse_ref
-from etat_major.taskfile import TaskFileError, _first_error, split_frontmatter
+from etat_major.taskfile import load_frontmatter_model
+from etat_major.text_safety import bounded_repr, is_control
 
 Text = Annotated[StrictStr, Field(min_length=1)]
 RecordId = Annotated[str, Field(pattern=r"^[0-9]+$")]
-Url = Annotated[StrictStr, Field(pattern=r"^https?://\S+$")]
+FindingId = Annotated[StrictStr, Field(pattern=r"^[A-Za-z0-9_-]+$")]
+Project = Annotated[StrictStr, Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
 DERIVED_FEATURE_STATUSES = (
     "approved",
     "rejected",
@@ -41,11 +42,20 @@ DECIDED_STATUSES = ("approved", "rejected", "postponed")
 CODE_KINDS = ("fp:n", "fp:f", "trail")
 
 
+def _reject_url_controls(value: Any) -> Any:
+    if isinstance(value, str) and any(is_control(char) for char in value):
+        raise ValueError("URL must not contain Unicode control or format characters")
+    return value
+
+
+Url = Annotated[StrictStr, Field(pattern=r"^https?://\S+$"), BeforeValidator(_reject_url_controls)]
+
+
 def _ref_of(*kinds: str, label: str) -> Any:
     def parse(value: Any) -> Ref:
         ref = parse_ref(value)
         if ref.kind not in kinds:
-            raise ValueError(f"expected a {label} reference, got {value!r}")
+            raise ValueError(f"expected a {label} reference, got {bounded_repr(value)}")
         return ref
 
     return Annotated[Ref, BeforeValidator(parse)]
@@ -81,17 +91,20 @@ class Source(_Record):
 
 
 class Finding(_Record):
-    id: Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]+$")]
+    id: FindingId
     text: Text
     source: Url | None = None
-    evidence: Literal["firsthand", "author", "secondhand", "opinion", "unverified"] | None = None
+    evidence: Literal["firsthand", "author", "secondhand", "opinion", "unverified"] | None = Field(
+        default=None, validate_default=True
+    )
     confidence: Literal["low", "medium", "high"] | None = None
+    conflicts_with: tuple[FindingId, ...] = ()
 
     @field_validator("evidence")
     @classmethod
     def _unsourced_means_unverified(cls, v: Any, info: ValidationInfo) -> Any:
-        if v not in (None, "unverified") and info.data.get("source") is None:
-            raise ValueError("a finding without a source may only have evidence 'unverified'")
+        if info.data.get("source") is None and v != "unverified":
+            raise ValueError("a finding without a source requires evidence 'unverified'")
         return v
 
 
@@ -102,6 +115,9 @@ class ResearchArtifact(_Identified):
     sources: Annotated[tuple[Source, ...], Field(min_length=1)]
     findings: tuple[Finding, ...] = ()
     question: Text | None = None
+    project: Project | None = None
+    collected_by: Text | None = None
+    collected_on: date | None = None
     unresolved: tuple[Text, ...] = ()
 
     def is_unsourced(self, finding: Finding) -> bool:
@@ -124,6 +140,7 @@ class Decision(_Identified):
     alternatives: tuple[Alternative, ...] = ()
     evidence: tuple[ResearchRef, ...] = ()
     features: tuple[FeatureRef, ...] = ()
+    revisit_on: date | None = None
 
     @field_validator("decided_by")
     @classmethod
@@ -145,7 +162,7 @@ class ArchitectureLink(_Record):
 
 
 class Feature(_Identified):
-    project: Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
+    project: Project
     title: Text
     status: Literal["idea", "researching", "proposed", "planned"]
     problem: Text | None = None
@@ -169,31 +186,13 @@ class Feature(_Identified):
         return v
 
 
-def _load[T: _Identified](path: Path, model: type[T]) -> T:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise TaskFileError(path, None, f"cannot read file: {exc}") from exc
-    meta, _body = split_frontmatter(text, path)
-    try:
-        record = model.model_validate(meta)
-    except ValidationError as exc:
-        raise _first_error(path, exc) from exc
-    prefix = path.name.split("-", 1)[0].removesuffix(".md")
-    if record.id != prefix:
-        raise TaskFileError(
-            path, "id", f"id '{record.id}' does not match filename prefix '{prefix}' (filename)"
-        )
-    return record
+def load_research(path: Path, *, dir_fd: int | None = None) -> ResearchArtifact:
+    return load_frontmatter_model(path, ResearchArtifact, filename_prefix=True, dir_fd=dir_fd)
 
 
-def load_research(path: Path) -> ResearchArtifact:
-    return _load(path, ResearchArtifact)
+def load_decision(path: Path, *, dir_fd: int | None = None) -> Decision:
+    return load_frontmatter_model(path, Decision, filename_prefix=True, dir_fd=dir_fd)
 
 
-def load_decision(path: Path) -> Decision:
-    return _load(path, Decision)
-
-
-def load_feature(path: Path) -> Feature:
-    return _load(path, Feature)
+def load_feature(path: Path, *, dir_fd: int | None = None) -> Feature:
+    return load_frontmatter_model(path, Feature, filename_prefix=True, dir_fd=dir_fd)

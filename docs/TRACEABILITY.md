@@ -26,7 +26,7 @@ workspace/
 
 **Reference grammar.** Every cross-reference is `<kind>:<id>`. Project-scoped records (`feature`, `task`, `milestone`) use `<project>/<n>`, for example `feature:netlens/0031`, `task:netlens/0042`, `milestone:netlens/m3`. `research` and `decision` ids are global (`research:0007`, `decision:0012`). A finding inside research is `research:0007#f1`. Code references are prefixed by layer: `fp:n:<component>` or `fp:f:<path>` (Floorplan), `trail:<path>#<symbol>` (Trail). Loaders reject any other spelling.
 
-**Minimum for Slice 1.** Records need only `id`, `status`, `provenance`, and for research a `source` (url, date). Every other field shown below is optional and may be added when a view needs it; do not build validators for fields nothing reads yet.
+**Minimum for Slice 1.** Each record needs an `id` and `status`. Research also needs a `title`, `provenance` and at least one source with a URL and date. A Decision needs a `question` and, when approved, rejected or postponed, `decided_by: human`. A Feature needs a `project` and `title`. The planned status requires an approved linked Decision.
 
 ## Records
 
@@ -51,7 +51,10 @@ findings:
     text: Users report slow scans on large subnets.
     source: https://example.org/thread/123
     confidence: medium      # low | medium | high
-    conflicts_with: [f4]    # optional
+    conflicts_with: [f3]    # optional
+  - id: f3
+    text: The impact of slow scans on repeat users is unclear.
+    evidence: unverified
 unresolved:
   - Is the complaint specific to one competitor?
 ```
@@ -71,7 +74,7 @@ alternatives:
   - option: Export CSV only
     why_not: Does not address the reported need to see trends.
 rationale: Repeated firsthand complaints; competitors lack it.
-evidence: [research:0007#f1, research:0007#f3]
+evidence: [research:0007#f1]
 features: [feature:netlens/0031]
 revisit_on: 2027-03-01      # optional
 ```
@@ -140,6 +143,14 @@ Not every idea moves forward. Moving a Feature to Approved needs a human-recorde
 - **Decision → consequences.** Features, tasks and evidence; whether the original goal was met (the Verified stage compared with the stated outcome).
 
 The minimum trace query, `etat-major trace feature:<project>/<id>`, prints that chain with provenance and marks each missing link `unverified` or `gap`.
+
+Feature–Decision links are read from either record, and the workspace and trace warn when only one side lists the link.
+
+### CLI exit codes
+
+- `0` for success, including traces with warnings or unsourced findings.
+- `1` for missing, stale or gap trace items, or workspace validation issues.
+- `2` for usage errors, including unknown features, missing or invalid workspace directories, and unavailable or invalid Floorplan graphs.
 
 ## Manual ChatGPT research handoff (first version)
 
