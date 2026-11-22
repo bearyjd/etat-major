@@ -5,6 +5,7 @@ import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from secrets import token_hex
 
 NOFOLLOW = os.O_NOFOLLOW | os.O_NONBLOCK
 
@@ -50,3 +51,27 @@ def read_text(path: Path, limit_mib: int, *, dir_fd: int | None = None) -> str:
         if len(data) > limit:
             raise ValueError(f"file exceeds the {limit_mib} MiB limit")
     return data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+
+def write_new_text(path: Path, text: str, *, dir_fd: int | None = None) -> None:
+    """Publish a bounded UTF-8 file exclusively, after writing it in full."""
+    data = text.encode("utf-8")
+    if len(data) > 1024 * 1024:
+        raise ValueError("file exceeds the 1 MiB limit")
+    if dir_fd is None:
+        with open_directory(path.parent) as fd:
+            _publish(path.name, data, fd)
+    else:
+        _publish(path.name, data, dir_fd)
+
+
+def _publish(name: str, data: bytes, directory: int) -> None:
+    temp = f".research-{token_hex(16)}.tmp"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW
+    fd = os.open(temp, flags, 0o600, dir_fd=directory)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(data)
+        os.link(temp, name, src_dir_fd=directory, dst_dir_fd=directory, follow_symlinks=False)
+    finally:
+        os.unlink(temp, dir_fd=directory)

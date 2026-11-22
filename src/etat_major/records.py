@@ -48,7 +48,11 @@ def _reject_url_controls(value: Any) -> Any:
     return value
 
 
-Url = Annotated[StrictStr, Field(pattern=r"^https?://\S+$"), BeforeValidator(_reject_url_controls)]
+Url = Annotated[
+    StrictStr, Field(pattern=r"(?i)^https?://\S+$"), BeforeValidator(_reject_url_controls)
+]
+SourceKind = Literal["reddit", "github-issue", "docs", "article", "store-review", "other"]
+Evidence = Literal["firsthand", "author", "secondhand", "opinion", "unverified"]
 
 
 def _ref_of(*kinds: str, label: str) -> Any:
@@ -84,26 +88,25 @@ class _Identified(_Record):
 class Source(_Record):
     url: Url
     date: date
-    kind: Literal["reddit", "github-issue", "docs", "article", "store-review", "other"] | None = (
-        None
-    )
-    evidence: Literal["firsthand", "author", "secondhand", "opinion", "unverified"] | None = None
+    kind: SourceKind | None = None
+    evidence: Evidence | None = None
 
 
 class Finding(_Record):
     id: FindingId
     text: Text
     source: Url | None = None
-    evidence: Literal["firsthand", "author", "secondhand", "opinion", "unverified"] | None = Field(
-        default=None, validate_default=True
-    )
+    source_date_missing: Literal[True] | None = None
+    evidence: Evidence | None = Field(default=None, validate_default=True)
     confidence: Literal["low", "medium", "high"] | None = None
     conflicts_with: tuple[FindingId, ...] = ()
 
     @field_validator("evidence")
     @classmethod
     def _unsourced_means_unverified(cls, v: Any, info: ValidationInfo) -> Any:
-        if info.data.get("source") is None and v != "unverified":
+        if (info.data.get("source") is None or info.data.get("source_date_missing")) and (
+            v != "unverified"
+        ):
             raise ValueError("a finding without a source requires evidence 'unverified'")
         return v
 
@@ -112,7 +115,7 @@ class ResearchArtifact(_Identified):
     title: Text
     status: Literal["unreviewed", "reviewed", "superseded"]
     provenance: Literal["verified", "inferred", "ai-generated", "human"]
-    sources: Annotated[tuple[Source, ...], Field(min_length=1)]
+    sources: tuple[Source, ...]
     findings: tuple[Finding, ...] = ()
     question: Text | None = None
     project: Project | None = None
@@ -120,9 +123,25 @@ class ResearchArtifact(_Identified):
     collected_on: date | None = None
     unresolved: tuple[Text, ...] = ()
 
+    @field_validator("sources")
+    @classmethod
+    def _require_dated_sources(
+        cls, sources: tuple[Source, ...], info: ValidationInfo
+    ) -> tuple[Source, ...]:
+        if not sources and (info.data.get("status"), info.data.get("provenance")) != (
+            "unreviewed",
+            "ai-generated",
+        ):
+            raise ValueError("at least 1 dated source is required")
+        return sources
+
     def is_unsourced(self, finding: Finding) -> bool:
         """Computed, never stored: no source URL, or one that is not a dated source here."""
-        return finding.source is None or finding.source not in {s.url for s in self.sources}
+        return (
+            finding.source is None
+            or finding.source_date_missing is True
+            or finding.source not in {s.url for s in self.sources}
+        )
 
 
 class Alternative(_Record):
@@ -167,6 +186,7 @@ class Feature(_Identified):
     status: Literal["idea", "researching", "proposed", "planned"]
     problem: Text | None = None
     outcome: Text | None = None
+    research_questions: tuple[Text, ...] = ()
     priority: Annotated[StrictInt, Field(ge=1)] | None = None
     research: tuple[ResearchRef, ...] = ()
     decisions: tuple[DecisionRef, ...] = ()
