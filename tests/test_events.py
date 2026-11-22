@@ -227,3 +227,31 @@ def test_hook_token_redacted_from_payload_text(kind, payload, field):
     assert "tok-demo" not in event.model_dump_json()
     assert "tok-demo" not in repr(event)
     assert "[redacted]" in getattr(event.payload, field)
+
+
+@pytest.mark.parametrize("field", ["event_id", "idempotency_key", "session_id", "task_id"])
+def test_hook_token_redacted_from_envelope_ids(field):
+    event = parse_event(make(**{field: "sess-tok-demo:1"}))
+    assert "tok-demo" not in event.model_dump_json()
+    assert "tok-demo" not in repr(event)
+    assert getattr(event, field) == "sess-[redacted]:1"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"x-tok-secret-9": 1},  # unknown envelope field named after the token
+        {"payload": {"auth_mode": "subscription", "tok-secret-9": 1}},
+        {"payload": {"tok-secret-9": 1}},
+        {"extra": {"tok-secret-9": ["tok-secret-9"]}},
+    ],
+)
+def test_hook_token_not_in_error_field_names(bad):
+    from etat_major.events import Event
+
+    data = make(**{"hook_token": "tok-secret-9", **bad})
+    for parse in (parse_event, Event.model_validate, lambda d: Event(**d)):
+        with pytest.raises(ValidationError) as exc:
+            parse(data)
+        assert exc.value.error_count() >= 1
+        assert not _leaks(exc.value, "tok-secret-9")

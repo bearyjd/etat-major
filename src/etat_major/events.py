@@ -124,13 +124,31 @@ Payload = (
 )
 
 
-def _without_token(payload: dict[str, Any], token: Any) -> dict[str, Any]:
-    """Payload text is persisted; a copy of the ``hook_token`` in it must not be."""
-    if not isinstance(token, str) or not token:
-        return payload
-    return {
-        k: v.replace(token, "[redacted]") if isinstance(v, str) else v for k, v in payload.items()
-    }
+def _scrub(value: Any, token: str) -> Any:
+    """Replace every copy of the ``hook_token`` in report text and field names."""
+    if isinstance(value, str):
+        return value.replace(token, "[redacted]")
+    if isinstance(value, BaseModel):
+        value = value.model_dump()
+    if isinstance(value, dict):
+        return {_scrub(k, token): _scrub(v, token) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub(v, token) for v in value]
+    return value
+
+
+def _prepare(data: Any) -> Any:
+    """Scrub the token from all but its own field, then type the payload by kind."""
+    if not isinstance(data, dict):
+        return data
+    token = data.get("hook_token")
+    if isinstance(token, str) and token:
+        data = {**_scrub({k: v for k, v in data.items() if k != "hook_token"}, token)}
+        data["hook_token"] = token
+    kind, raw = data.get("kind"), data.get("payload")
+    if kind in PAYLOADS and isinstance(raw, dict | BaseModel):
+        data = {**data, "payload": PAYLOADS[kind].model_validate(raw)}
+    return data
 
 
 class Event(_Strict):
@@ -151,27 +169,15 @@ class Event(_Strict):
 
     @model_validator(mode="wrap")
     @classmethod
-    def _no_input_in_errors(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Event:
+    def _scrub_and_validate(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Event:
         """Drop raw input from errors: it can hold the ``hook_token``."""
         try:
-            return handler(data)
+            return handler(_prepare(data))
         except ValidationError as exc:
             errors = [{**e, "input": None} for e in exc.errors(include_url=False)]
             title = exc.title
         # Raised outside the handler so the original error is not chained.
         raise ValidationError.from_exception_data(title, errors, hide_input=True)
-
-    @model_validator(mode="before")
-    @classmethod
-    def _typed_payload(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("kind") in PAYLOADS:
-            raw = data.get("payload")
-            if isinstance(raw, PAYLOADS[data["kind"]]):
-                raw = raw.model_dump()
-            if isinstance(raw, dict):
-                raw = _without_token(raw, data.get("hook_token"))
-                data = {**data, "payload": PAYLOADS[data["kind"]].model_validate(raw)}
-        return data
 
     @model_validator(mode="after")
     def _payload_matches_kind(self) -> Event:
