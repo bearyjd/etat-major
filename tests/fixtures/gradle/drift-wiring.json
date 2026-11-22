@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "version": 1,
+    "languages": ["kotlin"],
+    "scopes": [{"prefix": "scope-only", "markers": ["build.gradle.kts"]}]
+  },
+  "nodes": [
+    {"path": "app/src/main/kotlin/App.kt", "id": "app/src/main/kotlin/App.kt#App", "kind": "class", "span": "L1-L3"},
+    {"path": "libraries/core/src/main/kotlin/Core.kt", "id": "libraries/core/src/main/kotlin/Core.kt#Core", "kind": "class", "span": "L1-L2"}
+  ],
+  "edges": [
+    {"source": "app/src/main/kotlin/App.kt#App", "target": "libraries/core/src/main/kotlin/Core.kt#Core", "relation": "calls", "confidence": "extracted"},
+    {"source": "app/src/main/kotlin/App.kt#App", "target": "libraries/core/src/main/kotlin/Core.kt#Core", "relation": "extends", "confidence": "inferred"},
+    {"source": "libraries/core/src/main/kotlin/Core.kt#Core", "target": "app/src/main/kotlin/App.kt#App", "relation": "contains", "confidence": "extracted"}
+  ]
+}

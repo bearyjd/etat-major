@@ -23,7 +23,7 @@ from pydantic import (
     field_validator,
 )
 
-from etat_major.localfiles import open_directory, read_text
+from etat_major.localfiles import open_directory, read_text, read_text_kib
 from etat_major.refs import Ref, RefError, parse_ref
 from etat_major.taskfile import TaskFileError, check_recorded_array, first_error
 from etat_major.text_safety import bounded_repr
@@ -123,8 +123,8 @@ def load_graph(path: Path) -> FloorplanIndex:
     return FloorplanIndex(_collect(path, data, "nodes", "id"), _collect(path, data, "files", "p"))
 
 
-def _graph_document(path: Path) -> dict[str, Any]:
-    data = _read_json(path)
+def _graph_document(path: Path, *, limit_kib: int | None = None) -> dict[str, Any]:
+    data = _read_json(path, limit_kib=limit_kib)
     if "schema" not in data:
         raise FloorplanError(
             path, "schema", f"missing schema; only {SUPPORTED_SCHEMA!r} is supported"
@@ -146,10 +146,14 @@ def _reject_json_constant(_: str) -> None:
     raise ValueError("non-JSON numeric constant")
 
 
-def _read_json(path: Path) -> dict[str, Any]:
+def _read_json(path: Path, *, limit_kib: int | None = None) -> dict[str, Any]:
     try:
         with open_directory(path.parent) as fd:
-            text = read_text(path, _LIMIT_MIB, dir_fd=fd)
+            text = (
+                read_text(path, _LIMIT_MIB, dir_fd=fd)
+                if limit_kib is None
+                else read_text_kib(path, limit_kib, dir_fd=fd)
+            )
     except (OSError, UnicodeError):
         raise FloorplanError(path, "JSON", "cannot read file as UTF-8") from None
     except ValueError as exc:
@@ -278,9 +282,9 @@ def _unique(path: Path, field: str, values: tuple[str, ...]) -> None:
         seen.add(value)
 
 
-def load_architecture(path: Path) -> ArchitectureDocument:
+def load_architecture(path: Path, *, limit_kib: int | None = None) -> ArchitectureDocument:
     """Read the structured fields used by RepoIndex from a bounded graph."""
-    data = _graph_document(path)
+    data = _graph_document(path, limit_kib=limit_kib)
     # External links can contain remote URLs and are outside the architecture contract.
     links = data.get("links")
     if isinstance(links, list):

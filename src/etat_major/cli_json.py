@@ -17,6 +17,8 @@ COMMAND_NAMES = {
     "index": "index",
     "progress": "progress",
     "workspace": "workspace-validate",
+    "gradle-deps": "gradle-deps",
+    "gradle-drift": "gradle-drift",
 }
 
 

@@ -1,0 +1,16 @@
+{
+  "schema": "floorplan/graph@1",
+  "meta": {"repos": [{"name": "demo"}]},
+  "project": "demo",
+  "nodes": [],
+  "files": [
+    {"p": "app/src/main/kotlin/App.kt"},
+    {"p": "libraries/core/src/main/kotlin/Core.kt"},
+    {"p": "orphan/src/main/kotlin/Orphan.kt"}
+  ],
+  "routes": [],
+  "links": [
+    {"a": "f:app/src/main/kotlin/App.kt", "b": "f:libraries/core/src/main/kotlin/Core.kt", "k": "import"},
+    {"a": "f:app/src/main/kotlin/App.kt", "b": "f:orphan/src/main/kotlin/Orphan.kt", "k": "import"}
+  ]
+}

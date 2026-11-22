@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "ok",
+    "data",
+    "issues"
+  ],
+  "properties": {
+    "schema": {
+      "const": "etat-major/gradle-deps@1"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/data"
+        }
+      ]
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/issue"
+      }
+    }
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "field",
+        "message",
+        "severity"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ]
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "configuration",
+        "test_only",
+        "file",
+        "line"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "test_only": {
+          "type": "boolean"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "modules",
+        "edges"
+      ],
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/module"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/edge"
+          }
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "directory"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "directory": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "if": {
+    "properties": {
+      "ok": {
+        "const": true
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "data": {
+        "type": "object"
+      },
+      "issues": {
+        "not": {
+          "contains": {
+            "properties": {
+              "severity": {
+                "const": "error"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "else": {
+    "properties": {
+      "issues": {
+        "contains": {
+          "properties": {
+            "severity": {
+              "const": "error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

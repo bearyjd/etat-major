@@ -18,7 +18,7 @@ from pydantic import (
     field_validator,
 )
 
-from etat_major.localfiles import open_directory, read_text
+from etat_major.localfiles import open_directory, read_text, read_text_kib
 from etat_major.refs import RefError, parse_ref
 from etat_major.taskfile import TaskFileError, Text, check_recorded_array, first_error
 
@@ -228,10 +228,14 @@ def _reject_constant(_: str) -> None:
     raise ValueError("non-JSON numeric constant")
 
 
-def _read_wiring(path: Path) -> _Wiring:
+def _read_wiring(path: Path, *, limit_kib: int | None) -> _Wiring:
     try:
         with open_directory(path.parent) as fd:
-            text = read_text(path, _LIMIT_MIB, dir_fd=fd)
+            text = (
+                read_text(path, _LIMIT_MIB, dir_fd=fd)
+                if limit_kib is None
+                else read_text_kib(path, limit_kib, dir_fd=fd)
+            )
     except (OSError, UnicodeError):
         raise TrailError(path, "JSON", "cannot read file as UTF-8") from None
     except ValueError as exc:
@@ -257,8 +261,13 @@ def _read_wiring(path: Path) -> _Wiring:
         raise TrailError(path, error.field, error.message) from None
 
 
-def load_wiring(path: Path, *, indexed_revision: str | None = None) -> SymbolIndex:
+def load_wiring(
+    path: Path,
+    *,
+    indexed_revision: str | None = None,
+    limit_kib: int | None = None,
+) -> SymbolIndex:
     """Read a bounded wiring.json graph. Revision is supplied by the caller."""
-    wiring = _read_wiring(path)
+    wiring = _read_wiring(path, limit_kib=limit_kib)
     symbols = tuple(Symbol(node.id, node.kind, node.path, *node.span) for node in wiring.nodes)
     return SymbolIndex(symbols, wiring.edges, _coverage(wiring), indexed_revision)

@@ -23,6 +23,7 @@ from etat_major.cli_json import (
 from etat_major.evidence import ArchitectureIndexes, load_progress
 from etat_major.evidence_render import progress_data, render_text
 from etat_major.floorplan import load_graph
+from etat_major.gradle_cli import run_gradle
 from etat_major.refs import RefError, parse_ref
 from etat_major.render import render_trace
 from etat_major.repo_index import load_repo_index
@@ -88,6 +89,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     dlist.add_argument("--workspace", type=Path, required=True)
     _research_parser(sub.add_parser("research", help="prepare and import manual research"))
+    _gradle_parser(sub.add_parser("gradle", help="inspect recorded Gradle dependencies"))
     progress = sub.add_parser("progress", help="derive progress from local Git and recorded PRs")
     for flag in ("workspace", "repo", "prs", "releases"):
         progress.add_argument(f"--{flag}", type=Path, required=True)
@@ -114,6 +116,17 @@ def _research_parser(parser: argparse.ArgumentParser) -> None:
     paste.add_argument("file", type=Path)
     paste.add_argument("--workspace", type=Path, required=True)
     paste.add_argument("--id", required=True, help="four-digit research ID")
+
+
+def _gradle_parser(parser: argparse.ArgumentParser) -> None:
+    actions = parser.add_subparsers(dest="action", required=True)
+    deps = actions.add_parser("deps", help="read declared project dependencies")
+    drift = actions.add_parser("drift", help="compare declarations with recorded code evidence")
+    drift.add_argument("--graph", type=Path, required=True)
+    drift.add_argument("--trail", type=Path)
+    for action in (deps, drift):
+        action.add_argument("--root", type=Path, required=True)
+        action.add_argument("--format", choices=("json", "text"), default="text")
 
 
 def _err(message: str) -> None:
@@ -266,9 +279,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = _parser().parse_args(argv)
     except _ArgumentError as exc:
-        if argv and argv[0] in COMMAND_NAMES and json_format_requested(argv):
-            issue = Issue(COMMAND_NAMES[argv[0]], "arguments", "invalid command arguments")
-            return json_result(argv[0], USAGE, issues=(issue,))
+        command = _result_command(argv)
+        if command in COMMAND_NAMES and json_format_requested(argv):
+            issue = Issue(COMMAND_NAMES[command], "arguments", "invalid command arguments")
+            return json_result(command, USAGE, issues=(issue,))
         exc.parser.text_error(str(exc))
         return USAGE
     handlers = {
@@ -278,14 +292,23 @@ def main(argv: list[str] | None = None) -> int:
         "research": _research,
         "progress": _progress,
         "workspace": _workspace_validate,
+        "gradle": run_gradle,
     }
     try:
         return handlers[args.command](args)
     except TaskFileError as exc:
         if args.format == "json":
-            return json_error(args.command, exc)
+            return json_error(_result_command(argv), exc)
         _err(str(exc))
         return USAGE
+
+
+def _result_command(argv: list[str]) -> str:
+    if not argv:
+        return ""
+    if argv[0] == "gradle":
+        return "gradle-drift" if argv[1:2] == ["drift"] else "gradle-deps"
+    return argv[0]
 
 
 if __name__ == "__main__":
