@@ -1,8 +1,12 @@
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from etat_major.refs import parse_ref
+from etat_major.trace import trace_feature
 from etat_major.workspace import linked_decisions, load_workspace
 
 FEATURE = "features/netlens/0031-latency-graph.md"
@@ -74,12 +78,26 @@ def test_not_planned_needs_no_decision(workspace_dir):
     assert load_workspace(workspace_dir).issues == ()
 
 
-def test_decision_side_link_counts(workspace_dir):
-    edit(workspace_dir, FEATURE, "decisions: [decision:0012]\n", "")
+@pytest.mark.parametrize(
+    ("rel", "line", "missing_field"),
+    [
+        (FEATURE, "decisions: [decision:0012]\n", "decisions"),
+        (DECISION, "features: [feature:netlens/0031]\n", "features"),
+    ],
+)
+def test_one_sided_links_count_and_warn(workspace_dir, rel, line, missing_field):
+    edit(workspace_dir, rel, line, "")
     ws = load_workspace(workspace_dir)
     assert ws.issues == ()
     feature = ws.get_feature("netlens", "0031")
     assert [d.id for d in linked_decisions(ws, feature)] == ["0012"]
+    (warning,) = ws.warnings
+    assert warning.field == missing_field
+    trace = trace_feature(ws, None, parse_ref("feature:netlens/0031"))
+    (trace_warning,) = trace.warnings
+    assert "one-sided" in trace_warning
+    assert "feature:netlens/0031" in trace_warning and "decision:0012" in trace_warning
+    assert not trace.has_problems
 
 
 @pytest.mark.parametrize(
@@ -125,3 +143,95 @@ def test_feature_ref_resolution_helper(workspace_dir):
     ws = load_workspace(workspace_dir)
     assert ws.get_feature_by_ref(parse_ref("feature:netlens/0031")) is not None
     assert ws.get_feature_by_ref(parse_ref("feature:netlens/0999")) is None
+
+
+@pytest.mark.parametrize("location", ["research/0099-linked.md", "features/linked", "decisions"])
+def test_workspace_reports_symlinks(workspace_dir, tmp_path, location):
+    link = workspace_dir / location
+    target = tmp_path / "external"
+    if location == "decisions":
+        link.rename(target)
+    elif location.endswith(".md"):
+        demo = workspace_dir / "research/0007-android-network-tools.md"
+        target.write_text(demo.read_text().replace("id: 0007", "id: 0099"))
+    else:
+        target.mkdir()
+        path = target / "0099-external.md"
+        path.write_text("---\nid: 0099\nproject: linked\ntitle: External\nstatus: idea\n---\n")
+    link.symlink_to(target)
+    ws = load_workspace(workspace_dir)
+    assert any(i.path == location and "symlink" in i.message for i in ws.issues)
+    assert ws.get_research("0099") is None
+    assert ws.get_feature("linked", "0099") is None
+    if location == "decisions":
+        assert ws.decisions == ()
+
+
+def test_workspace_reports_fifo_without_waiting(workspace_dir):
+    os.mkfifo(workspace_dir / "research/0099-pipe.md")
+    proc = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            "-m",
+            "etat_major.cli",
+            "decisions",
+            "list",
+            "--workspace",
+            str(workspace_dir),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=2,
+    )
+    assert proc.returncode == 1
+    assert "0099-pipe.md" in proc.stderr and "regular file" in proc.stderr
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["2024-13-45", "9" * 5000, '!!int ""', "!!bool perhaps", "!!timestamp invalid"],
+    ids=["date", "integer", "empty-int", "invalid-bool", "invalid-timestamp"],
+)
+def test_workspace_collects_yaml_value_errors(workspace_dir, bad):
+    research = workspace_dir / "research"
+    (research / "0098-value.md").write_text(f"---\nvalue: {bad}\n---\n")
+    (research / "0099-other.md").write_text("invalid")
+    ws = load_workspace(workspace_dir)
+    assert [i.path for i in ws.issues] == ["research/0098-value.md", "research/0099-other.md"]
+    assert "invalid YAML" in ws.issues[0].message
+    assert [d.id for d in ws.decisions] == ["0012", "0013"]
+
+
+def test_workspace_reports_stray_feature_files(workspace_dir):
+    stray = ("features/.md", "features/top.md", "features/netlens/deep/deeper/nested.md")
+    for rel in stray:
+        path = workspace_dir / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    ws = load_workspace(workspace_dir)
+    assert {i.path for i in ws.issues} == set(stray)
+    assert all("features/<project>/" in i.message for i in ws.issues)
+    assert len(ws.features) == 1
+
+
+def test_record_size_limit_before_reading(workspace_dir):
+    path = workspace_dir / "research/0099-large.md"
+    with path.open("wb") as stream:
+        stream.truncate(1024 * 1024 + 1)
+    (issue,) = load_workspace(workspace_dir).issues
+    assert issue.path == "research/0099-large.md" and "1 MiB" in issue.message
+
+
+def test_record_error_bounds_echoed_id(workspace_dir):
+    edit(workspace_dir, FEATURE, "id: 0031", "id: " + "8" * 1000)
+    issue = next(i for i in load_workspace(workspace_dir).issues if i.field == "id")
+    assert "8" * 81 not in issue.message
+    assert "8" * 79 in issue.message
+
+
+def test_feature_research_finding_must_resolve(workspace_dir):
+    edit(workspace_dir, FEATURE, "research: [research:0007]", "research: [research:0007#f9]")
+    (issue,) = load_workspace(workspace_dir).issues
+    assert (issue.path, issue.field) == ("feature:netlens/0031", "research")
+    assert "missing" in issue.message and "research:0007#f9" in issue.message

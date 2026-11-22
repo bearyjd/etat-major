@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from etat_major.floorplan import FloorplanIndex
 from etat_major.records import ArchitectureLink, Decision, Feature, ResearchArtifact
 from etat_major.refs import Ref
-from etat_major.workspace import Workspace, linked_decisions
+from etat_major.text_safety import bounded_repr
+from etat_major.workspace import Workspace, link_warnings, linked_decisions
 
-PROBLEM_STATES = ("missing", "stale", "gap")
+ARCHITECTURE_PROBLEM_STATES = frozenset({"stale", "gap"})
 
 
 class TraceError(ValueError):
@@ -90,10 +91,12 @@ class Trace:
 
     @property
     def has_problems(self) -> bool:
-        states = [a.state for a in self.architecture]
-        states += [r.status for r in self.research] + [d.status for d in self.decisions]
-        states += [c.state for d in self.decisions for c in d.cites]
-        return any(s in PROBLEM_STATES for s in states)
+        return (
+            any(a.state in ARCHITECTURE_PROBLEM_STATES for a in self.architecture)
+            or any(not r.found for r in self.research)
+            or any(not d.found for d in self.decisions)
+            or any(c.state == "missing" for d in self.decisions for c in d.cites)
+        )
 
 
 def _research_line(ref: Ref, research: ResearchArtifact | None) -> ResearchLine:
@@ -176,10 +179,10 @@ def _decision_lines(
 
 def trace_feature(ws: Workspace, graph: FloorplanIndex | None, ref: Ref) -> Trace:
     if ref.kind != "feature":
-        raise TraceError(f"expected a feature reference, got '{ref}'")
+        raise TraceError(f"expected a feature reference, got {bounded_repr(str(ref))}")
     feature = ws.get_feature_by_ref(ref)
     if feature is None:
-        raise TraceError(f"{ref} not found in the workspace")
+        raise TraceError(f"{bounded_repr(str(ref))} not found in the workspace")
     research_ids = _research_ids(feature, linked_decisions(ws, feature))
     research = tuple(
         _research_line(Ref("research", rid), ws.get_research(rid)) for rid in research_ids
@@ -194,5 +197,5 @@ def trace_feature(ws: Workspace, graph: FloorplanIndex | None, ref: Ref) -> Trac
         ),
         acceptance=tuple(AcceptanceLine(a.id, a.text) for a in feature.acceptance),
         links=tuple(LinkLine(r, "unverified") for r in (*feature.tasks, *feature.milestones)),
-        warnings=_warnings(ws, decisions),
+        warnings=_warnings(ws, decisions) + tuple(map(str, link_warnings(ws, feature))),
     )

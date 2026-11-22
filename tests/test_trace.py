@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -143,6 +144,9 @@ def test_warning_approved_decision_citing_unreviewed_research(workspace_dir):
     t = run(workspace_dir)
     assert any("decision:0012" in w and "unreviewed" in w for w in t.warnings)
     assert not any("decision:0013" in w for w in t.warnings)  # rejected: no warning
+    assert "WARNINGS\n  decision:0012 is approved but cites unreviewed research:0007\n" in (
+        render_trace(t)
+    )
 
 
 def test_warning_approved_decision_citing_unsourced_finding(workspace_dir):
@@ -152,6 +156,28 @@ def test_warning_approved_decision_citing_unsourced_finding(workspace_dir):
 
 def test_clean_demo_has_no_warnings(workspace_dir):
     assert run(workspace_dir).warnings == ()
+
+
+@pytest.mark.parametrize("status", ["gap", "stale", "missing"])
+def test_found_records_do_not_use_architecture_problem_states(workspace_dir, status):
+    trace = run(workspace_dir)
+    (research,) = trace.research
+    decision = trace.decisions[0]
+    assert not replace(trace, research=(replace(research, status=status),)).has_problems
+    assert not replace(trace, decisions=(replace(decision, status=status),)).has_problems
+
+
+def test_problem_states_are_specific_to_architecture_and_citations(workspace_dir):
+    trace = run(workspace_dir)
+    assert not replace(
+        trace, architecture=(replace(trace.architecture[0], state="missing"),)
+    ).has_problems
+    decision = trace.decisions[0]
+    (cite,) = decision.cites
+    for state in ("gap", "stale"):
+        assert not replace(
+            trace, decisions=(replace(decision, cites=(replace(cite, state=state),)),)
+        ).has_problems
 
 
 def test_missing_links_marked_missing(workspace_dir):
@@ -167,6 +193,30 @@ def test_missing_links_marked_missing(workspace_dir):
     assert t.has_problems
 
 
+@pytest.mark.parametrize("ref", ["research:0099", "research:0007#f99"])
+def test_missing_decision_citation_is_a_problem(workspace_dir, ref):
+    edit(workspace_dir, "decisions/0012-add-latency-graph.md", "research:0007#f1", ref)
+    t = run(workspace_dir)
+    decision = next(d for d in t.decisions if str(d.ref) == "decision:0012")
+    assert [(str(c.ref), c.state) for c in decision.cites] == [(ref, "missing")]
+    assert t.has_problems
+
+
+def test_missing_feature_listed_decision_is_a_problem(workspace_dir):
+    edit(
+        workspace_dir,
+        FEATURE,
+        "decisions: [decision:0012]",
+        "decisions: [decision:0012, decision:0099]",
+    )
+    t = run(workspace_dir)
+    missing = [d for d in t.decisions if not d.found]
+    assert [(str(d.ref), d.relation, d.status) for d in missing] == [
+        ("decision:0099", "linked", "missing"),
+    ]
+    assert t.has_problems
+
+
 def test_tasks_and_milestones_unverified(workspace_dir):
     edit(
         workspace_dir,
@@ -179,6 +229,11 @@ def test_tasks_and_milestones_unverified(workspace_dir):
         ("task:netlens/0042", "unverified"),
         ("milestone:netlens/m3", "unverified"),
     ]
+    assert (
+        "TASKS AND MILESTONES\n"
+        "  task:netlens/0042  unverified\n"
+        "  milestone:netlens/m3  unverified\n" in render_trace(t)
+    )
 
 
 def test_trace_errors(workspace_dir):
@@ -217,3 +272,8 @@ def test_render_no_graph_and_deterministic(workspace_dir):
     assert "modifies  unverified" in out and "new  unverified" in out
     assert out == render_trace(run(workspace_dir))
     assert str(workspace_dir) not in out
+
+
+def test_render_empty_architecture_as_unverified(workspace_dir):
+    trace = replace(run(workspace_dir), architecture=())
+    assert "ARCHITECTURE\n  (none)  unverified\nACCEPTANCE\n" in render_trace(trace)
