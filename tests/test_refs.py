@@ -13,6 +13,7 @@ from etat_major.refs import Ref, RefError, parse_ref
         ("research:0007#f1", "research", None, "0007", "f1"),
         ("decision:0012", "decision", None, "0012", None),
         ("fp:n:ui.hostdetail", "fp:n", None, "ui.hostdetail", None),
+        ("fp:n:area/component:variant", "fp:n", None, "area/component:variant", None),
         ("fp:f:app/src/Latency.kt", "fp:f", None, "app/src/Latency.kt", None),
         (
             "trail:app/src/Latency.kt#Latency.sample",
@@ -50,6 +51,20 @@ def test_valid_refs(text, kind, project, ident, fragment):
         "fp:f:/abs/path.py",
         "fp:f:../escape.py",
         "fp:n:ui.hostdetail#sym",
+        "fp:n:/root",
+        "fp:n:area\x1b",
+        "fp:n:area\u202e",
+        "fp:n:area component",
+        "fp:f:app/./x.py",
+        "fp:f:app/../x.py",
+        "fp:f:app\\x.py",
+        "fp:f:app/%2e%2e/x.py",
+        "fp:f:app/\x00x.py",
+        "fp:f:app/\x1bx.py",
+        "fp:f:app/\u202ex.py",
+        "trail:app/./x.py#symbol",
+        "trail:app/x.py#symbol\x1b",
+        "trail:app/x.py#symbol\u202e",
         "trail:app/x.py",  # symbol required
         "trail:app/x.py#",
         "trail:#sym",
@@ -79,3 +94,14 @@ def test_ref_is_immutable_and_hashable():
 def test_error_names_grammar():
     with pytest.raises(RefError, match="expected"):
         parse_ref("bogus")
+
+
+def test_ref_error_bounds_unknown_kind_and_input():
+    value = "x" * 100 + "\x1b[31m:unused"
+    with pytest.raises(RefError) as exc:
+        parse_ref(value)
+    message = str(exc.value)
+    assert exc.value.text == value
+    assert "x" * 80 in message
+    assert "x" * 81 not in message
+    assert "\x1b" not in message

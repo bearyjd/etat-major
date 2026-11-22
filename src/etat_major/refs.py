@@ -11,11 +11,13 @@ import re
 from dataclasses import dataclass
 from typing import Final
 
+from etat_major.text_safety import bounded_repr, is_control
+
 _PROJECT = r"[a-z0-9][a-z0-9_-]*"
 _PATH_OK = re.compile(r"[^\s#]+")
 _PROJECT_KINDS: Final = {"feature": r"[0-9]+", "task": r"[0-9]+", "milestone": r"[a-z0-9]+"}
 _GLOBAL_KINDS: Final = ("research", "decision")
-_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+_COMPONENT = re.compile(r"[A-Za-z0-9][^\s#]*")
 _FINDING = re.compile(r"[A-Za-z0-9_-]+")
 _GLOBAL_ID = re.compile(r"[0-9]+")
 _GRAMMAR = (
@@ -29,7 +31,7 @@ class RefError(ValueError):
 
     def __init__(self, text: object, reason: str) -> None:
         self.text = text
-        super().__init__(f"invalid reference {text!r}: {reason}; expected {_GRAMMAR}")
+        super().__init__(f"invalid reference {bounded_repr(text)}: {reason}; expected {_GRAMMAR}")
 
 
 @dataclass(frozen=True)
@@ -51,14 +53,23 @@ class Ref:
 
 
 def _check_path(text: str, path: str) -> None:
-    if not _PATH_OK.fullmatch(path) or path.startswith("/") or ".." in path.split("/"):
-        raise RefError(text, "path must be relative, without '..', spaces or '#'")
+    if (
+        not _PATH_OK.fullmatch(path)
+        or path.startswith("/")
+        or {".", ".."}.intersection(path.split("/"))
+        or any(char in "\\%" or is_control(char) for char in path)
+    ):
+        raise RefError(
+            text,
+            "path must be relative without dot segments, spaces, '#', '\\', '%', "
+            "or control characters",
+        )
 
 
 def _code_ref(text: str) -> Ref | None:
     if text.startswith("fp:n:"):
         comp = text[5:]
-        if not _COMPONENT.fullmatch(comp):
+        if not _COMPONENT.fullmatch(comp) or any(map(is_control, comp)):
             raise RefError(text, "bad component id")
         return Ref("fp:n", comp)
     if text.startswith("fp:f:"):
@@ -67,7 +78,7 @@ def _code_ref(text: str) -> Ref | None:
     if text.startswith("trail:"):
         path, sep, symbol = text[6:].partition("#")
         _check_path(text, path)
-        if not sep or not _PATH_OK.fullmatch(symbol):
+        if not sep or not _PATH_OK.fullmatch(symbol) or any(map(is_control, symbol)):
             raise RefError(text, "trail refs need a '#<symbol>'")
         return Ref("trail", path, fragment=symbol)
     return None
@@ -95,4 +106,4 @@ def parse_ref(text: str) -> Ref:
         if hash_ and (kind != "research" or not _FINDING.fullmatch(frag)):
             raise RefError(text, "only research refs take a '#<finding>' fragment")
         return Ref(kind, ident, fragment=frag or None)
-    raise RefError(text, f"unknown kind '{kind}'")
+    raise RefError(text, f"unknown kind {bounded_repr(kind)}")
