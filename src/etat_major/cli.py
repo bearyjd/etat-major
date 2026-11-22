@@ -124,6 +124,7 @@ def _gradle_parser(parser: argparse.ArgumentParser) -> None:
     drift = actions.add_parser("drift", help="compare declarations with recorded code evidence")
     drift.add_argument("--graph", type=Path, required=True)
     drift.add_argument("--trail", type=Path)
+    drift.add_argument("--verbose", action="store_true", help="show Trail-only pair details")
     for action in (deps, drift):
         action.add_argument("--root", type=Path, required=True)
         action.add_argument("--format", choices=("json", "text"), default="text")

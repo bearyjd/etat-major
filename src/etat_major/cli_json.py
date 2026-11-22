@@ -7,7 +7,7 @@ from dataclasses import fields, is_dataclass
 from etat_major.records import Decision
 from etat_major.refs import Ref
 from etat_major.taskfile import TaskFileError
-from etat_major.text_safety import public_source_url, public_text
+from etat_major.text_safety import public_source_url, public_text, safe
 from etat_major.trace import ARCHITECTURE_PROBLEM_STATES, Trace
 from etat_major.workspace import Issue, feature_ref
 
@@ -64,6 +64,8 @@ def json_result(
 
 def json_error(command: str, error: TaskFileError) -> int:
     issue = Issue(error.filename, error.field_name, error.message)
+    if command in {"gradle-deps", "gradle-drift"}:
+        issue = Issue(safe(error.filename), safe(error.field_name), safe(error.message))
     return json_result(command, 2, issues=(issue,))
 
 

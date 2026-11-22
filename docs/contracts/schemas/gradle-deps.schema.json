@@ -112,6 +112,12 @@
           "items": {
             "$ref": "#/$defs/edge"
           }
+        },
+        "implicit_edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/implicit_edge"
+          }
         }
       }
     },
@@ -128,6 +134,53 @@
         },
         "directory": {
           "type": "string"
+        }
+      }
+    },
+    "implicit_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target",
+        "configuration",
+        "test_only",
+        "file",
+        "line",
+        "plugin_id",
+        "plugin_class",
+        "implicit"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "test_only": {
+          "type": "boolean"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "plugin_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "plugin_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "implicit": {
+          "const": true
         }
       }
     }

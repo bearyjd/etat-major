@@ -11,6 +11,19 @@ from etat_major.trail import SymbolIndex
 
 type Pair = tuple[str, str]
 type EvidenceKey = tuple[str, str, str, str | None]
+type EvidenceCounts = Counter[tuple[EvidenceKey, bool]]
+
+_TEST_SOURCE_SETS = frozenset({"test", "androidTest", "testFixtures"})
+_PRODUCTION_CONFIGURATIONS = frozenset({"implementation", "api"})
+_TIER_DETAILS = {
+    "declared_and_used": (1, "An explicit declaration covers recorded evidence"),
+    "declared_implicit": (1, "A convention plugin declaration covers recorded evidence"),
+    "import_backed": (1, "A Floorplan import originates outside the test source sets"),
+    "test_only": (2, "All recorded evidence originates in test source sets"),
+    "call_only": (3, "Trail records symbol links without a non-test Floorplan import"),
+    "build_time_configuration": (3, "An advisory declaration has no recorded evidence"),
+    "unused_candidate": (1, "An explicit production declaration has no recorded evidence"),
+}
 
 
 @dataclass(frozen=True)
@@ -29,6 +42,22 @@ class DriftEdge:
     declarations: tuple[Declaration, ...]
     evidence_count: int
     evidence: tuple[Evidence, ...]
+    tier: str
+    rank: int
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DriftSummary:
+    declared_and_used: int
+    declared_implicit: int
+    import_backed: int
+    test_only: int
+    call_only: int
+    build_time_configuration: int
+    unused_candidate: int
+    modules_only_declared: int
+    modules_only_observed: int
 
 
 @dataclass(frozen=True)
@@ -38,15 +67,13 @@ class Drift:
     used_but_undeclared: tuple[DriftEdge, ...]
     modules_only_declared: tuple[str, ...]
     modules_only_observed: tuple[str, ...]
+    declared_implicit: tuple[DriftEdge, ...]
+    call_only: tuple[DriftEdge, ...]
+    summary: DriftSummary
 
     @property
     def has_differences(self) -> bool:
-        return bool(
-            self.declared_but_unused
-            or self.used_but_undeclared
-            or self.modules_only_declared
-            or self.modules_only_observed
-        )
+        return bool(self.summary.import_backed or self.summary.unused_candidate)
 
 
 def _module_id(directory: str) -> str:
@@ -94,22 +121,23 @@ def _observed(
 
 
 def _count(
-    evidence: dict[Pair, Counter[EvidenceKey]],
+    evidence: dict[Pair, EvidenceCounts],
     endpoints: tuple[str, str],
     owners: dict[str, str],
     key: EvidenceKey,
 ) -> None:
     source, target = map(owners.get, endpoints)
     if source is not None and target is not None and source != target:
-        evidence[source, target][key] += 1
+        test_source = not _TEST_SOURCE_SETS.isdisjoint(endpoints[0].split("/"))
+        evidence[source, target][key, test_source] += 1
 
 
 def _evidence(
     floorplan: ArchitectureDocument,
     trail: SymbolIndex | None,
     owners: dict[str, str],
-) -> dict[Pair, Counter[EvidenceKey]]:
-    evidence: dict[Pair, Counter[EvidenceKey]] = defaultdict(Counter)
+) -> dict[Pair, EvidenceCounts]:
+    evidence: dict[Pair, EvidenceCounts] = defaultdict(Counter)
     for link in floorplan.links:
         if link.kind == "import" and link.source.startswith("f:") and link.target.startswith("f:"):
             _count(
@@ -135,6 +163,48 @@ def _evidence(
     return evidence
 
 
+def _tier(
+    explicit: tuple[Declaration, ...], implicit: tuple[Declaration, ...], counts: EvidenceCounts
+) -> str:
+    if not counts:
+        if any(d.configuration in _PRODUCTION_CONFIGURATIONS and not d.test_only for d in explicit):
+            return "unused_candidate"
+        return "build_time_configuration"
+    if explicit:
+        return "declared_and_used"
+    if implicit:
+        return "declared_implicit"
+    if any(key[0] == "floorplan" and not test_source for key, test_source in counts):
+        return "import_backed"
+    if all(test_source for _, test_source in counts):
+        return "test_only"
+    return "call_only"
+
+
+def _drift_edge(
+    pair: Pair,
+    explicit: tuple[Declaration, ...],
+    implicit: tuple[Declaration, ...],
+    counts: EvidenceCounts,
+) -> DriftEdge:
+    evidence: Counter[EvidenceKey] = Counter()
+    for (key, _), count in counts.items():
+        evidence[key] += count
+    items = tuple(Evidence(*key, count) for key, count in sorted(evidence.items()))
+    tier = _tier(explicit, implicit, counts)
+    rank, reason = _TIER_DETAILS[tier]
+    return DriftEdge(
+        *pair, explicit + implicit, sum(evidence.values()), items, tier, rank, (reason,)
+    )
+
+
+def _by_pair(edges: tuple[Declaration, ...]) -> dict[Pair, list[Declaration]]:
+    declarations: dict[Pair, list[Declaration]] = defaultdict(list)
+    for edge in edges:
+        declarations[edge.source, edge.target].append(edge)
+    return declarations
+
+
 def compare_dependencies(
     declared: GradleDependencies,
     floorplan: ArchitectureDocument,
@@ -143,26 +213,34 @@ def compare_dependencies(
     """Compare ordered module pairs, keeping every configuration and evidence source."""
     owners, observed = _observed(declared, floorplan, trail)
     evidence = _evidence(floorplan, trail, owners)
-    declarations: dict[Pair, list[Declaration]] = defaultdict(list)
-    for declaration in declared.edges:
-        declarations[declaration.source, declaration.target].append(declaration)
-    used, unused, undeclared = [], [], []
-    for pair in sorted(declarations.keys() | evidence.keys()):
-        declared_items = tuple(declarations.get(pair, ()))
-        counts = evidence.get(pair, Counter())
-        items = tuple(Evidence(*key, count) for key, count in sorted(counts.items()))
-        row = DriftEdge(*pair, declared_items, sum(counts.values()), items)
-        if declared_items and items:
-            used.append(row)
-        elif declared_items:
+    explicit = _by_pair(declared.edges)
+    implicit = _by_pair(declared.implicit_edges)
+    by_tier: dict[str, list[DriftEdge]] = defaultdict(list)
+    unused = []
+    for pair in sorted(explicit.keys() | implicit.keys() | evidence.keys()):
+        row = _drift_edge(
+            pair,
+            tuple(explicit.get(pair, ())),
+            tuple(implicit.get(pair, ())),
+            evidence.get(pair, Counter()),
+        )
+        by_tier[row.tier].append(row)
+        if not row.evidence:
             unused.append(row)
-        else:
-            undeclared.append(row)
     declared_modules = {module.id for module in declared.modules}
+    only_declared = tuple(sorted(declared_modules - observed))
+    only_observed = tuple(sorted(observed - declared_modules))
     return Drift(
-        tuple(used),
-        tuple(unused),
-        tuple(undeclared),
-        tuple(sorted(declared_modules - observed)),
-        tuple(sorted(observed - declared_modules)),
+        declared_and_used=tuple(by_tier["declared_and_used"]),
+        declared_but_unused=tuple(unused),
+        used_but_undeclared=tuple(by_tier["import_backed"] + by_tier["test_only"]),
+        modules_only_declared=only_declared,
+        modules_only_observed=only_observed,
+        declared_implicit=tuple(by_tier["declared_implicit"]),
+        call_only=tuple(by_tier["call_only"]),
+        summary=DriftSummary(
+            **{tier: len(by_tier[tier]) for tier in _TIER_DETAILS},
+            modules_only_declared=len(only_declared),
+            modules_only_observed=len(only_observed),
+        ),
     )

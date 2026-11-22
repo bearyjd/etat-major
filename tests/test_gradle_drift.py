@@ -182,7 +182,8 @@ def test_drift_chooses_longest_directory_prefix_without_trail(drift_args, capsys
 def test_conventional_inference_does_not_steal_known_module_files(drift_args, capsys, tmp_path):
     graph = _graph_with_import(tmp_path, "app/vendor/src/App.kt", "libraries/core/Core.kt")
     args = [*drift_args[:5], str(graph), "--format", "json"]
-    assert main(args) == 1
-    _, envelope = read_envelope(capsys, "gradle-drift", 1)
+    assert main(args) == 0
+    _, envelope = read_envelope(capsys, "gradle-drift", 0)
+    assert envelope["issues"] == []
     assert envelope["data"]["modules_only_observed"] == []
     assert envelope["data"]["declared_and_used"][0]["source"] == ":app"
