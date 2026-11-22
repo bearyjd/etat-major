@@ -7,7 +7,8 @@ etat-major gradle drift --root DIR --graph FLOORPLAN_JSON [--trail TRAIL_JSON] [
 
 The adapter reads scripts and recorded indexes as local data. It never runs
 Gradle, a wrapper, build code, Git, or an indexer. It opens directories and
-regular files without following symlinks. Each input is limited to 256 KiB.
+regular files without following symlinks. Settings and build scripts are
+limited to 256 KiB each.
 Discovery probes at most 5,000 settings and build file paths. Project paths,
 comment nesting and delimiter nesting are limited to 64 levels.
 
@@ -49,7 +50,9 @@ multiple declarations.
 ## Drift
 
 `drift` reads Floorplan file-to-file imports and optionally Trail calls and
-extends edges with known symbol endpoints. It assigns each recorded file to
+extends edges with known symbol endpoints. Each recorded graph reader enforces
+its own schema and limits, including a 64 MiB file cap for each input.
+The comparison assigns each recorded file to
 the longest matching non-root Gradle directory or Trail scope on a path
 boundary. Unmatched files use the directory preceding `/src/` in conventional
 source layouts, then the root project if available. Observed-only directories

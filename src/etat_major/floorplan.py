@@ -10,7 +10,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, overload
 
 from pydantic import (
     AfterValidator,
@@ -118,7 +118,18 @@ def _collect(path: Path, data: dict[str, Any], key: str, field: str) -> frozense
     return frozenset(values)
 
 
-def load_graph(path: Path) -> FloorplanIndex:
+@overload
+def load_graph(path: Path, *, architecture: Literal[False] = False) -> FloorplanIndex: ...
+
+
+@overload
+def load_graph(path: Path, *, architecture: Literal[True]) -> ArchitectureDocument: ...
+
+
+def load_graph(path: Path, *, architecture: bool = False) -> FloorplanIndex | ArchitectureDocument:
+    """Read a recorded graph, with structured nodes and links when requested."""
+    if architecture:
+        return load_architecture(path)
     data = _graph_document(path)
     return FloorplanIndex(_collect(path, data, "nodes", "id"), _collect(path, data, "files", "p"))
 

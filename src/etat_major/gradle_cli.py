@@ -4,8 +4,8 @@ import argparse
 from dataclasses import asdict
 
 from etat_major.cli_json import json_result
-from etat_major.floorplan import load_architecture
-from etat_major.gradle import INPUT_LIMIT_KIB, load_dependencies
+from etat_major.floorplan import load_graph
+from etat_major.gradle import load_dependencies
 from etat_major.gradle_drift import compare_dependencies
 from etat_major.text_safety import public_text, safe
 from etat_major.trail import load_wiring
@@ -21,8 +21,8 @@ def run_gradle(args: argparse.Namespace) -> int:
             "edges": [asdict(edge) for edge in dependencies.edges],
         }
     else:
-        graph = load_architecture(args.graph, limit_kib=INPUT_LIMIT_KIB)
-        trail = load_wiring(args.trail, limit_kib=INPUT_LIMIT_KIB) if args.trail else None
+        graph = load_graph(args.graph, architecture=True)
+        trail = load_wiring(args.trail) if args.trail else None
         report = compare_dependencies(dependencies, graph, trail)
         data = asdict(report)
         if report.has_differences:

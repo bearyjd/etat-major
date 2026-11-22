@@ -105,18 +105,47 @@ def test_drift_rejects_invalid_adapter_input(drift_args, capsys, tmp_path, flag)
     assert envelope["data"] is None
 
 
+@pytest.mark.parametrize(("flag", "mib"), [("--graph", 2), ("--trail", 10)])
+def test_drift_accepts_large_recorded_artifacts(drift_args, capsys, tmp_path, flag, mib):
+    index = drift_args.index(flag) + 1
+    with open(drift_args[index], encoding="utf-8") as stream:
+        graph = json.load(stream)
+    graph["padding"] = "x" * (mib * 1024 * 1024)
+    large = tmp_path / "large.json"
+    large.write_text(json.dumps(graph), encoding="utf-8")
+    drift_args[index] = str(large)
+
+    assert main(drift_args) == 1  # The fixture has candidate drift.
+    _, envelope = read_envelope(capsys, "gradle-drift", 1)
+    (used,) = envelope["data"]["declared_and_used"]
+    assert used["evidence_count"] == 3
+
+
 @pytest.mark.parametrize("flag", ["--graph", "--trail"])
 def test_drift_bounds_recorded_artifacts(drift_args, capsys, tmp_path, flag):
-    original = drift_args[drift_args.index(flag) + 1]
     large = tmp_path / "large.json"
-    with open(original, encoding="utf-8") as stream:
-        large.write_text(stream.read() + " " * (256 * 1024), encoding="utf-8")
+    with large.open("wb") as stream:
+        stream.truncate(64 * 1024 * 1024 + 1)
     drift_args[drift_args.index(flag) + 1] = str(large)
     assert main(drift_args) == 2
     _, envelope = read_envelope(capsys, "gradle-drift", 2)
     (issue,) = envelope["issues"]
     assert (issue["path"], issue["field"]) == ("large.json", "JSON")
-    assert "256 KiB" in issue["message"]
+    assert "64 MiB" in issue["message"]
+
+
+def test_drift_rejects_invalid_floorplan_link(drift_args, capsys, tmp_path):
+    graph = tmp_path / "graph.json"
+    graph.write_text(
+        '{"schema":"floorplan/graph@1","nodes":[],"files":[],"routes":[],"links":[{}]}',
+        encoding="utf-8",
+    )
+    drift_args[drift_args.index("--graph") + 1] = str(graph)
+    assert main(drift_args) == 2
+    _, envelope = read_envelope(capsys, "gradle-drift", 2)
+    (issue,) = envelope["issues"]
+    assert issue["path"] == "graph.json"
+    assert issue["field"].startswith("links")
 
 
 def test_drift_chooses_longest_directory_prefix_without_trail(drift_args, capsys, tmp_path):
