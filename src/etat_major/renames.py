@@ -49,7 +49,9 @@ def _raise_walk_error(exc: OSError) -> None:
     raise exc
 
 
-def _read_stdout(process: subprocess.Popen, limit: int) -> bytes:
+def _read_stdout(
+    process: subprocess.Popen, limit: int, exit_codes: tuple[int, ...]
+) -> tuple[bytes, int]:
     if process.stdout is None:
         raise ValueError("Git output unavailable")
     deadline = monotonic() + _TIMEOUT
@@ -67,12 +69,20 @@ def _read_stdout(process: subprocess.Popen, limit: int) -> bytes:
                 raise ValueError("Git timed out")
         else:
             raise ValueError("Git timed out")
-    if process.wait(timeout=max(0, deadline - monotonic())):
+    status = process.wait(timeout=max(0, deadline - monotonic()))
+    if status not in exit_codes:
         raise ValueError("Git could not read the requested data")
-    return bytes(result)
+    return bytes(result), status
 
 
-def _git(fd: int, args: tuple[str, ...], limit: int, *, use_repo: bool = True) -> bytes:
+def _git_result(
+    fd: int,
+    args: tuple[str, ...],
+    limit: int,
+    *,
+    use_repo: bool = True,
+    exit_codes: tuple[int, ...] = (0,),
+) -> tuple[bytes, int]:
     env = {
         "PATH": os.defpath,
         "LC_ALL": "C",
@@ -97,10 +107,14 @@ def _git(fd: int, args: tuple[str, ...], limit: int, *, use_repo: bool = True) -
         stderr=subprocess.DEVNULL,
     ) as process:
         try:
-            return _read_stdout(process, limit)
+            return _read_stdout(process, limit, exit_codes)
         finally:
             if process.poll() is None:
                 process.kill()
+
+
+def _git(fd: int, args: tuple[str, ...], limit: int, *, use_repo: bool = True) -> bytes:
+    return _git_result(fd, args, limit, use_repo=use_repo)[0]
 
 
 def _guard_config(fd: int) -> None:

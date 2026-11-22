@@ -22,7 +22,7 @@ from pydantic import (
 )
 
 from etat_major.refs import Ref, parse_ref
-from etat_major.taskfile import load_frontmatter_model
+from etat_major.taskfile import CalendarDate, load_frontmatter_model
 from etat_major.text_safety import bounded_repr, is_control
 
 Text = Annotated[StrictStr, Field(min_length=1)]
@@ -194,6 +194,23 @@ class Feature(_Identified):
     tasks: tuple[TaskRef, ...] = ()
     acceptance: tuple[Acceptance, ...] = ()
     architecture: tuple[ArchitectureLink, ...] = ()
+
+    accepted_by: Text | None = None
+    accepted_on: CalendarDate | None = Field(default=None, validate_default=True)
+
+    @field_validator("accepted_by")
+    @classmethod
+    def _acceptance_author(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("expected a nonempty acceptance author")
+        return value
+
+    @field_validator("accepted_on")
+    @classmethod
+    def _acceptance_pair(cls, value: date | None, info: ValidationInfo) -> date | None:
+        if "accepted_by" in info.data and (value is None) != (info.data["accepted_by"] is None):
+            raise ValueError("accepted_by and accepted_on must be recorded together")
+        return value
 
     @field_validator("status", mode="before")
     @classmethod

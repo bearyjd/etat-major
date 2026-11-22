@@ -1,0 +1,16 @@
+[
+  {
+    "number": 7,
+    "title": "Recorded latency work",
+    "body": "Changes for latency.\n\nTask: netlens/0042\n",
+    "state": "MERGED",
+    "isDraft": false,
+    "mergedAt": "2026-01-03T00:00:00Z",
+    "headRefName": "latency-work",
+    "reviewDecision": "APPROVED",
+    "statusCheckRollup": [
+      {"__typename": "CheckRun", "name": "tests", "status": "COMPLETED", "conclusion": "FAILURE"}
+    ],
+    "mergeCommit": {"oid": "0123456789abcdef0123456789abcdef01234567"}
+  }
+]

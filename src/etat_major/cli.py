@@ -11,6 +11,8 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from etat_major.evidence import ArchitectureIndexes, load_progress
+from etat_major.evidence_render import render_json, render_text
 from etat_major.floorplan import FloorplanError, load_graph
 from etat_major.refs import RefError, parse_ref
 from etat_major.render import render_trace
@@ -68,6 +70,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     dlist.add_argument("--workspace", type=Path, required=True)
     _research_parser(sub.add_parser("research", help="prepare and import manual research"))
+    progress = sub.add_parser("progress", help="derive progress from local Git and recorded PRs")
+    for flag in ("workspace", "repo", "prs", "releases"):
+        progress.add_argument(f"--{flag}", type=Path, required=True)
+    progress.add_argument("--format", choices=("json", "text"), default="text")
+    progress.add_argument("--graph", type=Path, help="optional recorded Floorplan graph")
+    progress.add_argument("--trail", type=Path, help="optional recorded Trail wiring")
     return parser
 
 
@@ -164,6 +172,30 @@ def _research(args: argparse.Namespace) -> int:
     return OK
 
 
+def _progress(args: argparse.Namespace) -> int:
+    try:
+        indexes = ArchitectureIndexes(
+            load_graph(args.graph) if args.graph is not None else None,
+            load_wiring(args.trail) if args.trail is not None else None,
+        )
+        report = load_progress(args.workspace, args.repo, args.prs, args.releases, indexes=indexes)
+    except (TaskFileError, FloorplanError, TrailError) as exc:
+        _err(str(exc))
+        return USAGE
+    for issue in report.issues:
+        print(
+            safe(
+                f"invalid: {issue.path}: field '{issue.field or 'file'}': invalid workspace record",
+                limit=_INVALID_LINE_LIMIT,
+            ),
+            file=sys.stderr,
+        )
+    if report.omitted_issues:
+        print(f"... {report.omitted_issues} more issues", file=sys.stderr)
+    sys.stdout.write(render_json(report) if args.format == "json" else render_text(report))
+    return PROBLEMS if report.issues else OK
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     handlers = {
@@ -171,6 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         "decisions": _decisions_list,
         "index": _index,
         "research": _research,
+        "progress": _progress,
     }
     return handlers[args.command](args)
 

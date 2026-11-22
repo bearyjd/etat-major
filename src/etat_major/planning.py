@@ -53,6 +53,16 @@ def parse_milestone(path: Path, *, dir_fd: int | None = None) -> Milestone:
     )
 
 
+def load_scoped_milestone(path: Path, *, dir_fd: int) -> tuple[str, Milestone]:
+    milestone = parse_milestone(path, dir_fd=dir_fd)
+    project = path.parent.name
+    try:
+        parse_ref(f"milestone:{project}/{milestone.id}")
+    except RefError:
+        raise TaskFileError(path, "project", "expected a project directory name") from None
+    return project, milestone
+
+
 def parse_vision(path: Path, *, dir_fd: int | None = None) -> Vision:
     vision = load_frontmatter_model(path, Vision, include_body=True, dir_fd=dir_fd)
     if vision.project != path.stem:

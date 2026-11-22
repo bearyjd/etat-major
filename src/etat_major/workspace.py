@@ -15,6 +15,7 @@ from itertools import islice
 from pathlib import Path
 
 from etat_major.localfiles import open_directory as _directory
+from etat_major.planning import Milestone, load_scoped_milestone
 from etat_major.records import (
     Decision,
     Feature,
@@ -65,6 +66,7 @@ class Workspace:
     warnings: tuple[Issue, ...] = ()
     omitted_issues: int = 0
     tasks: tuple[Task, ...] = ()
+    milestones: tuple[tuple[str, Milestone], ...] = ()
 
     def get_research(self, record_id: str) -> ResearchArtifact | None:
         return next((r for r in self.research if r.id == record_id), None)
@@ -171,7 +173,7 @@ def _load_dir[T](
         issues.append(Issue(sub, None, "expected a directory"))
         return []
     out: list[T] = []
-    allow_projects = sub in {"features", "tasks"}
+    allow_projects = sub in {"features", "milestones", "tasks"}
     try:
         with _directory(base, root_fd) as fd:
             for path, folder_fd in _walk_markdown(
@@ -372,11 +374,17 @@ def load_workspace(root: Path) -> Workspace:
             decisions = _load_dir(resolved, fd, "decisions", load_decision, issues)
             features = _load_dir(resolved, fd, "features", _load_feature, issues)
             tasks = _load_dir(resolved, fd, "tasks", _load_task, issues)
+            milestones = _load_dir(resolved, fd, "milestones", load_scoped_milestone, issues)
     except (OSError, ValueError, RuntimeError) as exc:
         detail = (exc.strerror or str(exc)) if isinstance(exc, OSError) else str(exc)
         raise WorkspaceError(f"workspace {bounded_repr(str(root))}: {detail}") from exc
     ws = Workspace(
-        tuple(research), tuple(decisions), tuple(features), (), tasks=tuple(t for _, t in tasks)
+        tuple(research),
+        tuple(decisions),
+        tuple(features),
+        (),
+        tasks=tuple(t for _, t in tasks),
+        milestones=tuple(milestones),
     )
     _cross_validate(ws, issues)
     _check_tasks(tasks, issues)
