@@ -16,6 +16,9 @@ dependencies = [
     "markdown-it-py>=3",
 ]
 
+[project.scripts]
+etat-major = "etat_major.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8",

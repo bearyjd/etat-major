@@ -1,0 +1,10 @@
+{
+  "meta": {"version": 1, "languages": ["kotlin"]},
+  "nodes": [
+    {"id": "app/src/net/Scanner.kt", "path": "app/src/net/Scanner.kt", "kind": "file", "span": "L1-L210"},
+    {"id": "app/src/net/Scanner.kt#scan", "path": "app/src/net/Scanner.kt", "kind": "function", "span": "L5-L67"}
+  ],
+  "edges": [
+    {"source": "app/src/net/Scanner.kt", "target": "app/src/net/Scanner.kt#scan", "relation": "contains", "confidence": "extracted"}
+  ]
+}

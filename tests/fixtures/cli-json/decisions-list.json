@@ -1,0 +1,22 @@
+{
+  "data": {
+    "decisions": [
+      {
+        "decided_by": "human",
+        "question": "Should NetLens add a live latency graph?",
+        "ref": "decision:0012",
+        "status": "approved"
+      },
+      {
+        "decided_by": "human",
+        "question": "Should NetLens sync scan history to a cloud service?",
+        "ref": "decision:0013",
+        "status": "rejected"
+      }
+    ],
+    "omitted_issues": 0
+  },
+  "issues": [],
+  "ok": true,
+  "schema": "etat-major/decisions-list@1"
+}

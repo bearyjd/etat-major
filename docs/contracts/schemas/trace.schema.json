@@ -1,0 +1,151 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ok", "data", "issues"],
+  "properties": {
+    "schema": {"const": "etat-major/trace@1"},
+    "ok": {"type": "boolean"},
+    "data": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}}
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "field", "message", "severity"],
+      "properties": {
+        "path": {"type": "string"},
+        "field": {"type": "string"},
+        "message": {"type": "string"},
+        "severity": {"enum": ["error", "warning"]}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature", "research", "decisions", "architecture", "acceptance", "links", "omitted_issues"],
+      "properties": {
+        "feature": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ref", "title", "status", "outcome", "provenance"],
+          "properties": {
+            "ref": {"type": "string"},
+            "title": {"type": "string"},
+            "status": {"enum": ["idea", "researching", "proposed", "planned"]},
+            "outcome": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+            "provenance": {"const": "human"}
+          }
+        },
+        "research": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref", "found", "status", "provenance", "title", "findings"],
+            "properties": {
+              "ref": {"type": "string"},
+              "found": {"type": "boolean"},
+              "status": {"enum": ["unreviewed", "reviewed", "superseded", "missing"]},
+              "provenance": {"type": "string"},
+              "title": {"type": "string"},
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "text", "source", "unsourced", "provenance"],
+                  "properties": {
+                    "id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "source": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+                    "unsourced": {"type": "boolean"},
+                    "provenance": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref", "relation", "found", "status", "provenance", "question", "cites"],
+            "properties": {
+              "ref": {"type": "string"},
+              "relation": {"enum": ["linked", "related"]},
+              "found": {"type": "boolean"},
+              "status": {
+                "enum": ["proposed", "approved", "rejected", "postponed", "superseded", "missing"]
+              },
+              "provenance": {"enum": ["human", "none"]},
+              "question": {"type": "string"},
+              "cites": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["ref", "state"],
+                  "properties": {
+                    "ref": {"type": "string"},
+                    "state": {"enum": ["ok", "unsourced", "missing"]}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "architecture": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref", "relation", "state", "provenance"],
+            "properties": {
+              "ref": {"type": "string"},
+              "relation": {"enum": ["new", "modifies", "uses"]},
+              "state": {"enum": ["gap", "built", "existing", "stale", "unverified"]},
+              "provenance": {"const": "human"}
+            }
+          }
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text", "state", "provenance"],
+            "properties": {
+              "id": {"type": "string"},
+              "text": {"type": "string"},
+              "state": {"const": "open"},
+              "provenance": {"const": "human"}
+            }
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref", "state"],
+            "properties": {"ref": {"type": "string"}, "state": {"const": "unverified"}}
+          }
+        },
+        "omitted_issues": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "if": {"properties": {"ok": {"const": true}}},
+  "then": {
+    "properties": {
+      "data": {"type": "object"},
+      "issues": {"not": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+    }
+  },
+  "else": {
+    "properties": {"issues": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+  }
+}

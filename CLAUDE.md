@@ -27,7 +27,7 @@ Governing documents: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARC
 First deployment is a trusted family on one machine over loopback or a private network. No per-user containers or Unix accounts at first. Open risk: Codeman's multi-user mode shares one OS account and one Claude login by default. Do not add a second user until credential isolation is verified end to end and account eligibility is confirmed. See "Security and trust" in the architecture document.
 
 ## Phases
-See the roadmap: Phase 1 tool evaluation (done); Slice 1, the thinnest research-to-code trace (next); Phase 2 repository visualization; Phase 3 research and feature model; Phase 4 planning visualization; Phase 5 progress and traceability; Phase 6 optional integrations and hardening. Each ends at its acceptance criteria before the next starts.
+See [the roadmap](docs/VISUALIZATION-ROADMAP.md). Phase 1 tool evaluation is complete. Slice 1 runs in the CLI with the research-to-code trace and decision listing. Phase 2 has recorded Floorplan and Trail readers, index joins, rename reconciliation and overlays. Phase 3 has research and feature loaders and manual brief/import. Phase 4 has planning models, dependency validation and board-state derivation. Phase 5 has local Git and recorded GitHub evidence, progress and derived feature stages. The web UI, live adapters and Phase 6 Codeman/Meute integrations remain future work.
 
 ## Build vs adopt (as of 2026-11-21; verify each license in its own repo)
 - Architecture maps and blueprints: Floorplan (MIT, pre-1.0, `graph.json` is not a documented contract). Function-level graph: Trail. Understand Anything: skip. See `docs/TOOL-EVALUATION.md`.

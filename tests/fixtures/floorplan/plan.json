@@ -1,0 +1,13 @@
+{
+  "$schema": "floorplan/plan@1",
+  "source": "hand-written for evaluation: Trail wiring.json adapter",
+  "stack": ["Python 3.11", "pydantic"],
+  "assumptions": ["wiring.json is read-only input; RepoIndex is an in-memory model"],
+  "questions": [{ "question": "Which wiring.json schema version is the contract?", "about": ["src/etat_major/wiring.py"] }],
+  "files": [
+    { "path": "src/etat_major/wiring.py", "name": "Wiring adapter", "description": "Reads a Trail wiring.json graph and emits a RepoIndex.", "uses": ["src/etat_major/repo_index.py"] },
+    { "path": "src/etat_major/repo_index.py", "name": "Repo index model", "description": "Typed in-memory index of a repo's nodes and edges." },
+    { "path": "tests/test_wiring.py", "name": "Wiring adapter tests", "description": "Checks the adapter against a sample wiring.json.", "uses": ["src/etat_major/wiring.py"] }
+  ],
+  "endpoints": []
+}

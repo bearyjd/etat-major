@@ -1,0 +1,105 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ok", "data", "issues"],
+  "properties": {
+    "schema": {"const": "etat-major/progress@1"},
+    "ok": {"type": "boolean"},
+    "data": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}}
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "field", "message", "severity"],
+      "properties": {
+        "path": {"type": "string"},
+        "field": {"type": "string"},
+        "message": {"type": "string"},
+        "severity": {"enum": ["error", "warning"]}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "as_of", "tasks", "features", "disconnected_commits", "disconnected_prs", "stale_milestones", "stale_links", "unimplemented_requirements", "omitted_issues"],
+      "properties": {
+        "version": {"const": 1},
+        "as_of": {"anyOf": [{"type": "null"}, {"type": "string", "format": "date"}]},
+        "tasks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["state", "generated", "committed", "tested", "reviewed", "merged", "shipped", "accepted"],
+            "properties": {
+              "state": {"enum": ["draft", "ready", "in-progress", "review", "done", "blocked"]},
+              "generated": {"$ref": "#/$defs/rung"},
+              "committed": {"$ref": "#/$defs/rung"},
+              "tested": {"$ref": "#/$defs/rung"},
+              "reviewed": {"$ref": "#/$defs/rung"},
+              "merged": {"$ref": "#/$defs/rung"},
+              "shipped": {"$ref": "#/$defs/rung"},
+              "accepted": {"$ref": "#/$defs/rung"}
+            }
+          }
+        },
+        "features": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["state", "tasks", "architecture", "accepted"],
+            "properties": {
+              "state": {
+                "enum": ["idea", "researching", "proposed", "planned", "approved", "postponed", "rejected", "implementing", "verified", "released"]
+              },
+              "tasks": {"type": "array", "items": {"type": "string"}},
+              "architecture": {
+                "type": "object",
+                "additionalProperties": {"enum": ["gap", "built", "existing", "stale", "unverified"]}
+              },
+              "accepted": {"$ref": "#/$defs/rung"}
+            }
+          }
+        },
+        "disconnected_commits": {"type": "array", "items": {"type": "string"}},
+        "disconnected_prs": {"type": "array", "items": {"type": "integer"}},
+        "stale_milestones": {"type": "array", "items": {"type": "string"}},
+        "stale_links": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "unimplemented_requirements": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "omitted_issues": {"type": "integer", "minimum": 0}
+      }
+    },
+    "rung": {
+      "anyOf": [{"const": "unverified"}, {"type": "array", "items": {"type": "string"}, "minItems": 1}]
+    }
+  },
+  "if": {"properties": {"ok": {"const": true}}},
+  "then": {
+    "properties": {
+      "data": {"type": "object"},
+      "issues": {"not": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+    }
+  },
+  "else": {
+    "properties": {"issues": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+  }
+}

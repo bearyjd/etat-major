@@ -1,0 +1,17 @@
+{
+  "schema": "floorplan/graph@1",
+  "project": "etat-major",
+  "nodes": [
+    {"id": "validation", "kind": "dir"},
+    {"id": "future", "kind": "dir"}
+  ],
+  "files": [
+    {"p": "src/etat_major/taskfile.py", "n": "validation", "l": "python", "loc": 245},
+    {"p": "app/entry.py", "n": "future", "l": "python", "loc": 20}
+  ],
+  "routes": [{"id": "r:0", "method": "GET", "path": "/health", "file": "app/entry.py"}],
+  "links": [
+    {"a": "f:app/entry.py", "b": "f:src/etat_major/taskfile.py", "k": "import"},
+    {"a": "f:src/etat_major/taskfile.py", "b": "r:0", "k": "http"}
+  ]
+}

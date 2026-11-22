@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import jsonschema
@@ -26,7 +27,6 @@ priority: 2
 acceptance:
   - Maps all source tables
   - Unit tests pass in CI
-budget_tokens: 400000
 evidence:
   - kind: pr
     ref: example-org/example-service#12
@@ -64,7 +64,7 @@ def test_task_is_immutable(tmp_path):
         t.status = "done"
 
 
-@pytest.mark.parametrize("status", ["running", "needs-you", "review", "failed"])
+@pytest.mark.parametrize("status", ["running", "needs-you", "review", "failed", "in-progress"])
 def test_derived_status_rejected_with_file_and_field(tmp_path, status):
     p = task(tmp_path, sub("status: ready", f"status: {status}"))
     with pytest.raises(TaskFileError) as e:
@@ -76,7 +76,11 @@ def test_derived_status_rejected_with_file_and_field(tmp_path, status):
 
 @pytest.mark.parametrize("status", ["draft", "ready", "blocked", "done"])
 def test_intent_status_accepted(tmp_path, status):
-    assert parse_task(task(tmp_path, sub("status: ready", f"status: {status}"))).status == status
+    acceptance = "\naccepted_by: alice\naccepted_on: 2027-03-01" if status == "done" else ""
+    t = parse_task(task(tmp_path, sub("status: ready", f"status: {status}{acceptance}")))
+    assert t.status == status
+    if status == "done":
+        assert (t.accepted_by, t.accepted_on) == ("alice", date(2027, 3, 1))
 
 
 def test_unknown_status_rejected(tmp_path):
@@ -121,10 +125,17 @@ def test_unknown_field_rejected(tmp_path):
     assert e.value.field == "session"
 
 
-def test_bad_budget_and_priority(tmp_path):
+@pytest.mark.parametrize("budget", ["400000", "-1", "null"])
+def test_removed_budget_field(tmp_path, budget):
+    p = task(tmp_path, sub("priority: 2", f"priority: 2\nbudget_tokens: {budget}"))
     with pytest.raises(TaskFileError) as e:
-        parse_task(task(tmp_path, sub("budget_tokens: 400000", "budget_tokens: -1")))
+        parse_task(p)
     assert e.value.field == "budget_tokens"
+    assert p.name in str(e.value)
+    assert "removed field" in str(e.value)
+
+
+def test_bad_priority(tmp_path):
     with pytest.raises(TaskFileError) as e:
         parse_task(task(tmp_path, sub("priority: 2", "priority: high")))
     assert e.value.field == "priority"
@@ -150,7 +161,9 @@ def test_optional_fields_default(tmp_path):
     text = "---\nid: 0042\ntitle: t\ninitiative: i\nproject: p\nowner: alice\nstatus: draft\n---\n"
     t = parse_task(task(tmp_path, text))
     assert t.acceptance == () and t.evidence == ()
-    assert t.priority is None and t.budget_tokens is None
+    assert t.priority is None and t.milestone is None
+    assert t.depends_on == () and t.targets == ()
+    assert t.accepted_by is None and t.accepted_on is None
 
 
 def test_missing_or_unclosed_frontmatter(tmp_path):

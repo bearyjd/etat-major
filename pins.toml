@@ -1,0 +1,6 @@
+[floorplan]
+tag = "floorplan--v0.11.0"
+commit = "94f81b463b7617e06d873ac71323ce71644c8399"
+
+[trail]
+version = "0.30.5"

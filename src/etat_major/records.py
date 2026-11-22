@@ -1,0 +1,251 @@
+"""Strict models and loaders for ResearchArtifact, Decision and Feature files.
+
+Contract: docs/TRACEABILITY.md. Only stored intent is accepted: derived values
+(``unsourced``, lifecycle stages past ``planned``) are computed elsewhere, never read here.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from pathlib import Path
+from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
+
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StrictInt,
+    StrictStr,
+    ValidationInfo,
+    field_validator,
+)
+
+from etat_major.refs import Ref, parse_ref
+from etat_major.taskfile import CalendarDate, load_frontmatter_model
+from etat_major.text_safety import bounded_repr, is_control
+
+Text = Annotated[StrictStr, Field(min_length=1)]
+RecordId = Annotated[str, Field(pattern=r"^[0-9]+$")]
+FindingId = Annotated[StrictStr, Field(pattern=r"^[A-Za-z0-9_-]+$")]
+Project = Annotated[StrictStr, Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
+DERIVED_FEATURE_STATUSES = (
+    "approved",
+    "rejected",
+    "postponed",
+    "implementing",
+    "verified",
+    "released",
+)
+STORED_FEATURE_STATUSES = ("idea", "researching", "proposed", "planned")
+DECIDED_STATUSES = ("approved", "rejected", "postponed")
+CODE_KINDS = ("fp:n", "fp:f", "trail")
+
+
+def _reject_url_controls(value: Any) -> Any:
+    if isinstance(value, str) and any(is_control(char) for char in value):
+        raise ValueError("URL must not contain Unicode control or format characters")
+    return value
+
+
+def _validate_url_host(value: str) -> str:
+    try:
+        parsed = urlsplit(value)
+        host, _port = parsed.hostname, parsed.port
+    except ValueError:
+        host = None
+    if not host or "\\" in value:
+        raise ValueError("expected an HTTP(S) URL with a valid host and optional port")
+    return value
+
+
+Url = Annotated[
+    StrictStr,
+    Field(pattern=r"(?i)^https?://\S+$"),
+    BeforeValidator(_reject_url_controls),
+    AfterValidator(_validate_url_host),
+]
+SourceKind = Literal["reddit", "github-issue", "docs", "article", "store-review", "other"]
+Evidence = Literal["firsthand", "author", "secondhand", "opinion", "unverified"]
+
+
+def _ref_of(*kinds: str, label: str) -> Any:
+    def parse(value: Any) -> Ref:
+        ref = parse_ref(value)
+        if ref.kind not in kinds:
+            raise ValueError(f"expected a {label} reference, got {bounded_repr(value)}")
+        return ref
+
+    return Annotated[Ref, BeforeValidator(parse)]
+
+
+ResearchRef = _ref_of("research", label="research")
+DecisionRef = _ref_of("decision", label="decision")
+FeatureRef = _ref_of("feature", label="feature")
+TaskRef = _ref_of("task", label="task")
+MilestoneRef = _ref_of("milestone", label="milestone")
+CodeRef = _ref_of(*CODE_KINDS, label="code (fp:n:, fp:f: or trail:)")
+
+
+def _id_text(v: Any) -> Any:
+    return str(v) if isinstance(v, int) and not isinstance(v, bool) else v
+
+
+class _Record(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class _Identified(_Record):
+    id: Annotated[RecordId, BeforeValidator(_id_text)]
+
+
+class Source(_Record):
+    url: Url
+    date: date
+    kind: SourceKind | None = None
+    evidence: Evidence | None = None
+
+
+class Finding(_Record):
+    id: FindingId
+    text: Text
+    source: Url | None = None
+    source_date_missing: Literal[True] | None = None
+    evidence: Evidence | None = Field(default=None, validate_default=True)
+    confidence: Literal["low", "medium", "high"] | None = None
+    conflicts_with: tuple[FindingId, ...] = ()
+
+    @field_validator("evidence")
+    @classmethod
+    def _unsourced_means_unverified(cls, v: Any, info: ValidationInfo) -> Any:
+        if (info.data.get("source") is None or info.data.get("source_date_missing")) and (
+            v != "unverified"
+        ):
+            raise ValueError("a finding without a source requires evidence 'unverified'")
+        return v
+
+
+class ResearchArtifact(_Identified):
+    title: Text
+    status: Literal["unreviewed", "reviewed", "superseded"]
+    provenance: Literal["verified", "inferred", "ai-generated", "human"]
+    sources: tuple[Source, ...]
+    findings: tuple[Finding, ...] = ()
+    question: Text | None = None
+    project: Project | None = None
+    collected_by: Text | None = None
+    collected_on: date | None = None
+    unresolved: tuple[Text, ...] = ()
+
+    @field_validator("sources")
+    @classmethod
+    def _require_dated_sources(
+        cls, sources: tuple[Source, ...], info: ValidationInfo
+    ) -> tuple[Source, ...]:
+        if not sources and (info.data.get("status"), info.data.get("provenance")) != (
+            "unreviewed",
+            "ai-generated",
+        ):
+            raise ValueError("at least 1 dated source is required")
+        return sources
+
+    def is_unsourced(self, finding: Finding) -> bool:
+        """Computed, never stored: no source URL, or one that is not a dated source here."""
+        return (
+            finding.source is None
+            or finding.source_date_missing is True
+            or finding.source not in {s.url for s in self.sources}
+        )
+
+
+class Alternative(_Record):
+    option: Text
+    why_not: Text
+
+
+class Decision(_Identified):
+    question: Text
+    status: Literal["proposed", "approved", "rejected", "postponed", "superseded"]
+    decided_on: date | None = None
+    decided_by: Annotated[Literal["human"] | None, Field(validate_default=True)] = None
+    chosen: Text | None = None
+    rationale: Text | None = None
+    alternatives: tuple[Alternative, ...] = ()
+    evidence: tuple[ResearchRef, ...] = ()
+    features: tuple[FeatureRef, ...] = ()
+    revisit_on: date | None = None
+
+    @field_validator("decided_by")
+    @classmethod
+    def _decided_requires_human(cls, v: Any, info: ValidationInfo) -> Any:
+        status = info.data.get("status")
+        if status in DECIDED_STATUSES and v != "human":
+            raise ValueError(f"status '{status}' requires decided_by: human")
+        return v
+
+
+class Acceptance(_Record):
+    id: Text
+    text: Text
+
+
+class ArchitectureLink(_Record):
+    ref: CodeRef
+    relation: Literal["new", "modifies", "uses"]
+
+
+class Feature(_Identified):
+    project: Project
+    title: Text
+    status: Literal["idea", "researching", "proposed", "planned"]
+    problem: Text | None = None
+    outcome: Text | None = None
+    research_questions: tuple[Text, ...] = ()
+    priority: Annotated[StrictInt, Field(ge=1)] | None = None
+    research: tuple[ResearchRef, ...] = ()
+    decisions: tuple[DecisionRef, ...] = ()
+    milestones: tuple[MilestoneRef, ...] = ()
+    tasks: tuple[TaskRef, ...] = ()
+    acceptance: tuple[Acceptance, ...] = ()
+    architecture: tuple[ArchitectureLink, ...] = ()
+
+    accepted_by: Text | None = None
+    accepted_on: CalendarDate | None = Field(default=None, validate_default=True)
+
+    @field_validator("accepted_by")
+    @classmethod
+    def _acceptance_author(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("expected a nonempty acceptance author")
+        return value
+
+    @field_validator("accepted_on")
+    @classmethod
+    def _acceptance_pair(cls, value: date | None, info: ValidationInfo) -> date | None:
+        if "accepted_by" in info.data and (value is None) != (info.data["accepted_by"] is None):
+            raise ValueError("accepted_by and accepted_on must be recorded together")
+        return value
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _stored_status_only(cls, v: Any) -> Any:
+        if v in DERIVED_FEATURE_STATUSES:
+            raise ValueError(
+                f"'{v}' is derived from the linked Decision or from Git evidence and is never "
+                f"written to a feature file; use one of {', '.join(STORED_FEATURE_STATUSES)}"
+            )
+        return v
+
+
+def load_research(path: Path, *, dir_fd: int | None = None) -> ResearchArtifact:
+    return load_frontmatter_model(path, ResearchArtifact, filename_prefix=True, dir_fd=dir_fd)
+
+
+def load_decision(path: Path, *, dir_fd: int | None = None) -> Decision:
+    return load_frontmatter_model(path, Decision, filename_prefix=True, dir_fd=dir_fd)
+
+
+def load_feature(path: Path, *, dir_fd: int | None = None) -> Feature:
+    return load_frontmatter_model(path, Feature, filename_prefix=True, dir_fd=dir_fd)

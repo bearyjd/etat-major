@@ -1,0 +1,138 @@
+{
+  "data": {
+    "architecture": {
+      "components": [
+        {
+          "id": "net.scan",
+          "kind": "dir",
+          "layer": "architecture",
+          "provenance": "inferred"
+        },
+        {
+          "id": "ui.hostdetail",
+          "kind": "dir",
+          "layer": "architecture",
+          "provenance": "inferred"
+        }
+      ],
+      "files": [
+        {
+          "component_id": "net.scan",
+          "language": "kotlin",
+          "layer": "architecture",
+          "lines": 210,
+          "path": "app/src/net/Scanner.kt",
+          "provenance": "verified"
+        },
+        {
+          "component_id": "ui.hostdetail",
+          "language": "kotlin",
+          "layer": "architecture",
+          "lines": 120,
+          "path": "app/src/ui/HostDetail.kt",
+          "provenance": "verified"
+        }
+      ],
+      "links": [
+        {
+          "kind": "import",
+          "layer": "architecture",
+          "provenance": "inferred",
+          "source": "f:app/src/ui/HostDetail.kt",
+          "target": "f:app/src/net/Scanner.kt"
+        }
+      ],
+      "modules": [
+        {
+          "imports": [],
+          "kind": "module",
+          "layer": "architecture",
+          "path": "app/src/net",
+          "provenance": "inferred"
+        },
+        {
+          "imports": [
+            "app/src/net"
+          ],
+          "kind": "module",
+          "layer": "architecture",
+          "path": "app/src/ui",
+          "provenance": "inferred"
+        }
+      ],
+      "routes": []
+    },
+    "coverage": {
+      "architecture_only": [
+        "app/src/ui/HostDetail.kt"
+      ],
+      "files_indexed": 2,
+      "files_skipped": null,
+      "languages": [
+        "kotlin"
+      ],
+      "symbols_only": []
+    },
+    "indexed_at": null,
+    "indexers": [
+      {
+        "commit": "94f81b463b7617e06d873ac71323ce71644c8399",
+        "layer": "architecture",
+        "name": "floorplan",
+        "provenance": "human",
+        "schema": "floorplan/graph@1",
+        "version": null
+      },
+      {
+        "commit": null,
+        "layer": "symbols",
+        "name": "trail",
+        "provenance": "human",
+        "schema": null,
+        "version": "0.30.5"
+      }
+    ],
+    "repository": "netlens",
+    "revision": null,
+    "symbols": {
+      "edges": [
+        {
+          "confidence": "extracted",
+          "from": "app/src/net/Scanner.kt",
+          "layer": "symbols",
+          "provenance": "verified",
+          "relation": "contains",
+          "to": "app/src/net/Scanner.kt#scan"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "app/src/net/Scanner.kt",
+          "kind": "file",
+          "layer": "symbols",
+          "path": "app/src/net/Scanner.kt",
+          "provenance": "verified",
+          "range": [
+            1,
+            210
+          ]
+        },
+        {
+          "id": "app/src/net/Scanner.kt#scan",
+          "kind": "function",
+          "layer": "symbols",
+          "path": "app/src/net/Scanner.kt",
+          "provenance": "verified",
+          "range": [
+            5,
+            67
+          ]
+        }
+      ]
+    },
+    "version": 1
+  },
+  "issues": [],
+  "ok": true,
+  "schema": "etat-major/index@1"
+}
