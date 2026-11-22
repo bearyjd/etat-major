@@ -42,6 +42,11 @@ def render_text(report: ProgressReport) -> str:
     lines.extend(safe(f"disconnected  commit:{oid}") for oid in report.disconnected_commits)
     lines.extend(safe(f"disconnected  pr:{number}") for number in report.disconnected_prs)
     lines.extend(safe(f"stale  {ref}") for ref in report.stale_milestones)
+    lines.extend(safe(f"stale link  {owner}  {ref}") for owner, ref in report.stale_links)
+    lines.extend(
+        safe(f"unimplemented requirement  {owner}  {ref}")
+        for owner, ref in report.unimplemented_requirements
+    )
     return "\n".join(lines) + ("\n" if lines else "")
 
 

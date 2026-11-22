@@ -199,6 +199,8 @@ def _workspace_validate(args: argparse.Namespace) -> int:
         return json_result(args.command, status, {}, issues=ws.issues, warnings=ws.warnings)
     _print_issues(ws.issues, ws.omitted_issues)
     _print_warnings(ws.warnings)
+    if status == OK:
+        print("ok")
     return status
 
 

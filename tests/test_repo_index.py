@@ -250,3 +250,31 @@ def test_repeated_trail_id_with_tied_ranges_exports_stably(tmp_path):
     trail["nodes"].reverse()
     path.write_text(json.dumps(trail))
     assert repo_index.load_repo_index(GRAPH, path).to_json() == first
+
+
+def test_repo_index_accepts_trail_file_ids_with_spaces(tmp_path):
+    path = "source files/module.py"
+    identifier = f"{path}#run"
+    trail = tmp_path / "wiring.json"
+    trail.write_text(
+        json.dumps(
+            {
+                "meta": {"version": 1},
+                "nodes": [
+                    {"id": path, "path": path, "kind": "file", "span": "L1-L8"},
+                    {"id": identifier, "path": path, "kind": "function", "span": "L2-L4"},
+                ],
+                "edges": [
+                    {
+                        "source": path,
+                        "target": identifier,
+                        "relation": "contains",
+                        "confidence": "extracted",
+                    }
+                ],
+            }
+        )
+    )
+    index = repo_index.load_repo_index(GRAPH, trail)
+    assert index.coverage.symbols_only == (path,)
+    assert index.symbols.edges[0].target == identifier

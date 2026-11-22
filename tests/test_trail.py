@@ -183,3 +183,31 @@ def test_validation_error_preserves_field_after_escaping_filename(tmp_path):
     with pytest.raises(TrailError, match=r"wire\\u001b.*nodes") as raised:
         load_wiring(path)
     assert "\x1b" not in str(raised.value)
+
+
+def test_wiring_accepts_relative_paths_with_spaces(tmp_path):
+    file = "source files/source file.py"
+    symbol = f"{file}#work"
+    path = write_graph(
+        tmp_path,
+        nodes=[
+            {"id": file, "path": file, "kind": "file", "span": "L1-L8"},
+            {"id": symbol, "path": file, "kind": "function", "span": "L3-L7"},
+        ],
+    )
+    index = load_wiring(path)
+    assert index.has_symbol(symbol)
+    assert len(index.symbols_in(file)) == 2
+
+
+def test_symbol_membership_uses_prebuilt_ids(monkeypatch):
+    from etat_major.trail import Symbol
+
+    index = load_wiring(FIXTURE)
+
+    def reject_iteration(self, key):
+        pytest.fail("membership tried to read a symbol instead of its prebuilt ID set")
+
+    monkeypatch.setattr(Symbol, "__getattribute__", reject_iteration)
+    assert index.has_symbol(SYMBOL)
+    assert not index.has_symbol("missing.py#symbol")

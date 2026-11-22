@@ -277,3 +277,8 @@ def test_warnings_do_not_change_exit_codes(capsys, workspace_dir):
     assert code == 0 and "one-sided" in out and "unsourced" in out and "invalid:" not in err
     code, _, err = run(capsys, "decisions", "list", "--workspace", str(workspace_dir))
     assert code == 0 and "warning:" in err and "one-sided" in err
+
+
+def test_workspace_validate_text_prints_ok(workspace_dir, capsys):
+    status, out, err = run(capsys, "workspace", "validate", "--workspace", str(workspace_dir))
+    assert (status, out, err) == (0, "ok\n", "")

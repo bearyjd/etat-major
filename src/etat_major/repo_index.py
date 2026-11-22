@@ -177,7 +177,7 @@ def _trail_endpoint(value: str) -> bool:
     if ":" in path or any(char in symbol for char in "/\\%") or ":" in symbol.replace("::", ""):
         return False
     try:
-        parse_ref(f"trail:{value}" if sep else f"fp:f:{path}")
+        parse_ref(f"trail:{value}" if sep else f"trail:{path}#file")
     except RefError:
         return False
     return True

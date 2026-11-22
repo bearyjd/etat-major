@@ -132,25 +132,20 @@ def _branch_commits(
 def _release_matches(
     fd: int, releases: tuple[Release, ...], merges: set[str]
 ) -> Mapping[str, tuple[str, ...]]:
-    if not merges:
-        return MappingProxyType({})
-    tags = {}
-    for release in releases:
-        if release.published_at is not None:
-            if tip := _resolve_commit(fd, f"refs/tags/{release.tag}"):
-                tags[release.tag] = tip
+    published = {release.tag for release in releases if release.published_at is not None}
     shipped = {}
-    for merge in sorted(merges):
-        if _resolve_commit(fd, merge) != merge:
-            continue
-        shipped[merge] = tuple(
-            name
-            for name, tip in sorted(tags.items())
-            if _git_result(fd, ("merge-base", "--is-ancestor", merge, tip), 128, exit_codes=(0, 1))[
-                1
-            ]
-            == 0
-        )
+    if published:
+        for merge in sorted(merges):
+            raw = _read(
+                fd,
+                (
+                    "for-each-ref",
+                    f"--contains={merge}",
+                    "--format=%(refname:strip=2)",
+                    "refs/tags/",
+                ),
+            )
+            shipped[merge] = tuple(sorted(published.intersection(raw.split("\n"))))
     return MappingProxyType(shipped)
 
 
@@ -185,7 +180,7 @@ def _collect(
         heads=MappingProxyType(heads),
         default_commits=default_commits,
         files=_tracked_files(fd, _resolve_commit(fd, "HEAD")),
-        releases=_release_matches(fd, releases, merges),
+        releases=_release_matches(fd, releases, merges & log.keys()),
     )
 
 

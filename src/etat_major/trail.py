@@ -4,7 +4,7 @@ import json
 import re
 from collections import Counter
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Literal
@@ -87,6 +87,10 @@ class SymbolIndex:
     edges: tuple[SymbolEdge, ...]
     coverage: SymbolCoverage
     indexed_revision: str | None = None
+    _symbol_ids: frozenset[str] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_symbol_ids", frozenset(symbol.id for symbol in self.symbols))
 
     def symbols_in(self, path: str) -> tuple[Symbol, ...]:
         return tuple(symbol for symbol in self.symbols if symbol.path == path)
@@ -102,7 +106,7 @@ class SymbolIndex:
         )
 
     def has_symbol(self, symbol_id: str) -> bool:
-        return any(symbol.id == symbol_id for symbol in self.symbols)
+        return symbol_id in self._symbol_ids
 
     def freshness(self, current_revision: str | None) -> Literal["fresh", "stale", "unknown"]:
         if not self.indexed_revision or not current_revision:
@@ -120,7 +124,7 @@ class _Node(_WireModel):
     @classmethod
     def _check_path(cls, path: str) -> str:
         try:
-            parse_ref(f"fp:f:{path}")
+            parse_ref(f"trail:{path}#file")
         except RefError:
             raise ValueError("expected a repository-relative code path") from None
         return path
@@ -193,8 +197,8 @@ def _read_wiring(path: Path) -> _Wiring:
     version = meta.get("version") if isinstance(meta, dict) else None
     if type(version) is not int or version != 1:
         raise TrailError(path, "meta.version", "only integer version 1 is supported")
-    for field in ("nodes", "edges"):
-        check_recorded_array(path, field, data.get(field), error=TrailError)
+    for key in ("nodes", "edges"):
+        check_recorded_array(path, key, data.get(key), error=TrailError)
     check_recorded_array(path, "meta.languages", meta.get("languages"), error=TrailError)
     try:
         return _Wiring.model_validate(data)

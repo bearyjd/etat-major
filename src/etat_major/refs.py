@@ -15,6 +15,7 @@ from etat_major.text_safety import bounded_repr, is_control
 
 _PROJECT = r"[a-z0-9][a-z0-9_-]*"
 _PATH_OK = re.compile(r"[^\s#]+")
+_PATH_WITH_SPACES = re.compile(r"(?:[^\s#]| )+")
 _DRIVE_PREFIX = re.compile(r"[A-Za-z]:")
 # Unicode solidus/reverse-solidus variants and standalone diagonal strokes.
 _SLASH_LIKE = frozenset("⁄∕∖⧵⧶⧸⧹／＼﹨╱╲⟋⟍")
@@ -55,9 +56,10 @@ class Ref:
         return f"{self.kind}:{body}" + (f"#{self.fragment}" if self.fragment else "")
 
 
-def _check_path(text: str, path: str) -> None:
+def _check_path(text: str, path: str, *, allow_spaces: bool = False) -> None:
+    pattern = _PATH_WITH_SPACES if allow_spaces else _PATH_OK
     if (
-        not _PATH_OK.fullmatch(path)
+        not pattern.fullmatch(path)
         or path.startswith("~")
         or _DRIVE_PREFIX.match(path)
         or {"", ".", ".."}.intersection(path.split("/"))
@@ -66,7 +68,7 @@ def _check_path(text: str, path: str) -> None:
         raise RefError(
             text,
             "path must be relative without empty or dot segments, a home or drive prefix, "
-            "spaces, '#', '\\', '%', slash lookalikes, or control characters",
+            "'#', '\\', '%', slash lookalikes, or control characters",
         )
 
 
@@ -81,7 +83,7 @@ def _code_ref(text: str) -> Ref | None:
         return Ref("fp:f", text[5:])
     if text.startswith("trail:"):
         path, sep, symbol = text[6:].partition("#")
-        _check_path(text, path)
+        _check_path(text, path, allow_spaces=True)
         if not sep or not _PATH_OK.fullmatch(symbol) or any(map(is_control, symbol)):
             raise RefError(text, "trail refs need a '#<symbol>'")
         return Ref("trail", path, fragment=symbol)

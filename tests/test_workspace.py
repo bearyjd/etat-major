@@ -304,3 +304,25 @@ def test_feature_research_finding_must_resolve(workspace_dir):
     (issue,) = load_workspace(workspace_dir).issues
     assert (issue.path, issue.field) == ("feature:netlens/0031", "research")
     assert "missing" in issue.message and "research:0007#f9" in issue.message
+
+
+def test_workspace_cap_keeps_lexically_first_entries(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from etat_major import workspace
+
+    root = tmp_path / "research"
+    root.mkdir()
+    for name in ("2.md", "3.md", "1.md"):
+        (root / name).write_text("invalid")
+    scandir = os.scandir
+
+    @contextmanager
+    def reversed_entries(fd):
+        with scandir(fd) as entries:
+            yield iter(sorted(entries, key=lambda entry: entry.name, reverse=True))
+
+    monkeypatch.setattr(workspace, "_DIRECTORY_LIMIT", 2)
+    monkeypatch.setattr(workspace.os, "scandir", reversed_entries)
+    issues = load_workspace(tmp_path).issues
+    assert [issue.path for issue in issues] == ["research", "research/1.md", "research/2.md"]

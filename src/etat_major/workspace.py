@@ -12,7 +12,7 @@ import stat
 from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from itertools import islice
+from heapq import nsmallest
 from pathlib import Path
 
 from etat_major.localfiles import open_directory as _directory
@@ -113,7 +113,7 @@ def _issue(root: Path, path: Path, exc: OSError | ValueError | RuntimeError) -> 
 def _entries(root: Path, base: Path, fd: int, issues: _IssueLog) -> Iterator[tuple[Path, int]]:
     try:
         with os.scandir(fd) as entries:
-            names = [entry.name for entry in islice(entries, _DIRECTORY_LIMIT + 1)]
+            names = nsmallest(_DIRECTORY_LIMIT + 1, (entry.name for entry in entries))
     except OSError as exc:
         issues.append(_issue(root, base, exc))
         return
@@ -126,7 +126,7 @@ def _entries(root: Path, base: Path, fd: int, issues: _IssueLog) -> Iterator[tup
                 f"directory exceeds {_DIRECTORY_LIMIT} entries",
             )
         )
-    for name in sorted(names):
+    for name in names:
         path = base / name
         try:
             mode = _check_path(path, fd)

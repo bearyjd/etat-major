@@ -194,7 +194,7 @@ def branch_task(branch: str, known: Set[str]) -> str | None:
     for match in _BRANCH_ID.finditer(name):
         if match.end() > prefix.end():
             break
-        key = f"{name[:match.start()]}/{match[1]}"
+        key = f"{name[: match.start()]}/{match[1]}"
         ambiguous |= first is not None
         first = first or key
         if key in known:
