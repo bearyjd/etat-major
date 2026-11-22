@@ -54,7 +54,7 @@ def test_missing_schema(tmp_path):
 
 
 def test_root_and_remote_not_retained(tmp_path):
-    meta = {"root": "/home/someone/secret-repo", "repos": [{"remote": "git@host.example:x/y.git"}]}
+    meta = {"root": "/abs/root/secret-repo", "repos": [{"remote": "git@host.example:x/y.git"}]}
     idx = load_graph(graph_with(tmp_path, meta=meta))
     blob = repr(idx) + repr(vars(idx) if hasattr(idx, "__dict__") else "")
     assert "secret-repo" not in blob and "host.example" not in blob

@@ -1,0 +1,94 @@
+"""``etat-major`` command line. Read-only: no network, no model calls, nothing written.
+
+Exit codes: 0 ok; 1 the trace has missing/stale/gap items or the workspace has validation
+errors; 2 usage errors (bad arguments, unreadable workspace or graph file).
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from etat_major.floorplan import FloorplanError, FloorplanIndex, load_graph
+from etat_major.refs import RefError, parse_ref
+from etat_major.render import render_trace
+from etat_major.trace import TraceError, trace_feature
+from etat_major.workspace import Workspace, load_workspace
+
+OK, PROBLEMS, USAGE = 0, 1, 2
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="etat-major")
+    sub = parser.add_subparsers(dest="command", required=True)
+    trace = sub.add_parser("trace", help="print the research-to-code trace of a feature")
+    trace.add_argument("ref", help="feature:<project>/<id>")
+    trace.add_argument("--workspace", type=Path, required=True, help="intent workspace directory")
+    trace.add_argument("--graph", type=Path, help="Floorplan graph.json (floorplan/graph@1)")
+    decisions = sub.add_parser("decisions", help="decision records")
+    dsub = decisions.add_subparsers(dest="action", required=True)
+    dlist = dsub.add_parser("list", help="list all decisions, rejected and postponed included")
+    dlist.add_argument("--workspace", type=Path, required=True)
+    return parser
+
+
+def _err(message: str) -> None:
+    print(f"error: {message}", file=sys.stderr)
+
+
+def _open_workspace(path: Path) -> Workspace | None:
+    if not path.is_dir():
+        _err(f"workspace '{path}' is not a directory")
+        return None
+    ws = load_workspace(path)
+    for issue in ws.issues:
+        print(f"invalid: {issue}", file=sys.stderr)
+    return ws
+
+
+def _trace(args: argparse.Namespace) -> int:
+    try:
+        ref = parse_ref(args.ref)
+    except RefError as exc:
+        _err(str(exc))
+        return USAGE
+    if ref.kind != "feature":
+        _err(f"expected a feature reference, got '{ref}'")
+        return USAGE
+    graph: FloorplanIndex | None = None
+    if args.graph is not None:
+        try:
+            graph = load_graph(args.graph)
+        except FloorplanError as exc:
+            _err(str(exc))
+            return USAGE
+    ws = _open_workspace(args.workspace)
+    if ws is None:
+        return USAGE
+    try:
+        trace = trace_feature(ws, graph, ref)
+    except TraceError as exc:
+        _err(str(exc))
+        return PROBLEMS
+    sys.stdout.write(render_trace(trace))
+    return PROBLEMS if trace.has_problems or ws.issues else OK
+
+
+def _decisions_list(args: argparse.Namespace) -> int:
+    ws = _open_workspace(args.workspace)
+    if ws is None:
+        return USAGE
+    for d in sorted(ws.decisions, key=lambda d: d.id):
+        by = d.decided_by or "none"
+        print(f"decision:{d.id}  {d.status}  {by}  {d.question}")
+    return PROBLEMS if ws.issues else OK
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    return _trace(args) if args.command == "trace" else _decisions_list(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
