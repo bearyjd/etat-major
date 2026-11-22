@@ -81,6 +81,49 @@ def test_demo_json_matches_golden_and_is_deterministic(capsys, cli_args, command
     assert json.loads(golden) == value
 
 
+def test_kotlin_index_json_matches_the_export_schema(capsys, graph_file):
+    trail = FIXTURES / "trail" / "wiring-kotlin.json"
+    args = ["index", "--graph", str(graph_file), "--trail", str(trail), "--format", "json"]
+    assert main(args) == 0
+    _, value = read_envelope(capsys, "index", 0)
+    symbols = value["data"]["symbols"]
+    assert len(symbols["nodes"]) == 160
+    assert len(symbols["edges"]) == 20
+    assert any(node["kind"] == "interface" for node in symbols["nodes"])
+
+
+@pytest.mark.parametrize("kind", ["future-kind", "local-path", "remote", "control"])
+def test_index_json_keeps_nodes_with_unknown_kinds_without_leaking_values(
+    capsys, graph_file, tmp_path, kind
+):
+    labels = {
+        "future-kind": "future-kind",
+        "local-path": str(tmp_path / "private"),
+        "remote": f"ssh://{tmp_path.name}/private",
+        "control": "future\x1bkind",
+    }
+    label = labels[kind]
+    trail = tmp_path / "wiring.json"
+    trail.write_text(
+        json.dumps(
+            {
+                "meta": {"version": 1},
+                "nodes": [{"id": "app.kt#x", "path": "app.kt", "kind": label, "span": "L1-L1"}],
+                "edges": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = ["index", "--graph", str(graph_file), "--trail", str(trail), "--format", "json"]
+    assert main(args) == 0
+    output, value = read_envelope(capsys, "index", 0)
+    (node,) = value["data"]["symbols"]["nodes"]
+    assert node["id"] == "app.kt#x"
+    assert node["kind"] == ("future-kind" if kind == "future-kind" else "unknown")
+    if kind != "future-kind":
+        assert label not in output
+
+
 @pytest.mark.parametrize("command", COMMANDS)
 def test_argument_errors_have_envelopes(capsys, command):
     args = [*command.split("-"), "--format=json"]

@@ -20,7 +20,15 @@ from etat_major.floorplan import (
 from etat_major.refs import RefError, parse_ref
 from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import safe
-from etat_major.trail import TRAIL_VERSION, Symbol, SymbolEdge, SymbolIndex, TrailError, load_wiring
+from etat_major.trail import (
+    TRAIL_VERSION,
+    Symbol,
+    SymbolEdge,
+    SymbolIndex,
+    TrailError,
+    load_wiring,
+    trail_symbol_path,
+)
 
 _LABEL = re.compile(r"[\w .@+$<>()\[\]!?,-]+")
 _SHA = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
@@ -155,6 +163,7 @@ class RepoIndex:
 
 def _symbol_record(symbol: Symbol) -> dict[str, object]:
     record = asdict(symbol)
+    record["kind"] = safe(symbol.kind) if _LABEL.fullmatch(symbol.kind) else "unknown"
     record["range"] = [record.pop("start_line"), record.pop("end_line")]
     return record
 
@@ -177,7 +186,10 @@ def _trail_endpoint(value: str) -> bool:
     if ":" in path or any(char in symbol for char in "/\\%") or ":" in symbol.replace("::", ""):
         return False
     try:
-        parse_ref(f"trail:{value}" if sep else f"trail:{path}#file")
+        if sep:
+            trail_symbol_path(value)
+        else:
+            parse_ref(f"trail:{path}#file")
     except RefError:
         return False
     return True
