@@ -221,7 +221,8 @@ def test_feature_requires_merge_specific_check_and_acceptance(history, capsys):
     history.feature("tasks: [task:netlens/0042]\naccepted_by: reviewer\naccepted_on: 2026-01-03")
     report = history.report(capsys)
     assert report["tasks"][TASK]["tested"] == ["pr:7/check:1"]
-    assert report["features"]["netlens/0031"]["state"] == "proposed"
+    assert report["features"]["netlens/0031"]["state"] == "implementing"
+    history.task("accepted_by: reviewer\naccepted_on: 2026-01-03", status="done")
     history.set_prs(
         history.pr(mergeCommit={"oid": merge}, statusCheckRollup=[check | {"commitOid": merge}])
     )
@@ -415,3 +416,31 @@ def test_mixed_checks_do_not_prove_tested_or_verified(history, capsys, state, on
     report = history.report(capsys)
     assert report["tasks"][TASK]["tested"] == "unverified"
     assert report["features"]["netlens/0031"]["state"] != "verified"
+
+
+def test_feature_remains_implementing_until_linked_task_is_accepted(history, capsys):
+    merge = history.commit("Merge latency")
+    history.set_prs(
+        history.pr(
+            mergeCommit={"oid": merge},
+            statusCheckRollup=[
+                {"__typename": "StatusContext", "state": "SUCCESS", "commitOid": merge}
+            ],
+        )
+    )
+    history.feature("tasks: [task:netlens/0042]\naccepted_by: reviewer\naccepted_on: 2026-01-03")
+    report = history.report(capsys)
+    assert report["tasks"][TASK]["state"] == "review"
+    assert report["features"]["netlens/0031"]["state"] == "implementing"
+
+
+def test_workspace_validate_names_task_file_with_unknown_milestone(history, capsys):
+    history.task("milestone: m3")
+    status = main(["workspace", "validate", "--workspace", str(history.workspace)])
+    assert status == 1
+    assert "tasks/netlens/0042-latency.md: field 'milestone':" in capsys.readouterr().err
+
+
+def test_closed_approved_pr_does_not_prove_review(history, capsys):
+    history.set_prs(history.pr(state="CLOSED", mergedAt=None, mergeCommit=None))
+    assert history.report(capsys)["tasks"][TASK]["reviewed"] == "unverified"

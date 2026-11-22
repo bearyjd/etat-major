@@ -100,4 +100,28 @@ def test_board_uses_stored_status_and_project_local_dependencies(status, depende
     dependency_states = {} if dependency_status is None else {"0041": dependency_status}
     assert planning.derive_board_column(task, dependency_states) == column
     summary = planning.BoardEvidence(True, True, True, True)
-    assert planning.derive_board_column(task, dependency_states, evidence=summary) == column
+    expected = "review" if column in {"draft", "ready"} else column
+    assert planning.derive_board_column(task, dependency_states, evidence=summary) == expected
+
+
+@pytest.mark.parametrize(
+    ("evidence", "column"),
+    [
+        (planning.BoardEvidence(branch_open=True), "in-progress"),
+        (planning.BoardEvidence(pr_open_draft=True), "in-progress"),
+        (planning.BoardEvidence(pr_open_ready=True), "review"),
+        (planning.BoardEvidence(pr_merged=True), "review"),
+    ],
+)
+def test_board_uses_linked_evidence(evidence, column):
+    task = taskfile.Task.model_validate(
+        {
+            "id": "0042",
+            "title": "Latency",
+            "initiative": "i",
+            "project": "netlens",
+            "owner": "maintainer",
+            "status": "ready",
+        }
+    )
+    assert planning.derive_board_column(task, {}, evidence) == column

@@ -5,18 +5,18 @@ import re
 import selectors
 import stat
 import subprocess
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from time import monotonic
 from types import MappingProxyType
 
-from etat_major.localfiles import open_directory
+from etat_major.localfiles import open_directory, read_text
 from etat_major.text_safety import safe
 
 _MAX_FILE = 64 * 1024 * 1024
-_MAX_ENTRIES = 100_000
 _TIMEOUT = 15
-_UNSUPPORTED = {"commondir", "gitdir", "config.worktree", "alternates", "http-alternates"}
+
 
 
 class RenameError(ValueError):
@@ -26,27 +26,78 @@ class RenameError(ValueError):
         super().__init__(f"{safe(repo.name, limit=100)}: {field}: {detail}")
 
 
+def _metadata_entry(fd: int, name: str, *, directory: bool = False) -> None:
+    try:
+        info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(info.st_mode):
+        raise ValueError("metadata symlink is not allowed")
+    if not (stat.S_ISDIR if directory else stat.S_ISREG)(info.st_mode):
+        raise ValueError("unexpected metadata file type")
+    if not directory and info.st_size > _MAX_FILE:
+        raise ValueError("metadata file exceeds the 64 MiB limit")
+
+
+def _reject_indirect(fd: int, *names: str) -> None:
+    for name in names:
+        try:
+            os.stat(name, dir_fd=fd, follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        raise ValueError("indirect metadata is not supported")
+
+
 def _inspect_metadata(fd: int) -> None:
-    # Git opens the files itself. Reject indirect metadata and unsafe entries first.
-    entries = 0
-    for _, dirs, files, directory in os.fwalk(".", dir_fd=fd, onerror=_raise_walk_error):
-        entries += len(dirs) + len(files)
-        if entries > _MAX_ENTRIES:
-            raise ValueError("too many metadata entries")
-        for name in (*dirs, *files):
-            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
-            if stat.S_ISLNK(info.st_mode):
-                raise ValueError("metadata symlink is not allowed")
-            if name in _UNSUPPORTED:
-                raise ValueError("indirect metadata is not supported")
-            if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
-                raise ValueError("expected regular metadata files and directories")
-            if info.st_size > _MAX_FILE and stat.S_ISREG(info.st_mode):
-                raise ValueError("metadata file exceeds the 64 MiB limit")
+    with os.scandir(fd) as entries:
+        if any(entry.is_symlink() for entry in entries):
+            raise ValueError("metadata symlink is not allowed")
+    _reject_indirect(fd, "commondir", "gitdir", "config.worktree")
+    for name in ("config", "HEAD", "packed-refs", "shallow"):
+        _metadata_entry(fd, name)
+    for name in ("objects", "refs", "info"):
+        _metadata_entry(fd, name, directory=True)
+    for name in ("refs/heads", "refs/tags", "refs/remotes", "objects/info", "objects/pack"):
+        _metadata_entry(fd, name, directory=True)
+    for name in ("info/grafts", "info/attributes", "objects/info/commit-graph"):
+        _metadata_entry(fd, name)
+    _reject_indirect(fd, "objects/info/alternates", "objects/info/http-alternates")
 
 
-def _raise_walk_error(exc: OSError) -> None:
-    raise exc
+def _worktree_pointer(repo: Path, fd: int) -> Path:
+    prefix = "gitdir: "
+    raw = read_text(Path(".git"), 1, dir_fd=fd).removesuffix("\n")
+    if not raw.startswith(prefix) or not raw[len(prefix):] or "\n" in raw or "\0" in raw:
+        raise ValueError("invalid gitdir pointer")
+    target = repo.absolute() / raw[len(prefix):]
+    if target.parent.name != "worktrees" or target.name in {"", ".", ".."}:
+        raise ValueError("expected a linked worktree gitdir")
+    return target
+
+
+@contextmanager
+def _open_repository(repo: Path) -> Iterator[int]:
+    with open_directory(repo) as root_fd:
+        entry = Path(".git")
+        mode = os.stat(entry, dir_fd=root_fd, follow_symlinks=False).st_mode
+        if stat.S_ISDIR(mode):
+            with open_directory(entry, root_fd) as fd:
+                _inspect_metadata(fd)
+                _guard_config(fd)
+                yield fd
+            return
+        target = _worktree_pointer(repo, root_fd)
+        with open_directory(target) as fd, open_directory(target.parent.parent) as common:
+            _inspect_metadata(common)
+            _reject_indirect(fd, "config", "config.worktree")
+            _metadata_entry(fd, "HEAD")
+            shared = read_text(Path("commondir"), 1, dir_fd=fd).removesuffix("\n")
+            backlink = read_text(Path("gitdir"), 1, dir_fd=fd).removesuffix("\n")
+            original = target / backlink
+            if shared != "../.." or original.absolute() != (repo / entry).absolute():
+                raise ValueError("invalid linked worktree metadata")
+            _guard_config(common)
+            yield fd
 
 
 def _read_stdout(
@@ -160,12 +211,7 @@ def _parse_renames(output: bytes) -> Mapping[str, str]:
 def load_renames(repo: Path, old_revision: str, new_revision: str) -> Mapping[str, str]:
     """Return old-to-new path pairs from Git's default rename similarity threshold."""
     try:
-        with open_directory(repo / ".git") as fd:
-            try:
-                _inspect_metadata(fd)
-                _guard_config(fd)
-            except ValueError as exc:
-                raise RenameError(repo, ".git", str(exc)) from None
+        with _open_repository(repo) as fd:
             old = _commit(repo, fd, old_revision, "old_revision")
             new = _commit(repo, fd, new_revision, "new_revision")
             try:
@@ -189,5 +235,10 @@ def load_renames(repo: Path, old_revision: str, new_revision: str) -> Mapping[st
                 return _parse_renames(output)
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 raise RenameError(repo, "diff", "could not read Git rename data") from None
+    except RenameError:
+        raise
+    except ValueError as exc:
+        detail = str(exc) if not isinstance(exc, UnicodeError) else "invalid metadata encoding"
+        raise RenameError(repo, ".git", detail) from None
     except (OSError, RecursionError, subprocess.TimeoutExpired):
         raise RenameError(repo, ".git", "cannot read repository metadata") from None

@@ -386,6 +386,12 @@ def load_workspace(root: Path, *, validate_all: bool = False) -> Workspace:
     )
     _cross_validate(ws, issues)
     _check_tasks(tasks, issues)
+    known_milestones = {(project, milestone.id) for project, milestone in milestones}
+    for path, task in tasks:
+        if task.milestone and (task.project, task.milestone) not in known_milestones:
+            issues.append(
+                Issue(path, "milestone", f"unknown milestone id {bounded_repr(task.milestone)}")
+            )
     warnings = tuple(w for feature in ws.features for w in link_warnings(ws, feature))
     return replace(
         ws, issues=tuple(issues.issues), warnings=warnings, omitted_issues=issues.omitted

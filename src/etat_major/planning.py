@@ -81,9 +81,16 @@ class BoardEvidence:
 def derive_board_column(
     task: Task, dependency_states: Mapping[str, str], evidence: BoardEvidence | None = None
 ) -> BoardColumn:
-    """Derive a column from accepted intent and project-local dependency statuses."""
+    """Derive a column from intent, dependencies and recorded work."""
     if task.status == "done":
         return "done"
-    if any(dependency_states.get(dependency) != "done" for dependency in task.depends_on):
+    if task.status == "blocked" or any(
+        dependency_states.get(dependency) != "done" for dependency in task.depends_on
+    ):
         return "blocked"
+    if evidence:
+        if evidence.pr_merged or evidence.pr_open_ready:
+            return "review"
+        if evidence.branch_open or evidence.pr_open_draft:
+            return "in-progress"
     return task.status

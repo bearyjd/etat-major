@@ -15,8 +15,7 @@ from etat_major.evidence_records import (
     branch_task,
     resolve_task_keys,
 )
-from etat_major.localfiles import open_directory
-from etat_major.renames import _git_result, _guard_config, _inspect_metadata
+from etat_major.renames import _git_result, _open_repository
 from etat_major.taskfile import TaskFileError
 
 _OUTPUT_LIMIT = 16 * 1024 * 1024
@@ -195,17 +194,17 @@ def load_git(
 ) -> GitEvidence:
     metadata = repo / ".git"
     try:
-        with open_directory(metadata) as fd:
-            try:
-                _inspect_metadata(fd)
-                _guard_config(fd)
-            except ValueError as exc:
-                raise TaskFileError(metadata, "metadata", str(exc)) from None
+        with _open_repository(repo) as fd:
             try:
                 return _collect(fd, prs, releases, known)
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 raise TaskFileError(
                     metadata, "history", "cannot read bounded local Git history"
                 ) from None
+    except ValueError as exc:
+        if isinstance(exc, TaskFileError):
+            raise
+        detail = str(exc) if not isinstance(exc, UnicodeError) else "invalid metadata encoding"
+        raise TaskFileError(metadata, "metadata", detail) from None
     except (OSError, RecursionError, subprocess.TimeoutExpired):
         raise TaskFileError(metadata, "metadata", "cannot open local Git directory") from None

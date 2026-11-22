@@ -17,7 +17,7 @@ from etat_major.evidence_records import (
     resolve_task_keys,
 )
 from etat_major.floorplan import FloorplanIndex
-from etat_major.planning import BoardColumn, derive_board_column
+from etat_major.planning import BoardColumn, BoardEvidence, derive_board_column
 from etat_major.records import ArchitectureLink, Feature
 from etat_major.taskfile import Task, TaskFileError
 from etat_major.trace import _arch_state
@@ -82,24 +82,6 @@ def _acceptable(task: Task) -> bool:
     return task.status == "done" and bool(task.accepted_by and task.accepted_on)
 
 
-def _task_state(
-    task: Task,
-    dependency_states: Mapping[str, str],
-    prs: list[PullRequest],
-    *,
-    branch: bool,
-    merged: bool,
-) -> BoardColumn:
-    baseline = derive_board_column(task, dependency_states)
-    if baseline == "blocked" or _acceptable(task):
-        return baseline
-    if merged or any(pr.state == "OPEN" and not pr.is_draft for pr in prs):
-        return "review"
-    if branch or any(pr.state == "OPEN" and pr.is_draft for pr in prs):
-        return "in-progress"
-    return "ready" if baseline == "done" else baseline
-
-
 def _pr_merge(pr: PullRequest) -> str | None:
     return pr.merge_commit.oid if pr.state == "MERGED" and pr.merge_commit else None
 
@@ -142,7 +124,7 @@ def _task_progress(
         ref = f"pr:{pr.number}"
         checks, merge_checked = _check_refs(pr)
         tested.update(checks)
-        if pr.review_decision == "APPROVED":
+        if pr.state != "CLOSED" and pr.review_decision == "APPROVED":
             reviewed.add(ref)
         if pr.state != "MERGED":
             continue
@@ -163,9 +145,15 @@ def _task_progress(
         shipped=_rung(shipped),
         accepted=_rung((f"task:{key}",) if _acceptable(task) else ()),
     )
+    board = BoardEvidence(
+        branch_open=key in branches,
+        pr_open_draft=any(pr.state == "OPEN" and pr.is_draft for pr in prs),
+        pr_open_ready=any(pr.state == "OPEN" and not pr.is_draft for pr in prs),
+        pr_merged=bool(merged),
+    )
     return TaskProgress(
         key,
-        _task_state(task, dependencies, prs, branch=key in branches, merged=bool(merged)),
+        derive_board_column(task, dependencies, board),
         evidence,
         tuple(sorted(merge_checks)),
         tuple(sorted(released_merges)),
@@ -188,7 +176,8 @@ def _feature_state(
         and feature.accepted_by
         and feature.accepted_on
         and all(
-            task.merge_checks
+            task.evidence.accepted != "unverified"
+            and task.merge_checks
             and set(task.merge_checks)
             == {ref for ref in task.evidence.merged if ref.startswith("pr:")}
             for task in linked
@@ -197,7 +186,10 @@ def _feature_state(
         if all(task.released_merges == task.merge_checks for task in linked):
             return "released"
         return "verified"
-    if any(task.state == "in-progress" for task in linked):
+    if any(task.evidence.accepted == "unverified" for task in linked) and any(
+        task.state in {"in-progress", "review"} or task.evidence.merged != "unverified"
+        for task in linked
+    ):
         return "implementing"
     if "approved" in decisions and feature.status != "planned":
         return "approved"

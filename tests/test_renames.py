@@ -113,3 +113,18 @@ def test_git_rejects_indirect_metadata_without_printing_target(history, relative
         load_renames(history, "HEAD~1", "HEAD")
     assert "/private" not in str(exc.value)
     assert "example.invalid" not in str(exc.value)
+
+
+def test_rename_metadata_does_not_walk_all_entries(history, monkeypatch):
+    from etat_major.renames import load_renames
+
+    monkeypatch.setattr(os, "fwalk", lambda *args, **kwargs: iter([(".", [], ["item"] * 100001, 0)]))
+    assert load_renames(history, "HEAD~1", "HEAD")["edit.py"] == "edited.py"
+
+
+def test_git_reads_renames_in_a_linked_worktree(history, tmp_path):
+    from etat_major.renames import load_renames
+
+    worktree = tmp_path / "linked worktree"
+    git(history, "worktree", "add", "--detach", str(worktree))
+    assert load_renames(worktree, "HEAD~1", "HEAD")["edit.py"] == "edited.py"
