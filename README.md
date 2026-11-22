@@ -1,18 +1,19 @@
 # État-major
 
-A self-hosted, living visual map of your repositories: how each one works, what you are building toward, and how you are getting there, with evidence. It is useful with no agent running.
+A self-hosted visual product-development workspace. It connects **why** you are building something (research and decisions), **what exists** (how the code works), **what should exist** (features, roadmap, planned architecture) and **how you are getting there** (evidence), so you can move along **Research → Decision → Feature → Design → Code → Evidence** in either direction. It is useful with no agent running.
 
-**Status:** pre-implementation. The product direction is in [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.md) and the plan in [docs/VISUALIZATION-ROADMAP.md](docs/VISUALIZATION-ROADMAP.md). [docs/SPEC.md](docs/SPEC.md) is the earlier agent-command-center design, partly superseded. Evidence behind component choices is in [docs/RESEARCH.md](docs/RESEARCH.md).
+**Status:** pre-implementation. Direction: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.md). Plan: [docs/VISUALIZATION-ROADMAP.md](docs/VISUALIZATION-ROADMAP.md). Traceability model: [docs/TRACEABILITY.md](docs/TRACEABILITY.md). Tool choices: [docs/TOOL-EVALUATION.md](docs/TOOL-EVALUATION.md). [docs/SPEC.md](docs/SPEC.md) is the earlier agent-command-center design, partly superseded. Research notes: [docs/RESEARCH.md](docs/RESEARCH.md).
 
-## Three views
+## Four connected views
 
-1. **Understand:** repository selector, file tree, symbol search, an interactive module and function graph, and source navigation. Verified, inferred and AI-generated information are always labelled apart.
-2. **Build:** vision, milestones, a Now/Next/Later roadmap, a Kanban board, task dependencies and versioned Mermaid diagrams, linked to the code they touch.
-3. **Progress:** commits, pull requests, checks and releases mapped to milestones. Every completion claim links to proof or reads `unverified`.
+1. **Discover (why):** market research, competitors, pain points, evidence, alternatives, decisions (including rejected ones) and feature proposals.
+2. **Understand (what exists):** an architecture map and function-level code graph with source navigation. Verified, inferred and AI-generated information are always labelled apart.
+3. **Design & Build (what should exist):** vision, approved features, a Now/Next/Later roadmap, Kanban, dependencies, diagrams and planned-architecture blueprints, linked to the code they touch.
+4. **Progress (how we are getting there):** commits, pull requests, checks and releases mapped to features and milestones. Every completion claim links to proof or reads `unverified`.
 
 ## What it is not
 
-Not a terminal, a coding-agent runner, a scheduler or a general project-management tool. Interactive agent sessions belong to [Codeman](https://github.com/Ark0N/Codeman) and unattended runs to [Meute](https://github.com/bearyjd/meute); both are optional and separate. Repository structure comes first from Trail through a replaceable adapter. Durable intent lives in Git as Markdown, YAML and Mermaid.
+Not a terminal, a coding-agent runner, a scheduler or a general project-management tool. Interactive agent sessions belong to [Codeman](https://github.com/Ark0N/Codeman) and unattended runs to [Meute](https://github.com/bearyjd/meute); both are optional and separate. Architecture maps come from [Floorplan](https://github.com/haydenschmitty/floorplan) and function-level structure from Trail, both through replaceable read-only adapters. Code analysis is reused, not rebuilt. External research uses a manual ChatGPT handoff that you review. Durable intent lives in Git as Markdown, YAML and Mermaid.
 
 ## Principles
 

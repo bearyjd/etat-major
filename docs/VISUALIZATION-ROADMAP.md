@@ -1,99 +1,87 @@
-# État-major: visualization roadmap
+# État-major: roadmap
 
-Status: plan. Replaces the six-phase roadmap in [SPEC.md](SPEC.md). Design and contracts: [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md).
+Status: plan. Replaces the six-phase roadmap in [SPEC.md](SPEC.md) and the earlier M0 to M8 list. Design: [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md). Traceability model: [TRACEABILITY.md](TRACEABILITY.md). Tool decisions: [TOOL-EVALUATION.md](TOOL-EVALUATION.md).
 
-Rules for every milestone:
+Rules for every phase:
 
 - Small, reviewable steps; tests written first for every contract change; coverage 80% or better on new code.
-- A milestone ends at its acceptance criteria. The next one does not start before they pass.
-- The core runs with no Codeman, no Meute and no agent. Integrations come last.
-- Nothing here stores or handles Claude or Codex credentials.
+- A phase ends at its acceptance criteria. The next does not start before they pass.
+- Build the smallest vertical slice first (Slice 1 below), not all phases at once.
+- The core runs with no Codeman, no Meute and no live Floorplan or agent. Integrations come last.
+- Nothing here stores or handles Claude or Codex credentials, and nothing sends data to ChatGPT or any model automatically.
+- Reuse, do not rebuild: Floorplan for architecture maps, Trail for symbols, Git for intent.
 
 ## What exists today
 
-- Scaffold, CI, and the task-file contract with a validator (`src/etat_major/taskfile.py`, `docs/contracts/`). It is reused by milestone M2.
-- A decision record that Backlog.md's format is not adopted (`docs/spikes/phase1-spike.md`).
-- No indexer adapter, no evidence code, no web UI.
+- Scaffold, CI, and the task-file contract with a validator (`src/etat_major/taskfile.py`, `docs/contracts/`). It is reused in Phase 4.
+- Decision record that Backlog.md's format is not adopted (`docs/spikes/phase1-spike.md`).
+- Design documents: architecture, traceability model, tool evaluation, this roadmap.
+- No adapters, no research or feature loaders, no evidence code, no UI.
 
-## Milestones
+## Phase 1: tool evaluation (done in this change)
 
-### M0: Reconcile the design (this change)
+Floorplan, Trail and Understand Anything inspected and run on copies; decision recorded in [TOOL-EVALUATION.md](TOOL-EVALUATION.md): Floorplan for the architecture layer, Trail for symbols, Understand Anything skipped as an indexer.
 
-Docs only: architecture, roadmap, and superseded markers in the README, `CLAUDE.md`, `SPEC.md` and `RESEARCH.md`.
+- **Acceptance (met):** mechanical (model-free) maps generated on two repositories; a blueprint built from a hand-written `plan.json` for a proposed feature; exported JSON inspected; integration feasibility and limits documented.
+- **Still unverified:** the quality and per-refresh cost of an LLM-written Floorplan architecture layer. Verify on a real repository before relying on the architecture layer.
 
-- **Done when:** the README, `CLAUDE.md`, architecture, roadmap, SPEC notes and RESEARCH section agree on the product; superseded plans are marked; no document claims a capability that is not built.
+## Slice 1: the thinnest research-to-code trace
 
-### M1: RepoIndex adapter for Trail
+The first thing to build, before any web UI. It proves the model.
 
-Read Trail's graph into the `RepoIndex` contract.
+- **Depends on:** Phase 1.
+- **Build:**
+  - Loaders (with validators) for ResearchArtifact, Decision and Feature Markdown files (ArchitectureLinks are embedded in a Feature), following [TRACEABILITY.md](TRACEABILITY.md), plus an `etat-major` console script entry in `pyproject.toml`.
+  - A reader for `floorplan/graph@1` that rejects any other schema string and strips the absolute root and remote (sanitize the recorded fixture before committing it).
+  - `etat-major trace feature:<project>/<id>`: prints research, decisions, the feature's target components and files, and acceptance items (all open until Phase 5), each with provenance, marking missing links `unverified` or `gap`, and checking that each ArchitectureLink ref exists in the supplied graph.
+- **Fixtures:** a small demo workspace with one research artifact, one decision (plus one rejected decision), one feature and a recorded `graph.json`. Tests parse the recorded files, never the network.
+- **Done when:** on the demo workspace, `trace` prints the full chain; a `modifies` or `uses` ref that no longer exists is reported `stale` (a renamed file reads stale until Phase 2); a `new` ref with no matching file is reported `gap`; a finding without a source URL is flagged `unsourced`; `etat-major decisions list` shows rejected and postponed decisions alongside approved ones; `trace` also lists decisions that cite the same research.
 
-- **Depends on:** M0.
-- **Build:** a versioned adapter that runs `trail build` against a copy or worktree, reads `wiring.json`, rejects any `meta.version` other than 1, maps `relation` and `confidence` to provenance, computes module nodes from directories and imports (marked `inferred`), and reports coverage (languages, files skipped, indexed revision against current `HEAD`).
-- **Tests:** a small committed fixture graph; version rejection; unknown relation handled without crashing; a stale-revision case.
-- **Done when:** for this repo, a command prints RepoIndex JSON with symbol ranges, call and import edges with provenance, and a coverage block; the Trail version is pinned; the indexer sits behind an interface with a second stub implementation proving it can be swapped.
-- **Open check:** `references`, `implements` and `lsp_*` edges were not observed; the adapter must handle them, and the roadmap does not promise them.
+## Phase 2: repository visualization
 
-### M2: ProjectIntent loader
+- **Depends on:** Slice 1.
+- **Build:**
+  - Floorplan adapter: a pinned Floorplan commit, a CI check that a recorded `graph@1` still parses, optional invocation of only the deterministic `scan`, `build` and `refresh` scripts on a copy or worktree (never the model-backed steps, `serve.mjs` or the Ask bar), a rename reconciler using Git rename detection, and the planned-versus-built overlay computed by diffing a blueprint's `f:` ids against the current code map.
+  - Trail adapter: build in a copy or worktree, read `wiring.json`, accept only `meta.version` 1, map `relation` and `confidence` to provenance, compute coverage and freshness against `HEAD`.
+  - A join of the two layers by repository-relative path and revision; both layers and their provenance stay visible.
+  - Read-only FastAPI JSON API and a first Understand screen: repository selector, file tree, symbol search, architecture map (start by embedding or linking Floorplan's generated viewer), function-level graph from Trail, node inspector, source viewer, coverage panel.
+- **Decide here:** whether Floorplan's viewer is enough for architecture or État-major needs its own Cytoscape.js overlays; confirm library licenses.
+- **Done when:** for one repository, you can pick a component, drill to a function, see callers and callees with provenance and coverage limits, and open source; a planned feature's blueprint shows planned, built and existing files; the page works on a phone-width screen with no Codeman, Meute or agent running.
+- **Not promised:** `references`, `implements` or `lsp_*` edges (not observed), call edges for languages without full-fidelity support, or a module graph beyond directories and imports.
 
-Extend the merged validator to the full intent model.
+## Phase 3: research and feature model
 
-- **Depends on:** M0.
-- **Build:** extend the merged contract (keep initiative, project, task; add optional `milestone`, `accepted_by`, `accepted_on`, `depends_on`, `targets`; drop `budget_tokens`), vision file, milestones (`horizon`: now, next, later), tasks with `depends_on`, `targets` and diagram paths; dependency cycle detection; a loader for a workspace directory with errors that name file and field.
-- **Rules kept:** only `draft`, `ready`, `blocked`, `done` are valid stored statuses; derived columns are never written to files.
-- **Done when:** a demo workspace loads; a task naming a derived status is rejected; a dependency cycle is rejected; a `targets` entry that does not resolve in a RepoIndex is reported as stale.
+- **Depends on:** Slice 1, and Phase 2 for the architecture links.
+- **Build:** full loaders and the lifecycle (Idea to Released, plus Rejected and Postponed); the Decision search ("has this question been decided?"); the manual ChatGPT handoff, that is `research brief` (writes a prompt file after a redaction check) and `research import` (parses a pasted answer into an `unreviewed`, `ai-generated` draft, flags unsourced items, keeps URLs verbatim); the review step that marks an artifact `reviewed`.
+- **Done when:** the importer and UI never write `approved`, `reviewed`, `decided_by`, `accepted_by` or `accepted_on` (tested); a brief is generated for a feature with no local paths, hostnames or keys; pasting a recorded sample answer yields a draft whose unsourced items are flagged; an unreviewed artifact cannot back an approved Decision; a stored Feature file cannot hold a derived lifecycle stage; nothing is sent anywhere automatically.
 
-### M3: ProgressEvidence from Git and GitHub
+## Phase 4: planning visualization
 
-Compute the evidence ladder.
+- **Depends on:** Phase 3.
+- **Build:** extend the merged task contract (keep initiative, project, task; add optional `milestone`, `accepted_by`, `accepted_on`, `depends_on`, `targets`, and a link to a Feature; drop `budget_tokens`), the vision file, milestones with Now/Next/Later, dependency cycle detection, a Kanban (Draft, Ready, In Progress, Review, Done, Blocked), dependency view, Mermaid diagrams and wireframes rendered with sanitization, and Floorplan blueprints attached to features.
+- **Edits:** the UI writes Markdown or YAML only into the configured intent workspace (a Git working tree) and shows the resulting diff. État-major commits and pushes nothing.
+- **Done when:** the demo roadmap and board render from files; clicking a feature highlights its planned and existing components; a task naming a derived status is rejected; a dependency cycle is rejected; every edit is an uncommitted diff in the workspace.
 
-- **Depends on:** M2 (task ids).
-- **Build:** link commits, branches and PRs to tasks by trailer `Task: <project>/<id>`, branch `task/<project>-<id>-...` or PR body; read PR state, reviews, checks and releases through `gh`; derive In Progress, Review and Blocked; mark every rung without proof `unverified`; list disconnected work.
-- **Tests:** a fixture repository with scripted history; PR and check data from recorded `gh` JSON, not the network.
-- **Done when:** on the fixture, each task shows exactly the rungs its records prove and no more; a task with a merged PR but no `accepted_by` and `accepted_on` is shown in Review and not `done`; disconnected commits are listed.
+## Phase 5: progress and traceability
 
-### M4: Read-only web UI, Understand view
+- **Depends on:** Phases 3 and 4.
+- **Build:** ProgressEvidence from Git and GitHub (link key `Task: <project>/<id>` in a commit trailer, branch or PR body; PRs, reviews, checks and releases through the user's own `gh` login); the evidence ladder; derived In Progress, Review, Implementing, Verified and Released; gap, stale and disconnected-work reports; comparison of the delivered result with the Feature's `outcome`.
+- **Tests:** a fixture repository with scripted history and recorded `gh` JSON.
+- **Done when:** each task and feature shows exactly the rungs its records prove and nothing more; a merged PR without `accepted_by` and `accepted_on` is shown in Review and not `done`; unimplemented, unverified and blocked requirements are listed; every completion claim links to a commit, PR, check, release or human acceptance, or reads `unverified`.
 
-A first screen on real data.
+## Phase 6: optional integrations and hardening
 
-- **Depends on:** M1.
-- **Build:** FastAPI serving a read-only JSON API and the UI; repository selector, file tree, symbol search, Cytoscape.js graph with module-to-function zoom, node inspector, source viewer, and a coverage and freshness panel. Confirm Cytoscape.js against React Flow here and check licenses.
-- **Done when:** selecting a repository, finding a function or class, inspecting its callers, callees and imports (and references where the index provides them), and opening its source works; the UI shows edge provenance and what is not covered; the page works on a phone-width screen; it needs no Codeman, Meute or agent.
-
-### M5: Build view
-
-The planning half.
-
-- **Depends on:** M2, M3, M4.
-- **Build:** vision, milestones with Now/Next/Later, a Kanban with Draft, Ready, In Progress, Review, Done and Blocked (In Progress and Review are derived through M3), dependency view, Mermaid diagrams and wireframes rendered with sanitization; a task's `targets` highlight nodes in the Understand graph.
-- **Edits:** the UI writes Markdown or YAML only into the configured intent workspace, a Git working tree, and shows the resulting diff. État-major commits and pushes nothing; the human commits. The read-only rule applies to indexed source repositories and to the M4 API.
-- **Done when:** the demo roadmap and board render from files; a task click highlights its code nodes; a stale mapping is visible; every edit appears as an uncommitted diff in the intent workspace and no edit lands outside it.
-
-### M6: Progress view and portfolio
-
-The proof half.
-
-- **Depends on:** M3, M5.
-- **Build:** per-milestone progress from the evidence ladder, blocked tasks, stale plans (milestones past date, unresolved targets), disconnected work, and a cross-repository portfolio page.
-- **Done when:** every completion claim on screen links to a commit, PR, check, release or human acceptance, or reads `unverified`; clicking a module shows its dependent tasks and their evidence.
-
-### M7: Integrations (optional, last)
-
-- **Depends on:** M5, M6.
-- **Meute (read-only):** parse `state/log` and `reports/**` directly into `generated` evidence and a summary. A Meute run links to a task only if its commits carry the `Task:` trailer or its report names the task id; otherwise it stays unlinked; never call the per-report command that marks reports read. Submit approved work only through `meute promote` or `meute plan --enqueue`, behind explicit human approval.
-- **Codeman:** show linked sessions from `GET /api/sessions`; open one by deep link; launch one for an approved task. Verify against the real server first.
-- **Done when:** with both services stopped, nothing else changes; with them running, a task shows its `ExecutionLink`; no second queue or terminal exists.
-
-### M8: Hardening and the second user
-
-- **Depends on:** M4 through M6 (M7 only for the integration checks).
-- **Build:** behaviour and limits on large repositories (graph size, on-demand loading), incremental reindex, freshness alerts, and the credential-isolation check for a second user.
-- **Credential check:** verify end to end that two people on one machine use distinct Claude and Codex logins through the chosen setup (separate OS users with separate Codeman instances, or verified per-user config directories). Confirm account eligibility with Anthropic before the second user is added.
-- **Done when:** a documented large-repository run; the isolation check passes or the second user is deferred with the reason recorded.
+- **Depends on:** Phases 2 to 5.
+- **Meute (read-only):** parse `state/log` and `reports/**` directly into `generated` evidence and a summary; never call the per-report command that marks reports read. A run links to a task only if its commits carry the `Task:` trailer or its report names the task id. Submit approved work only through `meute promote` or `meute plan --enqueue`, on an explicit human click.
+- **Codeman:** show linked sessions from `GET /api/sessions`; open one by deep link; launch one for an approved task on an explicit human click. État-major never sets `envOverrides`. Verify against the real server first.
+- **Cross-repository portfolio and mobile refinement.**
+- **Hardening:** large-repository limits, incremental reindex, freshness alerts, and the credential-isolation check for a second user (separate OS users with separate Codeman instances, or verified per-user config directories, plus account-eligibility confirmation with Anthropic).
+- **Done when:** with all services stopped nothing else changes; with them running a task shows its ExecutionLink; no second queue or terminal exists; a large-repository run is documented; the isolation check result (pass, or fail with the reason) is recorded and the second user is added only on a pass.
 
 ## Dependency order
 
-M0 → (M1, M2) → M3 → M4 uses M1 → M5 uses M2 and M4 → M6 uses M3 and M5 → M7 → M8. M1 and M2 can run in parallel; M3 needs M2.
+Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) → Phase 4 → Phase 5 → Phase 6. The Meute `generated` rung of the evidence ladder arrives in Phase 6, not Phase 5. The "module to why" query is tested in Phase 5.
 
 ## Recommended next step
 
-Start M1. It is the smallest piece that proves the product's core claim (a verifiable code map), it has a real fixture available from a run against this repository, and it does not depend on any decision still open.
+Build Slice 1. It is the smallest piece that proves the product's central claim (a navigable research-to-code trace), needs no web UI and no running service, and uses a recorded Floorplan `graph.json` fixture. Before Phase 2, verify what a model-written Floorplan architecture layer looks like and costs on a real repository. A human runs that once, manually, in their own agent session on a copy of the repository (this sends source to the model provider); it is not scheduled and État-major never runs it.

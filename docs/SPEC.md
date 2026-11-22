@@ -2,7 +2,7 @@
 
 Last updated 2026-11-21. Working title. Status: pre-implementation. This file is the earlier agent-command-center design and is partly superseded; see the banner below and VISUALIZATION-ARCHITECTURE.md. It began as a Claude doc whose two diagrams (architecture and roadmap) are not reproduced here; the text below carries the same information.
 
-> **Direction changed (2026-11-21).** The product is now a repository-intelligence and progress-visualization app, not an agent command center. See [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md) and [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md); they win over this file. Sections below carry a **Superseded** or **Kept** note. Superseded text is left for history, not as a plan.
+> **Direction changed (2026-11-21).** The product is now a visual product-development workspace (Discover, Understand, Design & Build, Progress), not an agent command center. See [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md), [TRACEABILITY.md](TRACEABILITY.md), [TOOL-EVALUATION.md](TOOL-EVALUATION.md) and [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md); they win over this file. Sections below carry a **Superseded** or **Kept** note. Superseded text is left for history, not as a plan.
 
 ## Vision
 
@@ -26,7 +26,7 @@ Last updated 2026-11-21. Working title. Status: pre-implementation. This file is
 
 ## North stars
 
-> **Superseded** by the three views and goals in the architecture document. Phone terminal and voice now belong to Codeman; unattended runs to Meute.
+> **Superseded** by the four views and goals in the architecture document. Phone terminal and voice now belong to Codeman; unattended runs to Meute.
 
 Four requirements every decision is judged against. Items 1 to 3 shape the first releases; item 4 is on the roadmap.
 
@@ -215,7 +215,7 @@ Creating or deeply editing tasks stays a desktop job until the rest is solid.
 
 ## Milestones
 
-> **Superseded** by [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md).
+> **Superseded** by [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md) (Phases 1 to 6 and Slice 1).
 
 The order is the reverse of the finished product: the data model and roll-ups come first because every later layer reads them, and the phone polish comes last because it depends on all of them. Each phase ends at its gate, and none starts before the previous gate passes.
 
