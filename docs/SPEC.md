@@ -2,7 +2,11 @@
 
 Last updated 2026-11-21. Working title. Status: pre-implementation. This file is the source of truth. It began as a Claude doc whose two diagrams (architecture and roadmap) are not reproduced here; the text below carries the same information.
 
+> **Direction changed (2026-11-21).** The product is now a repository-intelligence and progress-visualization app, not an agent command center. See [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md) and [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md); they win over this file. Sections below carry a **Superseded** or **Kept** note. Superseded text is left for history, not as a plan.
+
 ## Vision
+
+> **Partly superseded.** The strategic view and phone access survive as the Build and Progress views and Codeman's terminal. Planning agent, runner and sandboxed execution in "A day with the finished product" are out of scope.
 
 État-major is a self-hosted command center that gives one person, or a small family, a strategic view over a fleet of coding agents running in tmux. It starts from goals (initiatives), not sessions, and shows what is moving, what is stuck and what needs a human decision.
 
@@ -22,6 +26,8 @@ Last updated 2026-11-21. Working title. Status: pre-implementation. This file is
 
 ## North stars
 
+> **Superseded** by the three views and goals in the architecture document. Phone terminal and voice now belong to Codeman; unattended runs to Meute.
+
 Four requirements every decision is judged against. Items 1 to 3 shape the first releases; item 4 is on the roadmap.
 
 | # | North star | What it means | Roadmap | Status |
@@ -32,6 +38,8 @@ Four requirements every decision is judged against. Items 1 to 3 shape the first
 | 4 | Multi-user | A second person works in the same environment under their own login | Roadmap, after 1 to 3 | Not started |
 
 ## Principles and hard constraints
+
+> **Mixed.** Kept: 2 (no credentials), 3 (Git holds intent; derived state is not written to files), 7 (public AGPL, no personal data). Superseded: 1 (driving CLIs in tmux), 4, 5 (adapters and the four old contracts) and 6 (runner safety), because État-major no longer executes agents. See `CLAUDE.md` for the current constraints.
 
 Seven rules decide every design question below.
 
@@ -44,6 +52,8 @@ Seven rules decide every design question below.
 7. **Public and AGPL-3.0.** No personal paths, hostnames or keys in the code. All of that lives in config files, with a seeded demo workspace in the repo.
 
 ## Users and isolation
+
+> **Superseded** for the first deployment (trusted family, one machine). Credential isolation for a second user remains an open, verified-before-use item in the architecture document.
 
 The design is multi-user from the start, but the first releases ship with one user. Every user is a separate security domain that shares one board. Nothing a user's agents touch is reachable by another user's agents unless a shared initiative says so.
 
@@ -61,6 +71,8 @@ The design is multi-user from the start, but the first releases ship with one us
 **Out of scope at first:** operation with more than one user in the first releases (north star 4), SSO, organizations, billing, and any hosted multi-tenant mode.
 
 ## Data model
+
+> **Partly kept.** The task-file contract and the stored-status rule are implemented (`docs/contracts/task-file.md`). The runtime store is superseded by a rebuildable cache; In Progress and Review are now derived from Git evidence.
 
 Intent lives in markdown files in a git repo, in three levels. Runtime state lives in an uncommitted local store (SQLite or JSONL) that records hook events, spend and approvals. The strategic view is computed from both.
 
@@ -102,6 +114,8 @@ Free-form description and notes.
 
 ## Model router
 
+> **Superseded.** État-major launches no agents, so it has no router, profiles or fallback policy.
+
 The router chooses which agent CLI, model and credential profile runs a task. It works at the agent level, not the HTTP level: a subscription login cannot be proxied, so the only thing it can safely choose is which locally logged-in CLI to start.
 
 **Three parts**
@@ -135,6 +149,8 @@ OmniRoute is a backend for `api-key` profiles only. Claude and Codex subscriptio
 
 ## Architecture
 
+> **Superseded** by the component ownership and contracts in the architecture document.
+
 The browser reaches the board and the web terminal over Tailscale. The runner starts work through the router, inside the user's container. Hooks in each session report status back to the board. Nine components in three layers: clients (browser, optional phone client), control plane (board, API, router, runtime store) and execution (runner, tmux sessions, containers).
 
 **Integration points**
@@ -151,6 +167,8 @@ The browser reaches the board and the web terminal over Tailscale. The runner st
 **Voice (north star 1, after phase 6):** the browser captures speech and plays replies. The speech-to-text and text-to-speech engines are pluggable and chosen later. Voice is a client feature and does not touch the contracts.
 
 ## Recommended architecture
+
+> **Superseded** (control plane, runner and events). The Python and thin-frontend lean carries over; see the architecture document, "Technology".
 
 One small control-plane service, with everything else adopted. This is a lean from the research in [RESEARCH.md](RESEARCH.md), not a final decision; a one-weekend spike (below) confirms or overturns it.
 
@@ -174,6 +192,8 @@ One small control-plane service, with everything else adopted. This is a lean fr
 
 ## Strategic view
 
+> **Kept in spirit.** It becomes the Progress view and portfolio page; the morning digest becomes an optional Meute-artifact summary.
+
 The home screen answers four questions without opening a single session. Every number is computed from the task files and hook events.
 
 | View | Answers | Computed from |
@@ -195,6 +215,8 @@ Creating or deeply editing tasks stays a desktop job until the rest is solid.
 
 ## Milestones
 
+> **Superseded** by [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md).
+
 The order is the reverse of the finished product: the data model and roll-ups come first because every later layer reads them, and the phone polish comes last because it depends on all of them. Each phase ends at its gate, and none starts before the previous gate passes.
 
 1. **Foundation:** data model, task files, event schema.
@@ -207,6 +229,8 @@ The order is the reverse of the finished product: the data model and roll-ups co
 Phase 4 can move after phase 5, since hand-written tasks are enough to prove execution. North stars map to phases as follows: north star 1 to phases 3 and 6, north star 2 to phase 2, north star 3 to phase 5, and north star 4 after phase 6.
 
 ## Build vs adopt
+
+> **Kept** as research, with updates in `CLAUDE.md`. The runner, session-binding and router rows no longer apply.
 
 Adopt or borrow for every layer except the cross-project roadmap, the multi-user control plane and the glue between them. Field reports below come from Reddit threads as of 21 Nov 2026; most are author or single-user accounts, so each pick is a candidate to test, not a settled choice.
 
@@ -237,6 +261,8 @@ The closest published architecture to this design is a [Reddit write-up](https:/
 
 ## Licensing and compliance
 
+> **Kept.** Re-check Anthropic terms before each release.
+
 The repo is AGPL-3.0. That fixes what code can be reused and how Claude accounts may be used. Components run as separate processes, so their licenses do not combine with the AGPL code.
 
 **Reusable code (verify each license in the repo before forking; these come from search listings)**
@@ -261,6 +287,8 @@ The repo is AGPL-3.0. That fixes what code can be reused and how Claude accounts
 These terms changed several times in 2026. Re-check them before each release.
 
 ## Open questions
+
+> **Mostly superseded.** The current list is in the architecture document.
 
 - [ ] Web terminal: adopt Agentboard or ttyd as is, or embed xterm.js directly in the board?
 - [ ] Base: fork tmux-kanban or Lumbergh, or start fresh and borrow ideas?

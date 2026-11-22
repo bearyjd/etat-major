@@ -89,3 +89,15 @@ Layering: a shared control plane (web auth, project registry, roadmap, queue, no
 ## What people say they wish existed
 
 Synthesized from the threads, not verbatim requests: one phone interface for Claude Code and Codex; mobile-to-desktop handoff; a unified approval inbox; a dependable overnight runner; telling real progress from agent activity; cross-repo strategic planning; a source of truth that survives tool changes (markdown in git); safe parallel work; recovery after failure; clear subscription and API billing visibility; first-class mobile voice; real multi-user support; meaningful morning summaries; less maintenance; agent independence; one coherent command center.
+
+## 7. Verified findings on the neighbouring tools (2026-11-21)
+
+Read from each project's code and docs; see [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md) for how they are used. "Verified" means observed in code or by a read-only command.
+
+| Tool | Verified | Unverified |
+| --- | --- | --- |
+| Trail 0.30.5 (MIT) | Tree-sitter, 28 languages; function-level graph in `wiring.json` (`GraphV1`, version 1) with `contains`, `calls`, `imports`, `references`, `implements`, `extends` edges and a confidence label. On this repo (Python): 66 nodes, 167 edges, about 2 s; relations seen were `calls`, `contains`, `imports`, `extends`. Writes into its build target; telemetry on by default. | Accuracy on large repos and other languages; `references`, `implements` and `lsp_*` edges in practice; graph size at scale; a schema-compatibility promise (none documented). |
+| Meute `6b4253b` | Bash and Python, no daemon or database; external scheduling; files and CLI as the interface (`state/log`, `reports/**`, `meute promote`, `meute plan --enqueue`); single-user on the host's own logins; a web UI and TUI already exist. | Live schema of `lib/inbox.py dump`; differences on its web-inbox feature branch. |
+| Codeman 1.51.1 (MIT) | `/api/v1` REST, SSE and WebSocket terminal; create session then send input; Basic auth, passwordless by default; multi-user separates workspaces but shares one OS account, `~/.claude` and subscription. | Phone-friendly session deep link; whether a per-launch `CLAUDE_CONFIG_DIR` override survives restart for non-granted users; voice implementation completeness; Docker-case credential handling. |
+| Herdr (vendor page only) | Not independently verified. See the dashboards table above. | Everything. |
+
