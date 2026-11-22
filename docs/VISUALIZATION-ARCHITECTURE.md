@@ -4,13 +4,14 @@ Status: pre-implementation design. Written 2026-11-21. This document governs whe
 
 ## Purpose
 
-État-major is a living visual map of three things for each repository:
+État-major is a self-hosted visual product-development workspace. It answers four connected questions for each project:
 
-1. **Understand:** how the code works.
-2. **Build:** what we are building toward.
-3. **Progress:** how we are getting there, with evidence.
+1. **Discover (why):** market research, user needs, alternatives, decisions and feature proposals.
+2. **Understand (what exists):** how the current code works.
+3. **Design & Build (what should exist):** vision, approved features, roadmap, tasks and planned architecture.
+4. **Progress (how we are getting there):** commits, tests, releases and the gaps between plan and code, with evidence.
 
-It is useful with no agent running. It is not a terminal, a runner, a scheduler or a general project-management platform.
+The central relationship is traceable in both directions: **Research → Decision → Feature → Design → Code → Evidence** (see [TRACEABILITY.md](TRACEABILITY.md)). The four views are perspectives on one project model, not four applications. It is useful with no agent running. It is not a terminal, a runner, a scheduler or a general project-management platform.
 
 ## Non-goals
 
@@ -18,7 +19,9 @@ It is useful with no agent running. It is not a terminal, a runner, a scheduler 
 - A scheduler, queue or runner of any kind.
 - A terminal or tmux subsystem.
 - Handling Claude or Codex authentication in any way: no subscription proxy, token pooling or account switching.
-- A proprietary planning database. Git is the source of truth for intent.
+- A proprietary planning database. Git is the source of truth for intent, including research and decisions.
+- A second code-analysis engine. Reuse Floorplan and Trail; add another only if it does something they demonstrably cannot.
+- A research agent, a ChatGPT API client or a scraper of ChatGPT sessions. Research reaches État-major by a manual, human-reviewed handoff.
 - Enterprise identity, per-user containers or per-user Unix accounts in the first deployment (see [Security and trust](#security-and-trust)).
 
 ## What is superseded
@@ -43,7 +46,9 @@ The first SPEC.md described a control plane that supervised agents. That directi
 | Component | Owns | État-major's relationship |
 | --- | --- | --- |
 | **État-major** | Visualization, cross-repository aggregation, project intent files, progress evidence, links to sessions and jobs | The product. Works alone. |
-| **Trail** | Parsing code into a symbol graph | First source for `RepoIndex`, through a versioned adapter. Replaceable. |
+| **Floorplan** | Architecture maps, endpoints, flows and planned-software blueprints | Architecture layer of `RepoIndex`, read through an adapter; never forked or modified. Replaceable. |
+| **Trail** | Parsing code into a function-level symbol graph | Symbol layer of `RepoIndex`, through a versioned adapter. Replaceable. |
+| **ChatGPT** | External research and brainstorming, especially Reddit | Manual handoff only: État-major writes a brief, the human pastes it and brings back the answer for review. |
 | **Git and GitHub** | Durable intent (Markdown, YAML, Mermaid), history, PRs, checks, releases | Source of truth. Read through `git` and `gh`. |
 | **Codeman** | Interactive Claude Code and Codex sessions, tmux, mobile terminal, voice, notifications, logins | Separate. Link out; optionally launch a session for an approved task. |
 | **Meute** | Unattended scheduling and execution, run reports | Separate. Read its artifacts; submit approved work only through its own CLI. |
@@ -52,6 +57,8 @@ The first SPEC.md described a control plane that supervised agents. That directi
 Exactly one scheduler owns any job. Meute owns the job queue and run logic; its time triggers are external cron or systemd timers set up for Meute. État-major never writes Meute's state files.
 
 ## Verified facts about the neighbours
+
+Floorplan, Trail and Understand Anything are evaluated in [TOOL-EVALUATION.md](TOOL-EVALUATION.md): Floorplan for the architecture layer, Trail for symbols, Understand Anything skipped as an indexer. The notes below on Trail, Meute and Codeman come from the earlier pass.
 
 Findings below come from reading each project's code and docs on 2026-11-21. "Verified" means observed in code or by running a read-only command. Items marked unverified were not tested.
 
@@ -90,14 +97,16 @@ Provenance values used throughout: `verified` (derived by a deterministic tool),
 
 ### RepoIndex
 
-A derived, rebuildable snapshot of one repository at one revision. A cache, never authoritative.
+A derived, rebuildable snapshot of one repository at one revision. A cache, never authoritative. It has two layers read from two tools and joined by repository-relative path: the **architecture layer** (components, files, import and http links, routes; from Floorplan) and the **symbol layer** (functions, classes, call and extends edges; from Trail). The layers are never merged into one authoritative graph.
 
 ```yaml
 version: 1
 repository: example-service        # repo id
 revision: <git sha>                # the commit indexed
 indexed_at: 2026-11-21T12:00:00Z
-indexer: { name: trail, version: 0.30.5 }
+indexers:                          # one entry per layer; each kept with its own provenance
+  - { layer: architecture, name: floorplan, schema: "floorplan/graph@1", commit: <pinned> }
+  - { layer: symbols, name: trail, version: 0.30.5 }
 coverage: { languages: [python], files_indexed: 5, files_skipped: 0 }
 symbols:
   - id: src/example/mapper.py#map_row
@@ -113,6 +122,10 @@ edges:
 ```
 
 Symbol IDs are `path#qualified.name`, which survives re-indexing when the symbol does not move. Module-level nodes are computed by État-major from directories and import edges and are marked `inferred`.
+
+### ResearchArtifact, Decision, Feature, ArchitectureLink
+
+The research-to-feature end of the chain. Git-backed Markdown with frontmatter; fully specified, with lifecycle and examples, in [TRACEABILITY.md](TRACEABILITY.md). `Feature` stores human intent (Idea through Planned); Implementing, Verified and Released are derived from ProgressEvidence. An `ArchitectureLink` points a feature at a Floorplan component or file id, or a Trail symbol id, as `planned` or `built`.
 
 ### ProjectIntent
 
@@ -161,20 +174,23 @@ seen_at: 2026-11-21T12:00:00Z
 
 It is a link and a last-seen time, never a lifecycle owner. If the target disappears the link is shown as stale.
 
-## The three views
+## The four views
 
-1. **Understand.** Repository selector, file tree, symbol search, module and function graph, source navigation. Select a node to see its symbol, references and source location; zoom between modules and functions. A coverage panel shows languages, files skipped, index freshness (revision against current `HEAD`) and edge provenance. Explanations are labelled `ai-generated` and kept apart from verified relationships. No claim of a complete dynamic call graph is made.
-2. **Build.** Vision, milestones, Now/Next/Later, a Kanban with Draft, Ready, In Progress, Review, Done, Blocked, task dependencies, and Mermaid diagrams and wireframes linked to milestones and tasks. A task's `targets` link it to nodes in the Understand graph.
-3. **Progress.** Commits, PRs, checks and releases mapped to milestones through the evidence ladder. Blocked tasks, stale plans (targets that no longer resolve, milestones past their date) and disconnected work are surfaced. A portfolio page shows each project's movement across repositories. An optional morning summary reads Meute run artifacts.
+1. **Discover (why).** Research artifacts, competitors, pain points, ideas, evidence, alternatives, decisions (including rejected and postponed ones) and feature proposals, plus an idea pipeline from Idea to Approved. Primary visualization: evidence and decision relationships.
+2. **Understand (what exists).** Repository selector, file tree, symbol search, the architecture map (Floorplan layer), the function-level graph (Trail layer), source navigation and a coverage panel with index freshness (revision against current `HEAD`) and edge provenance. Explanations are labelled `ai-generated` and kept apart from verified relationships. No claim of a complete dynamic call graph is made.
+3. **Design & Build (what should exist).** Vision, approved features, PRDs, Now/Next/Later roadmap, milestones, a Kanban (Draft, Ready, In Progress, Review, Done, Blocked), task dependencies, Mermaid diagrams and wireframes, and Floorplan blueprints of planned architecture attached to features. A feature's `ArchitectureLink` records tie planned work to nodes in the Understand map.
+4. **Progress (how we are getting there).** Commits, PRs, checks and releases mapped to features, tasks and milestones through the evidence ladder; blocked tasks, stale plans, disconnected work, and gaps between planned and implemented architecture (planned components with no code, claimed changes to code that no longer exists). A portfolio page shows each project's movement across repositories. An optional morning summary reads Meute run artifacts.
 
-The views are connected: a task highlights its target nodes; a module shows its dependent tasks and their evidence. A project overview shows vision, current architecture, next milestones and completion evidence without raw logs.
+The views share one model and link in both directions: click a module to see the features it implements, why they were chosen and what evidence backs them; click a feature to see its research, its blueprint, its tasks, the code it touches and its open acceptance criteria. A project overview shows vision, current architecture, next milestones and completion evidence without raw logs.
 
 ## Integration boundaries
 
 - **Codeman:** read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Basic auth credentials come from configuration by reference (an environment variable name), never stored. Launching is an optional later hand-off, always behind explicit human approval, and État-major never sets `envOverrides` at all: any per-person credential directory is configured in Codeman, outside État-major. Each launch is one explicit human click; nothing is queued or retried.
 - **Meute:** read `state/log` and `reports/**` directly; submit only through `meute promote` or `meute plan --enqueue`, after human approval. No competing queue.
 - **Git and CI:** `git log` and `gh` for PRs, reviews, checks and releases. Read-only, using the user's existing `gh` login; État-major stores no token.
+- **Floorplan:** read its `graph.json`, `architecture.json` and `plan.json` through a versioned adapter that accepts only known schema strings. Run only its deterministic scripts, on a copy or worktree. It stays independently upgradeable; État-major does not fork it.
 - **Trail:** through the RepoIndex adapter, behind an interface so another indexer can replace it.
+- **ChatGPT:** no integration. A manual brief and import flow only, described in [TRACEABILITY.md](TRACEABILITY.md).
 
 ## Security and trust
 
@@ -189,7 +205,7 @@ The views are connected: a task highlights its target nodes; a module shows its 
 ## Technology (recommendation, to confirm in the first UI milestone)
 
 - **Backend:** Python, reusing the merged validator (`pydantic`, `PyYAML`). FastAPI to serve a read-only JSON API and static assets. The derived cache is SQLite or JSON files, rebuildable from Git and the indexer.
-- **Frontend:** a thin, server-rendered UI with HTMX, plus Cytoscape.js for the graph. Cytoscape.js needs no UI framework, supports compound nodes for module nesting and handles large graphs; React Flow would commit the project to a React single-page app for little gain here. Mermaid renders diagrams client-side.
+- **Frontend:** a thin, server-rendered UI with HTMX. For the architecture map, start by embedding or linking Floorplan's own generated viewer; add Cytoscape.js only for the overlays and the function-level layer that Floorplan does not provide. Cytoscape.js needs no UI framework, supports compound nodes for module nesting and handles large graphs; React Flow would commit the project to a React single-page app for little gain here. Mermaid renders diagrams client-side.
 - **Mobile:** responsive layout; no native app. The phone terminal is Codeman's job.
 - **Before adopting any library,** verify its license in its own repository.
 
