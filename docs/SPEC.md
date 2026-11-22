@@ -98,8 +98,6 @@ priority: 2
 acceptance:
   - Maps all source tables listed in docs/sources.md
   - Unit tests pass in CI
-# runtime state (session, spend) is kept outside git
-budget_tokens: 400000
 ---
 Free-form description and notes.
 ```

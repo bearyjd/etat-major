@@ -16,9 +16,11 @@ Rules for every phase:
 - Scaffold, CI, and the task-file contract with a validator (`src/etat_major/taskfile.py`, `docs/contracts/`). It is reused in Phase 4.
 - Decision record that Backlog.md's format is not adopted (`docs/spikes/phase1-spike.md`).
 - Design documents: architecture, traceability model, tool evaluation, this roadmap.
-- No adapters, no research or feature loaders, no evidence code, no UI.
+- The CLI runs the trace, decision listing, recorded index, progress, workspace validation and manual research handoff. Trace, decisions, index, progress and validation support JSON.
 
-## Phase 1: tool evaluation (done in this change)
+## Phase 1: tool evaluation
+
+**Status** — Mechanical tool evaluation is complete. Quality and cost of model-written Floorplan maps remain unverified.
 
 Floorplan, Trail and Understand Anything inspected and run on copies; decision recorded in [TOOL-EVALUATION.md](TOOL-EVALUATION.md): Floorplan for the architecture layer, Trail for symbols, Understand Anything skipped as an indexer.
 
@@ -26,6 +28,8 @@ Floorplan, Trail and Understand Anything inspected and run on copies; decision r
 - **Still unverified:** the quality and per-refresh cost of an LLM-written Floorplan architecture layer. Verify on a real repository before relying on the architecture layer.
 
 ## Slice 1: the thinnest research-to-code trace
+
+**Status** — The CLI trace, decision listing, record loaders and recorded Floorplan graph reader are implemented.
 
 The first thing to build, before any web UI. It proves the model.
 
@@ -39,6 +43,8 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 2: repository visualization
 
+**Status** — Recorded Floorplan and Trail adapters, index joins, renames and overlays are implemented. Tool execution, the read-only API and the Understand screen remain.
+
 - **Depends on:** Slice 1.
 - **Build:**
   - Floorplan adapter: a pinned Floorplan commit, a CI check that a recorded `graph@1` still parses, optional invocation of only the deterministic `scan`, `build` and `refresh` scripts on a copy or worktree (never the model-backed steps, `serve.mjs` or the Ask bar), a rename reconciler using Git rename detection, and the planned-versus-built overlay computed by diffing a blueprint's `f:` ids against the current code map.
@@ -51,11 +57,15 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 3: research and feature model
 
+**Status** — Research and feature loaders, relevant decision listing, manual brief/import and derived feature stages are implemented. Interactive decision search and the review UI remain.
+
 - **Depends on:** Slice 1, and Phase 2 for the architecture links.
 - **Build:** full loaders and the lifecycle (Idea to Released, plus Rejected and Postponed); the Decision search ("has this question been decided?"); the manual ChatGPT handoff, that is `research brief` (writes a prompt file after a redaction check) and `research import` (parses a pasted answer into an `unreviewed`, `ai-generated` draft, flags unsourced items, keeps URLs verbatim); the review step that marks an artifact `reviewed`.
 - **Done when:** the importer and UI never write `approved`, `reviewed`, `decided_by`, `accepted_by` or `accepted_on` (tested); a brief is generated for a feature with no local paths, hostnames or keys; pasting a recorded sample answer yields a draft whose unsourced items are flagged; an unreviewed artifact cannot back an approved Decision; a stored Feature file cannot hold a derived lifecycle stage; nothing is sent anywhere automatically.
 
 ## Phase 4: planning visualization
+
+**Status** — Task, vision and milestone models, dependency validation, board-state derivation and blueprint reading are implemented. The roadmap, board, diagram rendering and edit UI remain.
 
 - **Depends on:** Phase 3.
 - **Build:** extend the merged task contract (keep initiative, project, task; add optional `milestone`, `accepted_by`, `accepted_on`, `depends_on`, `targets`, and a link to a Feature; drop `budget_tokens`), the vision file, milestones with Now/Next/Later, dependency cycle detection, a Kanban (Draft, Ready, In Progress, Review, Done, Blocked), dependency view, Mermaid diagrams and wireframes rendered with sanitization, and Floorplan blueprints attached to features.
@@ -64,12 +74,16 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 5: progress and traceability
 
+**Status** — Progress derives evidence from local Git and recorded GitHub data and reports lifecycle stages, gaps and stale links. Live GitHub access and the progress UI remain.
+
 - **Depends on:** Phases 3 and 4.
 - **Build:** ProgressEvidence from Git and GitHub (link key `Task: <project>/<id>` in a commit trailer, branch or PR body; PRs, reviews, checks and releases through the user's own `gh` login); the evidence ladder; derived In Progress, Review, Implementing, Verified and Released; gap, stale and disconnected-work reports; comparison of the delivered result with the Feature's `outcome`.
 - **Tests:** a fixture repository with scripted history and recorded `gh` JSON.
 - **Done when:** each task and feature shows exactly the rungs its records prove and nothing more; a merged PR without `accepted_by` and `accepted_on` is shown in Review and not `done`; unimplemented, unverified and blocked requirements are listed; every completion claim links to a commit, PR, check, release or human acceptance, or reads `unverified`.
 
 ## Phase 6: optional integrations and hardening
+
+**Status** — Codeman and Meute integrations, portfolio and mobile views, and deployment hardening remain planned.
 
 - **Depends on:** Phases 2 to 5.
 - **Meute (read-only):** parse `state/log` and `reports/**` directly into `generated` evidence and a summary; never call the per-report command that marks reports read. A run links to a task only if its commits carry the `Task:` trailer or its report names the task id. Submit approved work only through `meute promote` or `meute plan --enqueue`, on an explicit human click.
@@ -84,4 +98,4 @@ Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) →
 
 ## Recommended next step
 
-Build Slice 1. It is the smallest piece that proves the product's central claim (a navigable research-to-code trace), needs no web UI and no running service, and uses a recorded Floorplan `graph.json` fixture. Before Phase 2, verify what a model-written Floorplan architecture layer looks like and costs on a real repository. A human runs that once, manually, in their own agent session on a copy of the repository (this sends source to the model provider); it is not scheduled and État-major never runs it.
+Build the read-only API and Understand screen using recorded artifacts and the existing CLI index.

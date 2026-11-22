@@ -30,12 +30,13 @@ Source URL, Date, Conflicts and Not verified may also be left blank.
 
 `etat-major research import FILE --workspace D --id NNNN` imports at least one
 finding into `research/NNNN-chatgpt-research.md`. It refuses an existing ID and
-reports malformed input with the file, field and line number. Control characters,
-raw angle brackets, and reserved human-only lifecycle terms are refused in field
-values.
+reports malformed input with the file, field and line number. Field values reject
+control, format, line-separator, paragraph-separator and private-use characters,
+as well as raw angle brackets. Human-only lifecycle fields are reserved in
+structured metadata. Their names may appear in prose.
 
-Imports use `status: unreviewed` and `provenance: ai-generated`. Source URLs are
-preserved verbatim. A finding missing a URL or date uses `evidence: unverified`
+Imports use `status: unreviewed` and `provenance: ai-generated`. Source URLs with
+credentials are rejected. Other source URLs are preserved verbatim in the draft. A finding missing a URL or date uses `evidence: unverified`
 and is displayed as unsourced. An undated URL is retained on the finding with
 `source_date_missing: true` so another finding's date cannot make it appear
 sourced. Drafts may contain an empty source list. The importer records unresolved

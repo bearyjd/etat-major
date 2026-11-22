@@ -26,7 +26,7 @@ workspace/
 
 **Reference grammar.** Every cross-reference is `<kind>:<id>`. Project-scoped records (`feature`, `task`, `milestone`) use `<project>/<n>`, for example `feature:netlens/0031`, `task:netlens/0042`, `milestone:netlens/m3`. `research` and `decision` ids are global (`research:0007`, `decision:0012`). A finding inside research is `research:0007#f1`. Code references are prefixed by layer: `fp:n:<component>` or `fp:f:<path>` (Floorplan), `trail:<path>#<symbol>` (Trail). Loaders reject any other spelling.
 
-File paths in code references are repository-relative. Use ASCII `/` between non-empty segments. Leading `~`, drive-letter prefixes, dot segments, backslashes and Unicode slash lookalikes are invalid.
+File paths in code references are repository-relative. Trail paths may contain spaces. Use ASCII `/` between non-empty segments. Leading `~`, drive-letter prefixes, dot segments, backslashes and Unicode slash lookalikes are invalid.
 
 **Minimum for Slice 1.** Each record needs an `id` and `status`. Research also needs a `title`, `provenance` and at least one source with a URL and date, with an exception for imported drafts described below. A Decision needs a `question` and, when approved, rejected or postponed, `decided_by: human`. A Feature needs a `project` and `title`. The planned status requires an approved linked Decision.
 
@@ -132,8 +132,8 @@ Embedded in a Feature or a Task, never a separate file. Stored fields: `ref` (la
 | Idea, Researching, Proposed | Yes (human intent) | The Feature file; Researching expects at least one ResearchArtifact |
 | Approved, Rejected, Postponed | **Derived from the linked Decision**, which is the single authority | A Decision with `decided_by: human`. A Feature file may not say `planned` without an approved Decision |
 | Planned | Yes | The human has created tasks from the approved Feature |
-| Implementing | **Derived** | A linked task has a branch or open draft PR (the Kanban In Progress column) and is not yet accepted |
-| Verified | **Derived** | All linked tasks are merged with a passing check on the merge commit, and the Feature carries `accepted_by` and `accepted_on` (the same human-acceptance fields as tasks, added with the Phase 4 contract). Per-acceptance-item verification is an open question; until then the human states in the acceptance that the criteria are met |
+| Implementing | **Derived** | Linked work is in progress, in review or merged, and at least one linked task awaits acceptance |
+| Verified | **Derived** | All linked tasks are accepted and merged with passing checks on the merge commit. A failing or pending head or merge check does not qualify. The Feature carries `accepted_by` and `accepted_on` (the same human-acceptance fields as tasks, added with the Phase 4 contract). Per-acceptance-item verification is an open question; until then the human states in the acceptance that the criteria are met |
 | Released | **Derived** | A release or tag contains the merge commits |
 
 Not every idea moves forward. Moving a Feature to Approved needs a human-recorded Decision; nothing auto-advances.
@@ -168,7 +168,7 @@ ChatGPT is the preferred external research and brainstorming partner, especially
 1. **Brief.** `etat-major research brief feature:<project>/<id> --workspace D --out FILE` writes a Markdown prompt file. It contains the Feature's project context, the specific questions, the sources to examine (Reddit, GitHub, documentation), and the required answer format below. The command refuses to write if its redaction check detects local paths, hostnames, IP or email addresses, or key-like strings.
 2. **Human review.** You read the brief and decide what leaves your machine. Nothing is sent by État-major.
 3. **Paste into ChatGPT**, then copy its answer.
-4. **Import.** `etat-major research import FILE --workspace D --id NNNN` parses the answer into a draft ResearchArtifact with `status: unreviewed` and `provenance: ai-generated`. Items without a URL and date are flagged `unsourced`. Source URLs are kept verbatim.
+4. **Import.** `etat-major research import FILE --workspace D --id NNNN` parses the answer into a draft ResearchArtifact with `status: unreviewed` and `provenance: ai-generated`. Items without a URL and date are flagged `unsourced`. Source URLs are stored verbatim after credential checks. Trace output omits URL credentials, query strings and fragments.
 5. **Review and approve.** You check the sources, fix classifications (firsthand, author, opinion) and mark the artifact `reviewed`. Only then may it back a Decision.
 6. **Extract.** From the reviewed artifact you record findings, alternatives and, if warranted, a Decision and Feature proposal.
 
