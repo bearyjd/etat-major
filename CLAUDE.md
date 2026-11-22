@@ -30,7 +30,7 @@ First deployment is a trusted family on one machine over loopback or a private n
 See [the roadmap](docs/VISUALIZATION-ROADMAP.md). Phase 1 tool evaluation is complete. Slice 1 runs in the CLI with the research-to-code trace and decision listing. Phase 2 has recorded Floorplan and Trail readers, index joins, rename reconciliation and overlays. Phase 3 has research and feature loaders and manual brief/import. Phase 4 has planning models, dependency validation and board-state derivation. Phase 5 has local Git and recorded GitHub evidence, progress and derived feature stages. The web UI, live adapters and Phase 6 Codeman/Meute integrations remain future work.
 
 ## Build vs adopt (as of 2026-11-21; verify each license in its own repo)
-- Architecture maps and blueprints: Floorplan (MIT, pre-1.0, `graph.json` is not a documented contract). Function-level graph: Trail. Understand Anything: skip. See `docs/TOOL-EVALUATION.md`.
+- Architecture layer: a reviewed component model kept in Git (seeded from Gradle modules and Trail scopes) is the source of truth. Floorplan (MIT, pre-1.0, `graph.json` not a stable contract) is an optional deterministic provider of file-level import links only; its model-written layer and blueprints are advisory. Function-level graph: Trail. Understand Anything: skip. See `docs/TOOL-EVALUATION.md` and `docs/FLOORPLAN-PROOF.md`.
 - Graph UI: start from Floorplan's generated viewer for architecture; Cytoscape.js (lean) over React Flow for overlays and the function layer; Mermaid for diagrams. Confirm in roadmap Phase 2.
 - Phone terminal and voice: Codeman (separate). Herdr is a candidate only if needed later.
 - Task format: our own contract (see `docs/spikes/phase1-spike.md`); Backlog.md is a reference only.

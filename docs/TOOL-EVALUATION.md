@@ -4,11 +4,13 @@ Evaluated 2026-11-21 by reading source and running the deterministic parts on co
 
 ## Decision
 
+**Updated 2026-11-22 after a hands-on proof-out on a real Kotlin repository: see [FLOORPLAN-PROOF.md](FLOORPLAN-PROOF.md).** Floorplan is adopted narrowly, as an optional deterministic provider of file-level import links and component globs. Its model-written architecture layer and blueprint mode are not relied on. The table and text below predate that result where they conflict with it.
+
 Use two engines with distinct jobs, consumed read-only through adapters, and skip the third. The case for two engines rests on verified, mechanical capabilities (Floorplan: cross-language files, imports and routes, blueprints; Trail: function nodes and call edges with confidence). Floorplan's LLM-written architecture layer is **unverified**, so the two-engine decision is provisional until that layer is tried on a real repository.
 
 | Tool | Role in État-major | Why |
 | --- | --- | --- |
-| **Floorplan** | Architecture layer: files, imports, endpoints, blueprints; components and flows if its architecture layer proves useful | Cross-language and cheap to build mechanically; the mechanical map is directory-level until a model-written layer is added and verified. |
+| **Floorplan** | Optional, deterministic provider of file-level import links and component globs (scan, build and refresh scripts only, on a copy). Its model-written components, flows and blueprints are advisory (`ai-generated`) and not relied on | Cross-language and cheap to build mechanically; the mechanical map is directory-level until a model-written layer is added and verified. |
 | **Trail** | Symbol layer: functions, classes, call and extends edges with confidence labels | Floorplan has no call edges and no per-edge confidence. |
 | **Understand Anything** | Skip as an indexer. Optional, manual, advisory prose only | Its graph is LLM-assembled, not reproducible and costs model quota; it duplicates Trail. |
 

@@ -43,6 +43,8 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 2: repository visualization
 
+**Revised after the Floorplan proof-out ([FLOORPLAN-PROOF.md](FLOORPLAN-PROOF.md)).** Do first: (a) fix the Trail adapter to accept every node kind real graphs contain (it rejected a real Kotlin graph), (b) add a Gradle declared-dependency adapter and compare it with actual import links to show drift, (c) keep the Floorplan adapter to the deterministic import-link and glob role, with a reviewed Git-backed component model as the source of truth for components. The Floorplan items below that mention blueprints or the architecture layer apply only as advisory inputs.
+
 **Status** — Recorded Floorplan and Trail adapters, index joins, renames and overlays are implemented. Tool execution, the read-only API and the Understand screen remain.
 
 - **Depends on:** Slice 1.
