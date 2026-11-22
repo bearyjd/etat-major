@@ -1,6 +1,6 @@
 """Parse and validate cross-record references (docs/TRACEABILITY.md, "Reference grammar").
 
-Grammar: ``<kind>:<id>``. Project-scoped kinds use ``<project>/<n>``; research and
+Grammar: ``<kind>:<id>``. Project-scoped kinds use ``<project>/<id>``; research and
 decision ids are global; a research finding is ``research:<id>#<finding>``; code refs
 are ``fp:n:<component>``, ``fp:f:<path>`` and ``trail:<path>#<symbol>``.
 """
@@ -13,19 +13,26 @@ from typing import Final
 
 from etat_major.text_safety import bounded_repr, is_control
 
-_PROJECT = r"[a-z0-9][a-z0-9_-]*"
+PROJECT_ID = r"[a-z0-9][a-z0-9_-]*"
+COMPONENT_ID = rf"{PROJECT_ID}(?:\.{PROJECT_ID})*"
 _PATH_OK = re.compile(r"[^\s#]+")
 _PATH_WITH_SPACES = re.compile(r"(?:[^\s#]| )+")
 _DRIVE_PREFIX = re.compile(r"[A-Za-z]:")
 # Unicode solidus/reverse-solidus variants and standalone diagonal strokes.
 _SLASH_LIKE = frozenset("⁄∕∖⧵⧶⧸⧹／＼﹨╱╲⟋⟍")
-_PROJECT_KINDS: Final = {"feature": r"[0-9]+", "task": r"[0-9]+", "milestone": r"[a-z0-9]+"}
+_PROJECT_KINDS: Final = {
+    "feature": r"[0-9]+",
+    "task": r"[0-9]+",
+    "milestone": r"[a-z0-9]+",
+    "component": COMPONENT_ID,
+}
 _GLOBAL_KINDS: Final = ("research", "decision")
 _COMPONENT = re.compile(r"[A-Za-z0-9][^\s#]*")
 _FINDING = re.compile(r"[A-Za-z0-9_-]+")
 _GLOBAL_ID = re.compile(r"[0-9]+")
 _GRAMMAR = (
-    "feature|task|milestone:<project>/<n>, research:<id>[#<finding>], decision:<id>, "
+    "feature|task|milestone:<project>/<n>, component:<project>/<id>, "
+    "research:<id>[#<finding>], decision:<id>, "
     "fp:n:<component>, fp:f:<path>, trail:<path>#<symbol>"
 )
 
@@ -101,9 +108,10 @@ def parse_ref(text: str) -> Ref:
     if not sep:
         raise RefError(text, "missing '<kind>:' prefix")
     if kind in _PROJECT_KINDS:
-        m = re.fullmatch(rf"({_PROJECT})/({_PROJECT_KINDS[kind]})", rest)
+        m = re.fullmatch(rf"({PROJECT_ID})/({_PROJECT_KINDS[kind]})", rest)
         if not m:
-            raise RefError(text, f"{kind} refs use '<project>/<n>'")
+            ident = "id" if kind == "component" else "n"
+            raise RefError(text, f"{kind} refs use '<project>/<{ident}>'")
         return Ref(kind, m.group(2), project=m.group(1))
     if kind in _GLOBAL_KINDS:
         ident, hash_, frag = rest.partition("#")
