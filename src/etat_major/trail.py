@@ -23,6 +23,7 @@ from etat_major.refs import RefError, parse_ref
 from etat_major.taskfile import Text, first_error
 from etat_major.text_safety import safe
 
+TRAIL_VERSION = "0.30.5"
 _LIMIT_MIB = 64
 _SPAN = re.compile(r"L([0-9]+)-L([0-9]+)")
 _RELATIONS = frozenset({"calls", "contains", "imports", "extends", "references", "implements"})
@@ -42,6 +43,8 @@ class Symbol:
     path: str
     start_line: int
     end_line: int
+    layer: Literal["symbols"] = "symbols"
+    provenance: Literal["verified"] = "verified"
 
 
 class _WireModel(BaseModel):
@@ -53,6 +56,10 @@ class SymbolEdge(_WireModel):
     target: Text
     relation: StrictStr
     confidence: StrictStr
+
+    @property
+    def layer(self) -> Literal["symbols"]:
+        return "symbols"
 
     @property
     def provenance(self) -> Literal["verified", "inferred"]:

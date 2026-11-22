@@ -14,6 +14,7 @@ from pathlib import Path
 from etat_major.floorplan import FloorplanError, load_graph
 from etat_major.refs import RefError, parse_ref
 from etat_major.render import render_trace
+from etat_major.repo_index import RepoIndexError, load_repo_index
 from etat_major.text_safety import bounded_repr, safe
 from etat_major.trace import TraceError, trace_feature
 from etat_major.trail import TrailError, load_wiring
@@ -49,6 +50,14 @@ def _parser() -> argparse.ArgumentParser:
     trace.add_argument("--workspace", type=Path, required=True, help="intent workspace directory")
     trace.add_argument("--graph", type=Path, help="Floorplan graph.json (floorplan/graph@1)")
     trace.add_argument("--trail", type=Path, help="Trail wiring.json (version 1)")
+    index = sub.add_parser(
+        "index", help="export an architecture and symbol snapshot", **help_options
+    )
+    index.add_argument("--graph", type=Path, required=True, help="Floorplan graph.json")
+    index.add_argument("--trail", type=Path, required=True, help="Trail wiring.json")
+    index.add_argument("--format", choices=("json", "text"), default="text")
+    index.add_argument("--revision", help="caller-supplied Git commit SHA for both artifacts")
+    index.add_argument("--indexed-at", help="caller-supplied RFC 3339 index timestamp")
     decisions = sub.add_parser("decisions", help="decision records")
     dsub = decisions.add_subparsers(dest="action", required=True)
     dlist = dsub.add_parser(
@@ -115,9 +124,22 @@ def _decisions_list(args: argparse.Namespace) -> int:
     return PROBLEMS if ws.issues else OK
 
 
+def _index(args: argparse.Namespace) -> int:
+    try:
+        index = load_repo_index(
+            args.graph, args.trail, revision=args.revision, indexed_at=args.indexed_at
+        )
+    except (FloorplanError, TrailError, RepoIndexError) as exc:
+        _err(str(exc))
+        return USAGE
+    sys.stdout.write(index.to_json() if args.format == "json" else index.to_text())
+    return OK
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    return _trace(args) if args.command == "trace" else _decisions_list(args)
+    handlers = {"trace": _trace, "decisions": _decisions_list, "index": _index}
+    return handlers[args.command](args)
 
 
 if __name__ == "__main__":

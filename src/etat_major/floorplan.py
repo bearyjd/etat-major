@@ -1,7 +1,7 @@
 """Read-only readers for Floorplan code maps and blueprints.
 
-Only component ids and file paths are kept. ``meta`` (absolute root, repo remotes) and every
-other field are dropped on load so they can never be shown or stored.
+The trace reader keeps component IDs and file paths. The architecture reader
+keeps structured graph fields and discards roots, remotes and free-form prose.
 """
 
 from __future__ import annotations
@@ -10,16 +10,26 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StrictStr, ValidationError, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictStr,
+    ValidationError,
+    computed_field,
+    field_validator,
+)
 
 from etat_major.localfiles import open_directory, read_text
-from etat_major.refs import Ref
+from etat_major.refs import Ref, RefError, parse_ref
 from etat_major.taskfile import first_error
 from etat_major.text_safety import bounded_repr, safe
 
 SUPPORTED_SCHEMA = "floorplan/graph@1"
+FLOORPLAN_COMMIT = "94f81b463b7617e06d873ac71323ce71644c8399"
 PLAN_SCHEMA = "floorplan/plan@1"
 _LIMIT_MIB = 64
 _SCHEMA_LABEL = re.compile(r"(?:floorplan/)?[a-zA-Z0-9_@.-]*")
@@ -110,6 +120,12 @@ def _collect(label: str, data: dict[str, Any], key: str, field: str) -> frozense
 
 def load_graph(path: Path) -> FloorplanIndex:
     label = safe(path.name, limit=100)
+    data = _graph_document(path)
+    return FloorplanIndex(_collect(label, data, "nodes", "id"), _collect(label, data, "files", "p"))
+
+
+def _graph_document(path: Path) -> dict[str, Any]:
+    label = safe(path.name, limit=100)
     data = _read_json(path)
     if "schema" not in data:
         raise FloorplanError(f"{label}: missing 'schema'; only {SUPPORTED_SCHEMA!r} is supported")
@@ -121,7 +137,7 @@ def load_graph(path: Path) -> FloorplanIndex:
         raise FloorplanError(
             f"{label}: unsupported schema{detail}; only {SUPPORTED_SCHEMA!r} is supported"
         )
-    return FloorplanIndex(_collect(label, data, "nodes", "id"), _collect(label, data, "files", "p"))
+    return data
 
 
 def _reject_json_constant(_: str) -> None:
@@ -157,3 +173,121 @@ def load_plan(path: Path) -> FloorplanPlan:
     except ValidationError as exc:
         raise FloorplanError(safe(first_error(path, exc))) from None
     return FloorplanPlan(frozenset(file.path for file in plan.files))
+
+
+def _code_path(value: str) -> str:
+    if ":" in value:
+        raise ValueError("expected a repository-relative file path")
+    try:
+        parse_ref(f"fp:f:{value}")
+    except RefError:
+        raise ValueError("expected a repository-relative file path") from None
+    return value
+
+
+def _endpoint(value: str) -> str:
+    prefix, _, identifier = value.partition(":")
+    if prefix == "f":
+        _code_path(identifier)
+    elif prefix not in {"n", "r"} or not re.fullmatch(r"[\w.@-]+", identifier):
+        raise ValueError("expected a Floorplan file, component or route ID")
+    return value
+
+
+type CodePath = Annotated[StrictStr, AfterValidator(_code_path)]
+type WireLabel = Annotated[StrictStr, Field(pattern=r"^[\w.@-]+$")]
+
+
+class _ArchitectureItem(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    layer: Literal["architecture"] = "architecture"
+
+
+class Component(_ArchitectureItem):
+    id: WireLabel
+    kind: WireLabel | None = None
+
+    @computed_field
+    @property
+    def provenance(self) -> Literal["inferred"]:
+        return "inferred"
+
+
+class ArchitectureFile(_ArchitectureItem):
+    path: CodePath = Field(alias="p")
+    component_id: WireLabel | None = Field(default=None, alias="n")
+    language: WireLabel | None = Field(default=None, alias="l")
+    lines: Annotated[int, Field(strict=True, ge=0)] | None = Field(default=None, alias="loc")
+
+    @computed_field
+    @property
+    def provenance(self) -> Literal["verified"]:
+        return "verified"
+
+
+class ArchitectureLink(_ArchitectureItem):
+    source: Annotated[StrictStr, AfterValidator(_endpoint)] = Field(alias="a")
+    target: Annotated[StrictStr, AfterValidator(_endpoint)] = Field(alias="b")
+    kind: Literal["import", "http"] = Field(alias="k")
+
+    @computed_field
+    @property
+    def provenance(self) -> Literal["inferred"]:
+        return "inferred"
+
+
+class Route(_ArchitectureItem):
+    id: Annotated[StrictStr, Field(pattern=r"^r:[0-9]+$")]
+    method: WireLabel
+    path: Annotated[StrictStr, Field(pattern=r"^/[\w/{}:.*@~+()-]*$")]
+    file: CodePath | None = None
+
+    @computed_field
+    @property
+    def provenance(self) -> Literal["inferred"]:
+        return "inferred"
+
+    @field_validator("path")
+    @classmethod
+    def _route_path(cls, value: str) -> str:
+        if value.startswith("//") or {".", ".."}.intersection(value.split("/")):
+            raise ValueError("expected an HTTP route path")
+        return value
+
+
+class ArchitectureDocument(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    project: WireLabel | None = None
+    nodes: tuple[Component, ...]
+    files: tuple[ArchitectureFile, ...]
+    routes: tuple[Route, ...] = ()
+    links: tuple[ArchitectureLink, ...] = ()
+
+
+def _unique(path: Path, field: str, values: tuple[str, ...]) -> None:
+    seen = set()
+    for i, value in enumerate(values):
+        if value in seen:
+            raise FloorplanError(f"{safe(path.name)}: {field.format(i)}: duplicate identifier")
+        seen.add(value)
+
+
+def load_architecture(path: Path) -> ArchitectureDocument:
+    """Read the structured fields used by RepoIndex from a bounded graph."""
+    data = _graph_document(path)
+    # External links can contain remote URLs and are outside the architecture contract.
+    links = data.get("links")
+    if isinstance(links, list):
+        data["links"] = [
+            link for link in links if not isinstance(link, dict) or link.get("k") != "external"
+        ]
+    try:
+        graph = ArchitectureDocument.model_validate(data)
+    except ValidationError as exc:
+        raise FloorplanError(safe(first_error(path, exc))) from None
+    _unique(path, "nodes[{}].id", tuple(item.id for item in graph.nodes))
+    _unique(path, "files[{}].p", tuple(item.path for item in graph.files))
+    _unique(path, "routes[{}].id", tuple(item.id for item in graph.routes))
+    return graph
