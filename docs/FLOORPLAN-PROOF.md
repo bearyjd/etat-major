@@ -23,7 +23,7 @@ Run 2026-11-22 on a real repository, to decide whether Floorplan belongs in Éta
 
 ## Findings
 
-**Module dependencies (VERIFIED, with one caveat).** Ground truth: the `project(":x")` dependencies declared in the Gradle build files. Floorplan's resolved import links covered 99 of 107 (93%). Trail's resolved `calls` and `extends` edges covered 76 of 107 (71%). All 7,105 of Trail's Kotlin `imports` edges have unresolved targets, so imports give no dependency graph there. Caveat: my ground-truth parser missed dependencies written another way, so Floorplan's 44 extra pairs are partly an undercount of the truth, not drift. The 8 declared dependencies that both missed were not examined.
+**Module dependencies (VERIFIED, with one caveat).** Ground truth: the `project(":x")` dependencies declared in the Gradle build files. Floorplan's resolved import links covered 99 of 107 (93%). Trail's resolved `calls` and `extends` edges covered 76 of 107 (71%). All 7,105 of Trail's Kotlin `imports` edges have unresolved targets, so imports give no dependency graph there. The ground truth was re-derived later with our own Gradle adapter: the same 107 declared dependencies, all written as `project(":x")` (this repository uses no type-safe accessors), so the ground truth stands. The 8 declared dependencies that Floorplan alone missed were not examined.
 
 **Accuracy of the model-written summaries (VERIFIED, 10-component sample).** Of 34 claims, 25 were correct, 9 partly right, none wrong. Overall ratings: 2 correct, 8 partly. The errors are overstatement and omission, not invention:
 - A "monitor" component reads as ongoing endpoint monitoring, but checks run only when a user taps a button; the stored interval is never scheduled.
@@ -57,7 +57,25 @@ Criterion 1 failed on the strict rating and the mechanical map added value, so:
 
 ## Follow-ups
 
-- Fix the Trail adapter's node kinds and test it against a real Kotlin graph.
-- Add the Gradle declared-dependency adapter.
+- The Trail node-kinds fix, the Gradle declared-dependency adapter and a fix for the Floorplan reader's real-shape bugs were built after this proof-out and are in a separate change (see the next section). Their status here is **built and tested on this real repository, not yet merged**.
+- Rank drift findings by evidence strength, and read build-logic convention plugins (see below).
 - Re-score the accuracy criterion after correcting the two obviously misleading summaries, to see whether a reviewed model draft is usable.
 - **Not run:** the skeptic's fuller experiment (a Python and TypeScript fixture, Android entry points, a Unicode rename, byte-identical runs with egress blocked), a question-set comparison of Floorplan, Trail and plain directory grouping, a blueprint on a real feature, LikeC4 and Aalekh trials, and a dependency audit.
+
+## Declared versus actual dependencies, on the real repository
+
+After the adapters were fixed, `etat-major gradle drift` ran on the same repository with the real Floorplan and Trail graphs in 0.45 s. Of the 107 declared module dependencies, **102 showed up in the code** (95%), **5 were declared but showed no use**, and **44 module pairs were used but not declared**. Spot-checked against the source:
+
+| Finding | Check | Verdict |
+| --- | --- | --- |
+| Feature module A uses feature module B: 44 undeclared pairs from Trail `calls` edges | No `import` of B anywhere in A | **False positive**: Trail's name-based call resolution produced cross-module edges with no import |
+| A feature module uses `core:ui`: undeclared | The convention plugin in `build-logic` adds `implementation(project(":core:ui"))` to every feature module | **False positive**: declared, but in a build-logic plugin the adapter does not read (it notes "composite build not followed") |
+| `wol` declares `core:network`: unused | Zero imports of that module in `wol` | **Plausibly a real unused dependency** |
+| `core:oui` declared by three modules: unused | No imports of it in those modules | **Plausibly real** (not checked for resource or reflection use) |
+
+Takeaways, all from this one repository: Floorplan's resolved imports are the strong evidence; Trail's call edges alone are weak for cross-module claims; a drift report must rank by evidence strength and understand convention plugins before its "undeclared" list is trusted. Two of four spot-checked items were noise, so the raw lists must not be presented as findings.
+
+## What the real-data run found in our own code
+
+Running our adapters on real artifacts exposed four bugs that hand-made fixtures had hidden: the Trail reader rejected four real node kinds; `gradle drift` applied a 256 KiB build-file cap to multi-megabyte graph files; a normal `includeBuild` line was reported as an error; and the Floorplan reader rejected the real `project` object because the Slice 1 fixture had the wrong shape. All four are fixed in the separate change, and each is now covered by a real-shaped fixture. Process rule going forward: an adapter is not done until it has run on a real artifact.
+
