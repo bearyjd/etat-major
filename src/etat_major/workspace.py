@@ -1,4 +1,4 @@
-"""Load an intent workspace (``research/``, ``decisions/``, ``features/<project>/``).
+"""Load research, decisions, features, and tasks from an intent workspace.
 
 File and cross-file problems are counted, with the first 200 retained as ``Issue`` objects.
 Unresolved references are reported as ``missing`` rather than raised.
@@ -10,7 +10,7 @@ import os
 import stat
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import islice
 from pathlib import Path
 
@@ -24,8 +24,8 @@ from etat_major.records import (
     load_research,
 )
 from etat_major.refs import Ref
-from etat_major.taskfile import TaskFileError
-from etat_major.text_safety import bounded_repr
+from etat_major.taskfile import Task, TaskFileError, parse_task
+from etat_major.text_safety import bounded_repr, safe
 
 _ISSUE_LIMIT = 200
 _DIRECTORY_LIMIT = 2000
@@ -41,7 +41,7 @@ class Issue:
 
     def __str__(self) -> str:
         where = f"{self.path}: field '{self.field}'" if self.field else self.path
-        return f"{where}: {self.message}"
+        return safe(f"{where}: {self.message}")
 
 
 class _IssueLog:
@@ -64,6 +64,7 @@ class Workspace:
     issues: tuple[Issue, ...]
     warnings: tuple[Issue, ...] = ()
     omitted_issues: int = 0
+    tasks: tuple[Task, ...] = ()
 
     def get_research(self, record_id: str) -> ResearchArtifact | None:
         return next((r for r in self.research if r.id == record_id), None)
@@ -170,15 +171,16 @@ def _load_dir[T](
         issues.append(Issue(sub, None, "expected a directory"))
         return []
     out: list[T] = []
+    allow_projects = sub in {"features", "tasks"}
     try:
         with _directory(base, root_fd) as fd:
             for path, folder_fd in _walk_markdown(
-                root, base, fd, issues, allow_projects=sub == "features"
+                root, base, fd, issues, allow_projects=allow_projects
             ):
                 rel = path.relative_to(root)
-                if sub == "features" and len(rel.parts) != 3:
+                if allow_projects and len(rel.parts) != 3:
                     issues.append(
-                        Issue(rel.as_posix(), None, "expected features/<project>/<file>.md")
+                        Issue(rel.as_posix(), None, f"expected {sub}/<project>/<file>.md")
                     )
                     continue
                 try:
@@ -192,14 +194,90 @@ def _load_dir[T](
 
 def _load_feature(path: Path, *, dir_fd: int) -> Feature:
     feature = load_feature(path, dir_fd=dir_fd)
-    if feature.project != path.parent.name:
+    _check_project(path, feature.project)
+    return feature
+
+
+def _load_task(path: Path, *, dir_fd: int) -> tuple[str, Task]:
+    task = parse_task(path, dir_fd=dir_fd)
+    _check_project(path, task.project)
+    return Path(*path.parts[-3:]).as_posix(), task
+
+
+def _check_project(path: Path, project: str) -> None:
+    if project != path.parent.name:
         raise TaskFileError(
             path,
             "project",
-            f"project {bounded_repr(feature.project)} does not match "
-            f"directory {bounded_repr(path.parent.name)}",
+            f"project does not match directory {bounded_repr(path.parent.name)}",
         )
-    return feature
+
+
+def _cyclic_components(graph: dict[str, list[str]]) -> list[list[str]]:
+    """Find strongly connected components with iterative Kosaraju traversal."""
+    reverse: dict[str, list[str]] = {node: [] for node in graph}
+    for source, targets in graph.items():
+        for target in targets:
+            reverse[target].append(source)
+
+    visited: set[str] = set()
+    finished: list[str] = []
+    for start in graph:
+        if start in visited:
+            continue
+        visited.add(start)
+        stack = [(start, iter(graph[start]))]
+        while stack:
+            node, children = stack[-1]
+            child = next(children, None)
+            if child is None:
+                finished.append(node)
+                stack.pop()
+            elif child not in visited:
+                visited.add(child)
+                stack.append((child, iter(graph[child])))
+
+    components: list[list[str]] = []
+    visited.clear()
+    for start in reversed(finished):
+        if start in visited:
+            continue
+        component = [start]
+        visited.add(start)
+        for node in component:
+            for parent in reverse[node]:
+                if parent not in visited:
+                    visited.add(parent)
+                    component.append(parent)
+        if len(component) > 1 or start in graph[start]:
+            components.append(sorted(component))
+    return sorted(components)
+
+
+def _check_tasks(records: list[tuple[str, Task]], issues: _IssueLog) -> None:
+    projects: dict[str, dict[str, str]] = {}
+    for path, task in records:
+        paths = projects.setdefault(task.project, {})
+        if task.id in paths:
+            issues.append(Issue(path, "id", f"duplicate task id {bounded_repr(task.id)}"))
+        else:
+            paths[task.id] = path
+
+    graphs: dict[str, dict[str, list[str]]] = {
+        project: {task_id: [] for task_id in paths} for project, paths in projects.items()
+    }
+    for path, task in records:
+        graph = graphs[task.project]
+        for target in task.depends_on:
+            if target not in graph:
+                issues.append(Issue(path, "depends_on", f"unknown task id {bounded_repr(target)}"))
+            elif path == projects[task.project][task.id]:
+                graph[task.id].append(target)
+    for project, graph in graphs.items():
+        for component in _cyclic_components(graph):
+            members = bounded_repr(", ".join(component))
+            path = projects[project][component[0]]
+            issues.append(Issue(path, "depends_on", f"dependency cycle among task ids {members}"))
 
 
 def _duplicates(records: list[Ref], issues: _IssueLog) -> None:
@@ -293,12 +371,16 @@ def load_workspace(root: Path) -> Workspace:
             research = _load_dir(resolved, fd, "research", load_research, issues)
             decisions = _load_dir(resolved, fd, "decisions", load_decision, issues)
             features = _load_dir(resolved, fd, "features", _load_feature, issues)
+            tasks = _load_dir(resolved, fd, "tasks", _load_task, issues)
     except (OSError, ValueError, RuntimeError) as exc:
         detail = (exc.strerror or str(exc)) if isinstance(exc, OSError) else str(exc)
         raise WorkspaceError(f"workspace {bounded_repr(str(root))}: {detail}") from exc
-    ws = Workspace(tuple(research), tuple(decisions), tuple(features), ())
+    ws = Workspace(
+        tuple(research), tuple(decisions), tuple(features), (), tasks=tuple(t for _, t in tasks)
+    )
     _cross_validate(ws, issues)
+    _check_tasks(tasks, issues)
     warnings = tuple(w for feature in ws.features for w in link_warnings(ws, feature))
-    return Workspace(
-        ws.research, ws.decisions, ws.features, tuple(issues.issues), warnings, issues.omitted
+    return replace(
+        ws, issues=tuple(issues.issues), warnings=warnings, omitted_issues=issues.omitted
     )

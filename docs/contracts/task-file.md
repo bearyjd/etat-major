@@ -4,7 +4,7 @@ Status: v1. Implemented by `src/etat_major/taskfile.py`; machine-readable form i
 [`task-file.schema.json`](task-file.schema.json). Decision basis:
 [`docs/spikes/phase1-spike.md`](../spikes/phase1-spike.md) (own format, Backlog.md is not a dependency).
 
-Git holds intent. Runtime state (sessions, spend, approvals) never appears in these files.
+Git holds intent and recorded human acceptance. Sessions and spend stay outside this contract.
 
 ## Layout
 
@@ -12,12 +12,16 @@ Git holds intent. Runtime state (sessions, spend, approvals) never appears in th
 workspace/
   initiatives/example-initiative.md
   projects/example-service.md
+  visions/example-service.md
+  milestones/example-service/m3-latency.md
   tasks/example-service/0042-schema-mapper.md
+  diagrams/overview.mmd
 ```
 
 Each file is markdown with a YAML frontmatter block (`---` fences) followed by a free-form body.
-Unknown or repeated frontmatter fields and YAML merge keys (`<<`) are rejected. Files in a
-`drafts/` folder (native Backlog.md drafts) are rejected; use `status: draft` on a normal task.
+Unknown or repeated frontmatter fields and YAML merge keys (`<<`) are rejected. Each Markdown
+file is limited to 1 MiB, with up to 64 YAML aliases. Use `status: draft` on a normal task
+instead of placing it in a native Backlog.md `drafts/` folder.
 
 ## Task
 
@@ -30,9 +34,11 @@ project: example-service
 owner: alice
 status: ready
 priority: 2
+milestone: m3
+depends_on: [0041]
+targets: [fp:f:src/schema.py, trail:src/schema.py#map_row]
 acceptance:
   - Maps all source tables listed in docs/sources.md
-budget_tokens: 400000
 evidence:
   - kind: pr
     ref: example-org/example-service#12
@@ -49,18 +55,32 @@ evidence:
 | `status` | yes | `draft`, `ready`, `blocked` or `done` |
 | `priority` | no | Integer, 1 or more (1 is highest by convention) |
 | `acceptance` | no | List of non-empty strings; default empty |
-| `budget_tokens` | no | Integer above 0 |
+| `milestone` | no | Lowercase alphanumeric milestone ID in the same project |
+| `depends_on` | no | List of task IDs in the same project. Zero padding is preserved. Default empty |
+| `targets` | no | List of [code references](../TRACEABILITY.md#layout) using `fp:n:`, `fp:f:` or `trail:`. Default empty |
+| `accepted_by` | when done | Nonblank string identifying the person who accepted the task |
+| `accepted_on` | when done | ISO calendar date (`YYYY-MM-DD`) |
 | `evidence` | no | List of `{kind, ref}`; `kind` is `pr`, `test-run` or `release`; `ref` is a non-empty string such as `org/repo#12`. Default empty |
+
+The `budget_tokens` field was removed. Delete it from older task files.
 
 ### Status
 
-Only intent statuses are valid in a file. `running`, `needs-you`, `review` and `failed` are
-derived from runtime state and are rejected with an error naming the file and the `status` field.
+Only `draft`, `ready`, `blocked` and `done` are valid in a file. The validator rejects derived
+statuses including `in-progress` and `review`. A person records both acceptance fields with
+`status: done`. Both fields must be absent for the other stored statuses.
 
-**"Only a human writes `done`"** cannot be proven from file content, so the validator accepts
-`done` and does not try to. Enforcement belongs to the git workflow: protect `main`, require human
-review of any change that sets `done`, and have agent sessions work in worktrees without
-permission to merge. Roll-ups count `done` only together with `evidence`. Note (2026-11-21): `evidence` entries are declared references; under the visualization architecture they count as proof only after Git or GitHub confirms them, and the human acceptance fields are added in a later change.
+The fields record an acceptance claim. The Git review workflow is responsible for verifying who
+made it. An `evidence` entry counts as proof after Git or GitHub confirms the referenced item.
+
+`planning.derive_board_column(task, dependency_states, evidence=None)` takes a mapping from local
+task ID to stored status. Accepted `done` takes precedence. A task with any missing or unfinished
+dependency lands in `blocked`. Otherwise the column is its stored status. Evidence-based
+`in-progress` and `review` columns are reserved for the progress evidence phase.
+
+The workspace loader checks task IDs within each project and collects unknown dependencies and
+cyclic groups, including self-dependencies. The case of an unknown ID in one project is independent
+of whether another project has the same ID.
 
 ## Initiative
 
@@ -69,6 +89,18 @@ Fields: `id` (equals filename stem), `title`, `owner`, `target_date` (ISO date),
 ## Project
 
 Fields: `id` (equals filename stem), `title`, `initiative`, `owner` required; `repo` optional.
+
+## Vision
+
+`planning.parse_vision` loads `visions/<project>.md`. Frontmatter contains `project` (the filename
+stem), `vision` (a non-empty string), `goals` (a non-empty list of non-empty strings) and optional
+`diagrams` (a list of workspace-relative `diagrams/*.mmd` links). The body can add context.
+
+## Milestone
+
+`planning.parse_milestone` loads `milestones/<project>/<id>-<slug>.md`. Frontmatter requires `id`
+(lowercase alphanumeric, matching the filename prefix), `title`, `outcome` and `horizon` (`now`,
+`next` or `later`). `target_date` is an optional ISO calendar date.
 
 ## Body safety
 
@@ -79,5 +111,6 @@ sanitise or escape the body and must show or drop flagged content.
 
 ## Errors
 
-`TaskFileError` messages read `<filename>: field '<field>': <reason>`; nested fields use dotted
-paths (`evidence.0.kind`). Only the first problem is reported.
+`TaskFileError` messages identify the filename and field. Nested fields use dotted paths such as
+`evidence.0.kind`. Individual parsers report the first problem with a file. Workspace validation
+collects issues across files and reports omitted issues once it reaches the display cap.
