@@ -1,0 +1,31 @@
+{
+  "schema": "floorplan/graph@1",
+  "meta": {
+    "repos": [{"name": "netlens"}]
+  },
+  "project": "netlens",
+  "nodes": [
+    {
+      "id": "ui.hostdetail",
+      "label": "Host detail screen",
+      "kind": "dir",
+      "summary": "Shows one host and its scan results.",
+      "paths": ["app/src/ui"]
+    },
+    {
+      "id": "net.scan",
+      "label": "Scanner",
+      "kind": "dir",
+      "summary": "Subnet scanning.",
+      "paths": ["app/src/net"]
+    }
+  ],
+  "files": [
+    {"p": "app/src/ui/HostDetail.kt", "n": "ui.hostdetail", "l": "kotlin", "loc": 120},
+    {"p": "app/src/net/Scanner.kt", "n": "net.scan", "l": "kotlin", "loc": 210}
+  ],
+  "routes": [],
+  "links": [
+    {"a": "f:app/src/ui/HostDetail.kt", "b": "f:app/src/net/Scanner.kt", "k": "import", "w": 1}
+  ]
+}
