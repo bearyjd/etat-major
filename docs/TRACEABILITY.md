@@ -132,7 +132,7 @@ Embedded in a Feature or a Task, never a separate file. Stored fields: `ref` (la
 | Idea, Researching, Proposed | Yes (human intent) | The Feature file; Researching expects at least one ResearchArtifact |
 | Approved, Rejected, Postponed | **Derived from the linked Decision**, which is the single authority | A Decision with `decided_by: human`. A Feature file may not say `planned` without an approved Decision |
 | Planned | Yes | The human has created tasks from the approved Feature |
-| Implementing | **Derived** | Linked work is in progress, in review or merged, and at least one linked task awaits acceptance |
+| Implementing | **Derived** | Linked work has a branch, commit or open or merged PR, and at least one linked task awaits acceptance |
 | Verified | **Derived** | All linked tasks are accepted and merged with passing checks on the merge commit. A failing or pending head or merge check does not qualify. The Feature carries `accepted_by` and `accepted_on` (the same human-acceptance fields as tasks, added with the Phase 4 contract). Per-acceptance-item verification is an open question; until then the human states in the acceptance that the criteria are met |
 | Released | **Derived** | A release or tag contains the merge commits |
 

@@ -49,6 +49,7 @@ class TaskProgress:
     evidence: ProgressEvidence
     merge_checks: tuple[str, ...]
     released_merges: tuple[str, ...]
+    work_started: bool
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,15 @@ def _check_refs(pr: PullRequest) -> tuple[list[str], bool]:
     return refs, passes_on_merge
 
 
+def _board_evidence(prs: list[PullRequest], *, branch: bool, merged: bool) -> BoardEvidence:
+    return BoardEvidence(
+        branch_open=branch,
+        pr_open_draft=any(pr.state == "OPEN" and pr.is_draft for pr in prs),
+        pr_open_ready=any(pr.state == "OPEN" and not pr.is_draft for pr in prs),
+        pr_merged=merged,
+    )
+
+
 def _task_progress(
     task: Task,
     git: GitEvidence,
@@ -145,18 +155,14 @@ def _task_progress(
         shipped=_rung(shipped),
         accepted=_rung((f"task:{key}",) if _acceptable(task) else ()),
     )
-    board = BoardEvidence(
-        branch_open=key in branches,
-        pr_open_draft=any(pr.state == "OPEN" and pr.is_draft for pr in prs),
-        pr_open_ready=any(pr.state == "OPEN" and not pr.is_draft for pr in prs),
-        pr_merged=bool(merged),
-    )
+    board = _board_evidence(prs, branch=key in branches, merged=bool(merged))
     return TaskProgress(
         key,
         derive_board_column(task, dependencies, board),
         evidence,
         tuple(sorted(merge_checks)),
         tuple(sorted(released_merges)),
+        bool(commits or merged or board.branch_open or board.pr_open_draft or board.pr_open_ready),
     )
 
 
@@ -186,10 +192,10 @@ def _feature_state(
         if all(task.released_merges == task.merge_checks for task in linked):
             return "released"
         return "verified"
-    if any(task.evidence.accepted == "unverified" for task in linked) and any(
-        task.state in {"in-progress", "review"} or task.evidence.merged != "unverified"
-        for task in linked
-    ):
+    needs_acceptance = not all_found or any(
+        task.evidence.accepted == "unverified" for task in linked
+    )
+    if needs_acceptance and any(task.work_started for task in linked):
         return "implementing"
     if "approved" in decisions and feature.status != "planned":
         return "approved"

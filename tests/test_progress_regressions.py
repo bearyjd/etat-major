@@ -93,3 +93,12 @@ def test_progress_text_lists_stale_links_and_unimplemented_requirements(history,
     out = capsys.readouterr().out
     assert "stale link  feature:netlens/0031  fp:f:old.py" in out
     assert "unimplemented requirement  feature:netlens/0031  fp:f:new.py" in out
+
+
+def test_feature_with_open_work_stays_implementing_while_task_is_blocked(history, capsys):
+    history.task(status="blocked")
+    history.feature("tasks: [task:netlens/0042]")
+    history.set_prs(history.pr(state="OPEN", mergedAt=None, mergeCommit=None))
+    report = history.report(capsys)
+    assert report["tasks"][TASK]["state"] == "blocked"
+    assert report["features"]["netlens/0031"]["state"] == "implementing"
