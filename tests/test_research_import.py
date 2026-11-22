@@ -82,11 +82,6 @@ def test_import_reports_missing_field_at_line(tmp_path, capsys):
         ("Users report", "\x1b[31mUsers report", "Claim", 2),
         ("Users report", "<img src=x onerror=alert(1)>Users report", "Claim", 2),
         ("Users report", "Users\u202ereport", "Claim", 2),
-        ("Users report", "accepted_on: today. Users report", "Claim", 2),
-        ("Users report", "accepted_by: human. Users report", "Claim", 2),
-        ("Users report", "decided_by: human. Users report", "Claim", 2),
-        ("Users report", "status: approved. Users report", "Claim", 2),
-        ("Users report", "status: reviewed. Users report", "Claim", 2),
         ("Source URL: ", "Source URL: ftp://", "Source URL", 3),
         ("Source URL: ", "Source URL: https:/// ", "Source URL", 3),
         ("2026-09-14", "2026-02-30", "Date", 4),
@@ -107,13 +102,20 @@ def test_import_rejects_malformed_or_injected_input(
     assert not (tmp_path / "research").exists()
 
 
-def test_human_only_fields_cannot_be_emitted(tmp_path, sample):
+@pytest.mark.parametrize(
+    "claim",
+    ["Users reviewed the app", "The team approved the change", "accepted_by: human"],
+)
+def test_human_only_fields_cannot_be_emitted(tmp_path, sample, claim):
+    sample = sample.replace("Users report", claim, 1)
     assert run_import(tmp_path, answer_file(tmp_path, sample)) == 0
     (path,) = (tmp_path / "research").glob("0007-*.md")
-    contents = path.read_text()
-    metadata, body = split_frontmatter(contents, path)
+    metadata, body = split_frontmatter(path.read_text(), path)
     assert metadata["status"] == "unreviewed"
-    assert not re.search(r"\b(?:approved|reviewed|decided_by|accepted_by|accepted_on)\b", contents)
+    assert metadata["findings"][0]["text"].startswith(claim)
+    forbidden = {"decided_by", "accepted_by", "accepted_on", "approved", "reviewed"}
+    for entry in [metadata, *metadata["findings"], *metadata["sources"]]:
+        assert not (entry.keys() & forbidden)
     assert not body.strip()
 
 

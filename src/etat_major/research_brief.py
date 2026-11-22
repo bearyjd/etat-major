@@ -4,6 +4,7 @@ import re
 import stat
 from html import escape
 from pathlib import Path
+from unicodedata import category, normalize
 
 from etat_major.localfiles import open_directory, write_new_text
 from etat_major.records import Feature, load_feature
@@ -16,11 +17,12 @@ _DIAGNOSTIC = Path("research brief")
 _SENSITIVE = re.compile(
     r"""(?ix)
     # Absolute POSIX paths, drive-rooted paths, and UNC paths.
-    (?<![\w/])(?:[a-z]:[\\/]|\\\\|~?/(?:[^\s)\]}>]|$))
+    (?<![\w/／∕])(?:[a-z]:[\\/／∕]|\\\\|~?[/／∕](?:[^\s)\]}>]|$))
     # Email addresses, DNS names, IP addresses, and common local host syntax.
     | [\w.+%\-]+@[\w\-]+
-    | (?<![\w.-])(?:[^\W_][\w-]*[.。．｡])+[^\W\d_][\w-]*(?![\w-])
-    | (?<!\d)(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?!\d)
+    | (?<![\w.。．｡-])(?!node[.。．｡]js(?![\w-]|[.。．｡][^\W_]))
+        (?:[^\W_][\w-]*[.。．｡])+[^\W\d_]{2,}(?![\w-])
+    | (?<!\d)(?:[0-9]{1,3}[.。．｡]){3}[0-9]{1,3}(?!\d)
     | (?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])
     | \blocalhost\b
     | \bhost(?:name)?\s*[:=]\s*["']?[a-z0-9][\w-]*
@@ -32,7 +34,7 @@ _SENSITIVE = re.compile(
     | \bsk[-_][a-z0-9_-]+
     | \b(?:gh[pousr]|github_pat|glpat|xox[baprs])[-_][a-z0-9_-]{8,}
     | \b(?:akia|asia)[a-z0-9]{16}\b
-    | -----begin[ a-z]*private\ key-----
+    | -----begin\s+(?:[a-z]+\s+)*private\s+key-----
     | \b[a-z0-9_+/=-]{32,}\b
     """
 )
@@ -86,9 +88,14 @@ def _select_file(project: Path, fd: int, record_id: str) -> Path:
     return matches[0]
 
 
+def _contains_sensitive(value: str) -> bool:
+    normalized = "".join(c for c in normalize("NFKC", value) if category(c) != "Cf")
+    return bool(_SENSITIVE.search(value) or _SENSITIVE.search(normalized))
+
+
 def _diagnostic_name(path: Path) -> Path:
     # Dots in the extension are expected. Check the caller-controlled stem.
-    return _DIAGNOSTIC if _SENSITIVE.search(path.stem) else path
+    return _DIAGNOSTIC if _contains_sensitive(path.stem) else path
 
 
 def _load_feature(workspace: Path, ref: Ref) -> tuple[Path, Feature]:
@@ -103,7 +110,7 @@ def _load_feature(workspace: Path, ref: Ref) -> tuple[Path, Feature]:
             feature = load_feature(path, dir_fd=project_fd)
         except TaskFileError as exc:
             field = exc.field or "file"
-            if _SENSITIVE.search(field):
+            if _contains_sensitive(field):
                 field = "frontmatter"
             raise TaskFileError(_diagnostic_name(path), field, "invalid feature record") from None
     if feature.project != ref.project:
@@ -113,7 +120,7 @@ def _load_feature(workspace: Path, ref: Ref) -> tuple[Path, Feature]:
 
 def _checked(path: Path, field: str, value: str) -> str:
     escaped = safe(value)
-    if _SENSITIVE.search(value) or _SENSITIVE.search(escaped):
+    if _contains_sensitive(value):
         raise TaskFileError(
             _diagnostic_name(path), field, "redaction check found sensitive content in brief"
         )

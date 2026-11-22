@@ -139,3 +139,33 @@ def test_brief_error_does_not_echo_sensitive_field_name(workspace_dir, tmp_path)
     with pytest.raises(TaskFileError, match="frontmatter") as error:
         write_brief(REF, workspace_dir, tmp_path / "brief.md")
     assert sensitive not in str(error.value)
+
+
+def test_brief_allows_abbreviations_and_runtime_names(workspace_dir, tmp_path):
+    question = "How do tools, e.g. Node.js tools, compare, i.e. by latency?"
+    _edit(workspace_dir, f'research_questions: ["{question}"]')
+    out = tmp_path / "brief.md"
+    write_brief(REF, workspace_dir, out)
+    assert question in out.read_text()
+
+
+@pytest.mark.parametrize(
+    "masked",
+    [
+        "ｐａｓｓｗｏｒｄ＝sample",
+        "ｌｏｃａｌｈｏｓｔ",
+        "local\u200bhost",
+        "／hidden／record",
+        "∕hidden∕record",
+        "１９２．０．２．１",
+        "192。0｡2．1",
+        "-----BEGIN\u00a0RSA\u00a0PRIVATE\u00a0KEY-----",
+    ],
+)
+def test_brief_rejects_unicode_disguised_sensitive_values(workspace_dir, tmp_path, masked):
+    _edit(workspace_dir, f'research_questions: ["Check {masked}"]')
+    out = tmp_path / "brief.md"
+    with pytest.raises(TaskFileError, match="redaction") as error:
+        write_brief(REF, workspace_dir, out)
+    assert masked not in str(error.value)
+    assert not out.exists()

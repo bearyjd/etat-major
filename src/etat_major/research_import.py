@@ -25,7 +25,7 @@ _FIELDS = {
     "not_verified": "Not verified",
 }
 _FINDING_ID = r"F[1-9][0-9]*"
-_HUMAN_ONLY = re.compile(r"\b(?:approved|reviewed|decided_by|accepted_by|accepted_on)\b", re.I)
+_HUMAN_ONLY_FIELDS = frozenset({"approved", "reviewed", "decided_by", "accepted_by", "accepted_on"})
 
 
 class _AnswerFinding(BaseModel):
@@ -76,8 +76,6 @@ def _field_value(path: Path, lines: list[str], index: int, field: str) -> str:
         raise TaskFileError(path, field, f"line {index + 1}: control characters are forbidden")
     if "<" in text or ">" in text:
         raise TaskFileError(path, field, f"line {index + 1}: angle brackets are forbidden")
-    if _HUMAN_ONLY.search(text):
-        raise TaskFileError(path, field, f"line {index + 1}: human-only entries are forbidden")
     return text.strip()
 
 
@@ -199,13 +197,24 @@ def _write_artifact(workspace: Path, out: Path, research_id: str, text: str) -> 
         raise TaskFileError(out, "file", detail or "cannot write artifact") from None
 
 
+def _check_draft_fields(path: Path, value: object) -> None:
+    if isinstance(value, dict):
+        if value.keys() & _HUMAN_ONLY_FIELDS or value.get("status", "unreviewed") != "unreviewed":
+            raise TaskFileError(path, "frontmatter", "expected draft-only metadata")
+        for item in value.values():
+            _check_draft_fields(path, item)
+    elif isinstance(value, list):
+        for item in value:
+            _check_draft_fields(path, item)
+
+
 def import_answer(answer: Path, workspace: Path, research_id: str) -> None:
     """Read a bounded answer and exclusively publish its draft research file."""
     if not re.fullmatch(r"[0-9]{4}", research_id):
         raise TaskFileError(answer, "id", "expected four ASCII digits")
     artifact = _artifact(answer, research_id, _read_answer(answer))
-    metadata = yaml.safe_dump(
-        artifact.model_dump(mode="json", exclude_none=True), sort_keys=False, allow_unicode=True
-    )
+    fields = artifact.model_dump(mode="json", exclude_none=True)
+    _check_draft_fields(answer, fields)
+    metadata = yaml.safe_dump(fields, sort_keys=False, allow_unicode=True)
     out = Path(f"{research_id}-chatgpt-research.md")
     _write_artifact(workspace, out, research_id, f"---\n{metadata}---\n")
