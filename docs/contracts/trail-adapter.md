@@ -8,13 +8,20 @@ artifacts raise `TrailError` with the basename and the failing field or `JSON`.
 
 The immutable `SymbolIndex` contains node and edge tuples in graph order.
 Nodes keep the ID, kind, repository-relative path and inclusive one-based start
-and end lines from `L<start>-L<end>`. File IDs are their paths. Class,
-function and method IDs use `<path>#<symbol>`. The reader keeps the metadata
-needed for coverage and discards other fields, including source bodies and
-repository metadata.
+and end lines from `L<start>-L<end>`. The recognized kinds are `file`, `class`,
+`function`, `method`, `interface`, `type`, `enum`, `struct`, `trait`, `module`,
+`constant` and `variable`. File IDs are their paths. Other recognized kinds
+use `<path>#<symbol>`, including Kotlin names with spaces inside backticks.
+Unknown kind labels are retained, set `unknown_kind` on the node and appear
+in `coverage.unknown_kinds`. Unknown kinds can use either ID form.
+The reader discards unused fields, including source bodies and repository
+metadata. The joined JSON snapshot uses `unknown` for kind labels that cannot
+be printed safely.
 
 Edges retain the original source, target, relation and confidence strings.
-An endpoint can identify an external target with no matching node.
+An import can reference an external target with no matching node. The adapter
+keeps the edge and counts it as unresolved, preserving the given confidence
+and provenance.
 
 | Confidence | Provenance |
 | --- | --- |
@@ -31,8 +38,14 @@ participate in relation counts under their original labels.
 - `callers(id)` and `callees(id)` return incoming and outgoing `calls`
   edges, respectively. Results include confidence and provenance and cover one hop.
 - Coverage uses `meta.languages` (empty if absent) and counts actual nodes by
-  kind and edges by relation. `files_without_symbols` reports paths with a file
-  node and no class, function or method node.
+  kind and edges by relation, including unrecognized labels.
+  `coverage.unresolved_relations` counts edges by relation whose target ID
+  has no matching node. These edges also contribute to the total relation counts.
+  `files_without_symbols` reports paths with a file node and no other kind of node.
+- `module_scopes` on the index and its coverage contains the ordered tuple of
+  repository-relative prefixes from `meta.scopes[].prefix`, including Gradle
+  modules. An empty prefix denotes the repository root. If `meta.scopes` is
+  absent, the tuple is empty. Scope labels and markers are ignored.
 - `freshness(current_revision)` compares the two caller-supplied revision
   strings. Equal revisions are `fresh`, different revisions are `stale`,
   and a missing revision gives `unknown`. The reader performs no Git lookup.
