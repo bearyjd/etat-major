@@ -14,32 +14,39 @@ import yaml
 from markdown_it import MarkdownIt, rules_inline
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     StrictInt,
     StrictStr,
     ValidationError,
     field_validator,
+    model_validator,
 )
 
-from etat_major.localfiles import read_text
-from etat_major.text_safety import bounded_repr
+from etat_major.localfiles import open_directory, read_text
+from etat_major.refs import Ref, RefError, parse_ref
+from etat_major.text_safety import bounded_repr, safe
 
 INTENT_STATUSES = ("draft", "ready", "blocked", "done")
-DERIVED_STATUSES = ("running", "needs-you", "review", "failed")
+DERIVED_STATUSES = ("running", "needs-you", "review", "failed", "in-progress")
 
 Text = Annotated[StrictStr, Field(min_length=1)]
+MilestoneId = Annotated[StrictStr, Field(pattern=r"^[a-z0-9]+$")]
 
 
 class TaskFileError(ValueError):
     """A file violates the contract; names the file and the offending field."""
 
-    def __init__(self, path: Path, field: str | None, message: str) -> None:
+    def __init__(
+        self, path: Path, field: str | None, message: str, *, default_field: str = "file"
+    ) -> None:
         self.path = path
         self.field = field
         self.message = message
-        where = f"{path.name}: field '{field}'" if field else path.name
-        super().__init__(f"{where}: {message}")
+        name = safe(path.name, limit=256)
+        where = f"{name}: field '{safe(field or default_field, limit=80)}'"
+        super().__init__(f"{where}: {safe(message, limit=512)}")
 
 
 class _KeyError(Exception):
@@ -53,9 +60,18 @@ class _Loader(yaml.SafeLoader):
     and rejects merge keys and keys repeated within one mapping, either of
     which would let one value silently replace another before validation."""
 
+    aliases = 0
+
+    def compose_node(self, parent: yaml.Node | None, index: Any) -> yaml.Node:
+        if self.check_event(yaml.AliasEvent):
+            self.aliases += 1
+            if self.aliases > 64:
+                raise _KeyError("frontmatter", "YAML frontmatter exceeds the 64-alias limit")
+        return super().compose_node(parent, index)
+
     def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
         seen: set[str] = set()
-        for key_node, _ in node.value:
+        for key_node, value_node in node.value:
             line = key_node.start_mark.line + 1
             if key_node.tag == "tag:yaml.org,2002:merge":
                 raise _KeyError(
@@ -68,6 +84,11 @@ class _Loader(yaml.SafeLoader):
                         f"duplicate key on frontmatter line {line}; write each key once",
                     )
                 seen.add(key_node.value)
+                if value_node.tag == "tag:yaml.org,2002:timestamp":
+                    try:
+                        self.construct_object(value_node, deep=deep)
+                    except (AttributeError, ValueError, OverflowError) as exc:
+                        raise _KeyError(key_node.value, "invalid YAML calendar date") from exc
         return super().construct_mapping(node, deep)
 
 
@@ -80,7 +101,7 @@ _Loader.add_implicit_resolver(
 )
 
 
-class _Model(BaseModel):
+class MarkdownRecord(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     body: str = ""
     warnings: tuple[str, ...] = ()
@@ -92,8 +113,41 @@ class Evidence(BaseModel):
     ref: Text
 
 
-class Task(_Model):
-    id: Annotated[str, Field(pattern=r"^[0-9]+$")]
+def _id_text(value: Any) -> Any:
+    return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
+
+
+def _target_ref(value: Any) -> Ref:
+    try:
+        ref = parse_ref(value)
+    except RefError:
+        pass
+    else:
+        if ref.kind in ("fp:n", "fp:f", "trail"):
+            return ref
+    raise ValueError("expected a code reference (fp:n:, fp:f: or trail:)")
+
+
+_TaskId = Annotated[StrictStr, Field(pattern=r"^[0-9]+$"), BeforeValidator(_id_text)]
+_TargetRef = Annotated[Ref, BeforeValidator(_target_ref)]
+
+
+def _calendar_date(value: Any) -> date:
+    if type(value) is date:
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            pass
+    raise ValueError("expected an ISO calendar date (YYYY-MM-DD)")
+
+
+CalendarDate = Annotated[date, BeforeValidator(_calendar_date)]
+
+
+class Task(MarkdownRecord):
+    id: _TaskId
     title: Text
     initiative: Text
     project: Text
@@ -101,13 +155,48 @@ class Task(_Model):
     status: Literal["draft", "ready", "blocked", "done"]
     priority: Annotated[StrictInt, Field(ge=1)] | None = None
     acceptance: tuple[Text, ...] = ()
-    budget_tokens: Annotated[StrictInt, Field(gt=0)] | None = None
     evidence: tuple[Evidence, ...] = ()
+    milestone: MilestoneId | None = None
+    depends_on: tuple[_TaskId, ...] = ()
+    targets: tuple[_TargetRef, ...] = ()
+    accepted_by: Text | None = None
+    accepted_on: CalendarDate | None = None
 
-    @field_validator("id", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def _id_text(cls, v: Any) -> Any:
-        return str(v) if isinstance(v, int) and not isinstance(v, bool) else v
+    def _check_task_fields(cls, meta: Any) -> Any:
+        if not isinstance(meta, dict):
+            return meta
+        status = meta.get("status")
+        violations = {}
+        if "budget_tokens" in meta:
+            violations["budget_tokens"] = "removed field; delete it from the task file"
+        for field in ("accepted_by", "accepted_on"):
+            if status == "done" and meta.get(field) is None:
+                violations[field] = "required when status is done"
+            elif status in ("draft", "ready", "blocked") and field in meta:
+                violations[field] = "only allowed when status is done"
+        if violations:
+            raise ValidationError.from_exception_data(
+                cls.__name__,
+                [
+                    {
+                        "type": "value_error",
+                        "loc": (field,),
+                        "input": None,
+                        "ctx": {"error": ValueError(message)},
+                    }
+                    for field, message in violations.items()
+                ],
+            )
+        return meta
+
+    @field_validator("accepted_by")
+    @classmethod
+    def _acceptance_author(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("expected a nonempty acceptance author")
+        return value
 
     @field_validator("status", mode="before")
     @classmethod
@@ -120,7 +209,7 @@ class Task(_Model):
         return v
 
 
-class Project(_Model):
+class Project(MarkdownRecord):
     id: Text
     title: Text
     initiative: Text
@@ -128,7 +217,7 @@ class Project(_Model):
     repo: Text | None = None
 
 
-class Initiative(_Model):
+class Initiative(MarkdownRecord):
     id: Text
     title: Text
     owner: Text
@@ -140,17 +229,25 @@ def split_frontmatter(text: str, path: Path) -> tuple[dict[str, Any], str]:
     """Return (frontmatter mapping, body)."""
     m = re.match(r"\A---[ \t]*\r?\n(.*?\r?\n)?---[ \t]*(?:\r?\n|\Z)", text, re.DOTALL)
     if not m:
-        raise TaskFileError(path, None, "missing or unclosed YAML frontmatter ('---' block)")
+        raise TaskFileError(
+            path, None, "missing or unclosed YAML frontmatter", default_field="frontmatter"
+        )
     try:
         meta = yaml.load(m.group(1) or "", Loader=_Loader)  # noqa: S506 - safe subclass
     except _KeyError as exc:
-        raise TaskFileError(path, _brief(exc.key), exc.message) from None
+        raise TaskFileError(path, _field_name(exc.key), exc.message) from None
     # Explicit YAML scalar tags can fail inside their constructors.
-    except (yaml.YAMLError, ValueError, LookupError, AttributeError, RecursionError) as exc:
-        detail = getattr(exc, "problem", None) or str(exc)
-        raise TaskFileError(path, None, f"invalid YAML frontmatter: {_brief(detail)}") from exc
+    except (
+        yaml.YAMLError,
+        ValueError,
+        LookupError,
+        AttributeError,
+        RecursionError,
+        OverflowError,
+    ):
+        raise TaskFileError(path, "frontmatter", "invalid YAML frontmatter") from None
     if not isinstance(meta, dict):
-        raise TaskFileError(path, None, "frontmatter must be a YAML mapping")
+        raise TaskFileError(path, "frontmatter", "frontmatter must be a YAML mapping")
     return meta, text[m.end() :]
 
 
@@ -203,11 +300,24 @@ def _brief(value: str) -> str:
     return value if len(value) <= 80 else value[:80] + "…"
 
 
+def _field_name(value: str) -> str:
+    if value == "<<" or re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", value):
+        return _brief(value)
+    return "frontmatter"
+
+
 def first_error(path: Path, exc: ValidationError) -> TaskFileError:
-    err = exc.errors()[0]
-    field = _brief(".".join(str(p) for p in err["loc"])) or None
+    err = exc.errors(include_input=False, include_url=False)[0]
+    field = _field_name(".".join(str(p) for p in err["loc"]))
     msg = err["msg"].removeprefix("Value error, ")
     return TaskFileError(path, field, msg)
+
+
+def _read_markdown(path: Path, dir_fd: int | None) -> str:
+    if dir_fd is not None:
+        return read_text(path, 1, dir_fd=dir_fd)
+    with open_directory(path.parent) as fd:
+        return read_text(path, 1, dir_fd=fd)
 
 
 def load_frontmatter_model[T: BaseModel](
@@ -222,22 +332,24 @@ def load_frontmatter_model[T: BaseModel](
     if include_body and "drafts" in path.parts:
         raise TaskFileError(
             path,
-            None,
+            "file",
             "files in a 'drafts' folder are native Backlog.md drafts, "
             "not task files; set status: draft on a normal task instead",
         )
     try:
-        text = read_text(path, 1, dir_fd=dir_fd)
+        text = _read_markdown(path, dir_fd)
     except (OSError, ValueError) as exc:
         detail = exc.strerror if isinstance(exc, OSError) else str(exc)
-        raise TaskFileError(path, None, f"cannot read file: {_brief(detail or str(exc))}") from exc
+        raise TaskFileError(
+            path, None, f"cannot read file: {_brief(detail or 'I/O error')}"
+        ) from None
     meta, body = split_frontmatter(text, path)
     if include_body:
         meta = {**meta, "body": body, "warnings": scan_markup(body)}
     try:
         record = model.model_validate(meta)
     except ValidationError as exc:
-        raise first_error(path, exc) from exc
+        raise first_error(path, exc) from None
     if filename_prefix:
         prefix = path.name.split("-", 1)[0].removesuffix(".md")
         if (ident := record.id) != prefix:
@@ -251,13 +363,13 @@ def load_frontmatter_model[T: BaseModel](
 
 def _require_stem(path: Path, value: str, label: str) -> None:
     if value != path.stem:
-        raise TaskFileError(
-            path, "id", f"id {bounded_repr(value)} must equal the filename ({label})"
-        )
+        raise TaskFileError(path, "id", f"id must equal the filename ({label})")
 
 
-def parse_task(path: Path) -> Task:
-    return load_frontmatter_model(path, Task, filename_prefix=True, include_body=True)
+def parse_task(path: Path, *, dir_fd: int | None = None) -> Task:
+    return load_frontmatter_model(
+        path, Task, filename_prefix=True, include_body=True, dir_fd=dir_fd
+    )
 
 
 def parse_project(path: Path) -> Project:
