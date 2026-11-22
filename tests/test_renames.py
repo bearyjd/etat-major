@@ -118,7 +118,9 @@ def test_git_rejects_indirect_metadata_without_printing_target(history, relative
 def test_rename_metadata_does_not_walk_all_entries(history, monkeypatch):
     from etat_major.renames import load_renames
 
-    monkeypatch.setattr(os, "fwalk", lambda *args, **kwargs: iter([(".", [], ["item"] * 100001, 0)]))
+    monkeypatch.setattr(
+        os, "fwalk", lambda *args, **kwargs: iter([(".", [], ["item"] * 100001, 0)])
+    )
     assert load_renames(history, "HEAD~1", "HEAD")["edit.py"] == "edited.py"
 
 
@@ -128,3 +130,27 @@ def test_git_reads_renames_in_a_linked_worktree(history, tmp_path):
     worktree = tmp_path / "linked worktree"
     git(history, "worktree", "add", "--detach", str(worktree))
     assert load_renames(worktree, "HEAD~1", "HEAD")["edit.py"] == "edited.py"
+
+
+def test_git_reads_renames_in_a_relative_linked_worktree(history, tmp_path):
+    from etat_major.renames import load_renames
+
+    worktree = tmp_path / "relative"
+    git(history, "worktree", "add", "--detach", str(worktree))
+    pointer = worktree / ".git"
+    gitdir = Path(pointer.read_text().strip().removeprefix("gitdir: "))
+    pointer.write_text(f"gitdir: {os.path.relpath(gitdir, worktree)}\n")
+    (gitdir / "gitdir").write_text(f"{os.path.relpath(pointer, gitdir)}\n")
+    assert load_renames(worktree, "HEAD~1", "HEAD")["edit.py"] == "edited.py"
+
+
+def test_git_rejects_symlinked_loose_object_bucket(history):
+    from etat_major.renames import RenameError, load_renames
+
+    oid = git(history, "rev-parse", "HEAD").decode().strip()
+    bucket = history / ".git" / "objects" / oid[:2]
+    target = history / "moved"
+    bucket.rename(target)
+    bucket.symlink_to(target, target_is_directory=True)
+    with pytest.raises(RenameError, match=r"repo.*\.git.*symlink"):
+        load_renames(history, "HEAD~1", "HEAD")

@@ -18,7 +18,6 @@ _MAX_FILE = 64 * 1024 * 1024
 _TIMEOUT = 15
 
 
-
 class RenameError(ValueError):
     """The repository or revision pair could not be read."""
 
@@ -59,7 +58,16 @@ def _inspect_metadata(fd: int) -> None:
         _metadata_entry(fd, name, directory=True)
     for name in ("refs/heads", "refs/tags", "refs/remotes", "objects/info", "objects/pack"):
         _metadata_entry(fd, name, directory=True)
-    for name in ("info/grafts", "info/attributes", "objects/info/commit-graph"):
+    for name in ("refs/remotes/origin", "objects/info/commit-graphs", "reftable"):
+        _metadata_entry(fd, name, directory=True)
+    for bucket in range(256):
+        _metadata_entry(fd, f"objects/{bucket:02x}", directory=True)
+    for name in (
+        "info/grafts",
+        "info/attributes",
+        "objects/info/commit-graph",
+        "refs/remotes/origin/HEAD",
+    ):
         _metadata_entry(fd, name)
     _reject_indirect(fd, "objects/info/alternates", "objects/info/http-alternates")
 
@@ -67,9 +75,9 @@ def _inspect_metadata(fd: int) -> None:
 def _worktree_pointer(repo: Path, fd: int) -> Path:
     prefix = "gitdir: "
     raw = read_text(Path(".git"), 1, dir_fd=fd).removesuffix("\n")
-    if not raw.startswith(prefix) or not raw[len(prefix):] or "\n" in raw or "\0" in raw:
+    if not raw.startswith(prefix) or not raw[len(prefix) :] or "\n" in raw or "\0" in raw:
         raise ValueError("invalid gitdir pointer")
-    target = repo.absolute() / raw[len(prefix):]
+    target = repo.absolute() / raw[len(prefix) :]
     if target.parent.name != "worktrees" or target.name in {"", ".", ".."}:
         raise ValueError("expected a linked worktree gitdir")
     return target
@@ -94,8 +102,11 @@ def _open_repository(repo: Path) -> Iterator[int]:
             shared = read_text(Path("commondir"), 1, dir_fd=fd).removesuffix("\n")
             backlink = read_text(Path("gitdir"), 1, dir_fd=fd).removesuffix("\n")
             original = target / backlink
-            if shared != "../.." or original.absolute() != (repo / entry).absolute():
+            if shared != "../.." or original.name != entry.name:
                 raise ValueError("invalid linked worktree metadata")
+            with open_directory(original.parent) as backlink_fd:
+                if not os.path.samestat(os.fstat(root_fd), os.fstat(backlink_fd)):
+                    raise ValueError("invalid linked worktree backlink")
             _guard_config(common)
             yield fd
 
