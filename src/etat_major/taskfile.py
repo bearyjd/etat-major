@@ -37,8 +37,24 @@ class TaskFileError(ValueError):
         super().__init__(f"{where}: {message}")
 
 
+class _DuplicateKeyError(Exception):
+    def __init__(self, key: str, line: int) -> None:
+        self.key = key
+        self.line = line
+
+
 class _Loader(yaml.SafeLoader):
-    """SafeLoader that keeps zero-padded numbers such as 0042 as strings."""
+    """SafeLoader that keeps zero-padded numbers such as 0042 as strings
+    and rejects a key repeated within one mapping."""
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+        seen: set[str] = set()
+        for key_node, _ in node.value:
+            if isinstance(key_node, yaml.ScalarNode):
+                if key_node.value in seen:
+                    raise _DuplicateKeyError(key_node.value, key_node.start_mark.line + 1)
+                seen.add(key_node.value)
+        return super().construct_mapping(node, deep)
 
 
 _Loader.yaml_implicit_resolvers = {
@@ -113,6 +129,10 @@ def split_frontmatter(text: str, path: Path) -> tuple[dict[str, Any], str]:
         raise TaskFileError(path, None, "missing or unclosed YAML frontmatter ('---' block)")
     try:
         meta = yaml.load(m.group(1) or "", Loader=_Loader)  # noqa: S506 - safe subclass
+    except _DuplicateKeyError as exc:
+        raise TaskFileError(
+            path, exc.key, f"duplicate key on frontmatter line {exc.line}; write each key once"
+        ) from None
     except yaml.YAMLError as exc:
         raise TaskFileError(path, None, f"invalid YAML frontmatter: {exc}") from exc
     if not isinstance(meta, dict):

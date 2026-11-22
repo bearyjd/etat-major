@@ -16,7 +16,7 @@ workspace/
 ```
 
 Each file is markdown with a YAML frontmatter block (`---` fences) followed by a free-form body.
-Unknown frontmatter fields are rejected. Files in a `drafts/` folder (native Backlog.md drafts)
+Unknown or repeated frontmatter fields are rejected. Files in a `drafts/` folder (native Backlog.md drafts)
 are not task files and are rejected; use `status: draft` on a normal task.
 
 ## Task

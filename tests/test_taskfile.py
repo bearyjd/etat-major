@@ -271,3 +271,19 @@ def test_schema_is_valid_and_agrees_with_parser(tmp_path):
     for status in ["running", "needs-you", "review", "failed"]:
         assert list(v.iter_errors({**json.loads(json.dumps(meta, default=str)), "status": status}))
     assert list(v.iter_errors({"id": "0042"}))
+
+
+@pytest.mark.parametrize(
+    ("text", "field"),
+    [
+        (sub("status: ready\n", "status: running\nstatus: ready\n"), "status"),
+        (sub("owner: alice\n", "owner: alice\nowner: bob\n"), "owner"),
+        (sub("    ref: example-org", "    kind: release\n    ref: example-org"), "kind"),
+    ],
+    ids=["derived-status-masked", "owner", "nested"],
+)
+def test_duplicate_key_rejected(tmp_path, text, field):
+    with pytest.raises(TaskFileError) as e:
+        parse_task(task(tmp_path, text))
+    assert e.value.field == field
+    assert "duplicate" in str(e.value)
