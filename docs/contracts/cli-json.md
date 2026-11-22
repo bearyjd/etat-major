@@ -55,7 +55,9 @@ differences in `data`.
 Object keys are sorted. Arrays follow the command's stable order, including
 authored order where it carries meaning. The same inputs produce identical
 bytes, including the final newline. `index` exports the caller-provided
-`--indexed-at` timestamp when supplied. `progress --as-of YYYY-MM-DD`
+`--indexed-at` timestamp when supplied. Its coverage includes
+`unknown_node_kinds` and `unknown_link_kinds` from the Floorplan layer.
+`progress --as-of YYYY-MM-DD`
 evaluates overdue milestones against that date and echoes it in
 `data.as_of`. Without that flag, JSON uses `as_of: null` and an empty
 `stale_milestones` array. The text progress report defaults to the current

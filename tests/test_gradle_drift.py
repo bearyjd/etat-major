@@ -135,12 +135,25 @@ def test_drift_bounds_recorded_artifacts(drift_args, capsys, tmp_path, flag):
     assert "64 MiB" in issue["message"]
 
 
-def test_drift_rejects_invalid_floorplan_link(drift_args, capsys, tmp_path):
+def _write_graph(tmp_path, **changes):
+    data = json.loads((FIXTURE_DIR / "drift-graph.json").read_text(encoding="utf-8"))
     graph = tmp_path / "graph.json"
-    graph.write_text(
-        '{"schema":"floorplan/graph@1","nodes":[],"files":[],"routes":[],"links":[{}]}',
-        encoding="utf-8",
-    )
+    graph.write_text(json.dumps(data | changes), encoding="utf-8")
+    return graph
+
+
+def _graph_with_import(tmp_path, source, target, *extra_paths):
+    data = json.loads((FIXTURE_DIR / "drift-graph.json").read_text(encoding="utf-8"))
+    files = [
+        dict(data["files"][0], p=path, name=path.rsplit("/", 1)[-1])
+        for path in (source, target, *extra_paths)
+    ]
+    links = [dict(data["links"][0], a=f"f:{source}", b=f"f:{target}")]
+    return _write_graph(tmp_path, files=files, links=links)
+
+
+def test_drift_rejects_invalid_floorplan_link(drift_args, capsys, tmp_path):
+    graph = _write_graph(tmp_path, links=[{}])
     drift_args[drift_args.index("--graph") + 1] = str(graph)
     assert main(drift_args) == 2
     _, envelope = read_envelope(capsys, "gradle-drift", 2)
@@ -157,21 +170,7 @@ def test_drift_chooses_longest_directory_prefix_without_trail(drift_args, capsys
     (root / "app/build.gradle.kts").write_text(
         'dependencies { implementation(project(":core:child")) }', encoding="utf-8"
     )
-    graph = tmp_path / "graph.json"
-    graph.write_text(
-        json.dumps(
-            {
-                "schema": "floorplan/graph@1",
-                "nodes": [],
-                "routes": [],
-                "files": [
-                    {"p": path} for path in ("app/App.kt", "core/Core.kt", "core/child/Child.kt")
-                ],
-                "links": [{"a": "f:app/App.kt", "b": "f:core/child/Child.kt", "k": "import"}],
-            }
-        ),
-        encoding="utf-8",
-    )
+    graph = _graph_with_import(tmp_path, "app/App.kt", "core/child/Child.kt", "core/Core.kt")
     args = [*drift_args[:6], "--format", "json"]
     args[args.index("--graph") + 1] = str(graph)
     assert main(args) == 0
@@ -181,21 +180,7 @@ def test_drift_chooses_longest_directory_prefix_without_trail(drift_args, capsys
 
 
 def test_conventional_inference_does_not_steal_known_module_files(drift_args, capsys, tmp_path):
-    graph = tmp_path / "graph.json"
-    graph.write_text(
-        json.dumps(
-            {
-                "schema": "floorplan/graph@1",
-                "nodes": [],
-                "routes": [],
-                "files": [{"p": "app/vendor/src/App.kt"}, {"p": "libraries/core/Core.kt"}],
-                "links": [
-                    {"a": "f:app/vendor/src/App.kt", "b": "f:libraries/core/Core.kt", "k": "import"}
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
+    graph = _graph_with_import(tmp_path, "app/vendor/src/App.kt", "libraries/core/Core.kt")
     args = [*drift_args[:5], str(graph), "--format", "json"]
     assert main(args) == 1
     _, envelope = read_envelope(capsys, "gradle-drift", 1)

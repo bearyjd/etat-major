@@ -1,16 +1,141 @@
 {
   "schema": "floorplan/graph@1",
-  "meta": {"repos": [{"name": "demo"}]},
-  "project": "demo",
-  "nodes": [],
+  "project": {
+    "name": "demo",
+    "summary": "",
+    "entrypoints": []
+  },
+  "meta": {
+    "generatedAt": "2026-11-22T14:05:59.838Z",
+    "scanAt": "2026-11-22T14:05:59.625Z",
+    "rootName": "demo",
+    "audience": "developers",
+    "agent": "claude",
+    "repos": [
+      {
+        "path": ".",
+        "name": "demo",
+        "branch": "main",
+        "head": ""
+      }
+    ],
+    "counts": {
+      "files": 3,
+      "loc": 3,
+      "unassigned": 0
+    }
+  },
+  "nodes": [
+    {
+      "id": "app",
+      "parent": null,
+      "label": "App",
+      "kind": "library",
+      "summary": "",
+      "details": "",
+      "tags": [],
+      "paths": [
+        "app/**"
+      ],
+      "packages": [],
+      "hosts": [],
+      "stats": {
+        "files": 1,
+        "loc": 1
+      }
+    },
+    {
+      "id": "libraries",
+      "parent": null,
+      "label": "Libraries",
+      "kind": "library",
+      "summary": "",
+      "details": "",
+      "tags": [],
+      "paths": [
+        "libraries/**"
+      ],
+      "packages": [],
+      "hosts": [],
+      "stats": {
+        "files": 1,
+        "loc": 1
+      }
+    },
+    {
+      "id": "orphan",
+      "parent": null,
+      "label": "Orphan",
+      "kind": "library",
+      "summary": "",
+      "details": "",
+      "tags": [],
+      "paths": [
+        "orphan/**"
+      ],
+      "packages": [],
+      "hosts": [],
+      "stats": {
+        "files": 1,
+        "loc": 1
+      }
+    }
+  ],
   "files": [
-    {"p": "app/src/main/kotlin/App.kt"},
-    {"p": "libraries/core/src/main/kotlin/Core.kt"},
-    {"p": "orphan/src/main/kotlin/Orphan.kt"}
+    {
+      "p": "app/src/main/kotlin/App.kt",
+      "n": "app",
+      "r": "demo",
+      "l": "kotlin",
+      "loc": 1,
+      "name": "App",
+      "d": "",
+      "auto": true,
+      "h": "",
+      "sig": []
+    },
+    {
+      "p": "libraries/core/src/main/kotlin/Core.kt",
+      "n": "libraries",
+      "r": "demo",
+      "l": "kotlin",
+      "loc": 1,
+      "name": "Core",
+      "d": "",
+      "auto": true,
+      "h": "",
+      "sig": []
+    },
+    {
+      "p": "orphan/src/main/kotlin/Orphan.kt",
+      "n": "orphan",
+      "r": "demo",
+      "l": "kotlin",
+      "loc": 1,
+      "name": "Orphan",
+      "d": "",
+      "auto": true,
+      "h": "",
+      "sig": []
+    }
   ],
   "routes": [],
   "links": [
-    {"a": "f:app/src/main/kotlin/App.kt", "b": "f:libraries/core/src/main/kotlin/Core.kt", "k": "import"},
-    {"a": "f:app/src/main/kotlin/App.kt", "b": "f:orphan/src/main/kotlin/Orphan.kt", "k": "import"}
-  ]
+    {
+      "a": "f:app/src/main/kotlin/App.kt",
+      "b": "f:libraries/core/src/main/kotlin/Core.kt",
+      "k": "import",
+      "w": 1
+    },
+    {
+      "a": "f:app/src/main/kotlin/App.kt",
+      "b": "f:orphan/src/main/kotlin/Orphan.kt",
+      "k": "import",
+      "w": 1
+    }
+  ],
+  "flows": [],
+  "tour": [],
+  "health": {},
+  "screens": []
 }
