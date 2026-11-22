@@ -15,6 +15,9 @@ from etat_major.text_safety import bounded_repr, is_control
 
 _PROJECT = r"[a-z0-9][a-z0-9_-]*"
 _PATH_OK = re.compile(r"[^\s#]+")
+_DRIVE_PREFIX = re.compile(r"[A-Za-z]:")
+# Unicode solidus/reverse-solidus variants and standalone diagonal strokes.
+_SLASH_LIKE = frozenset("⁄∕∖⧵⧶⧸⧹／＼﹨╱╲⟋⟍")
 _PROJECT_KINDS: Final = {"feature": r"[0-9]+", "task": r"[0-9]+", "milestone": r"[a-z0-9]+"}
 _GLOBAL_KINDS: Final = ("research", "decision")
 _COMPONENT = re.compile(r"[A-Za-z0-9][^\s#]*")
@@ -55,14 +58,15 @@ class Ref:
 def _check_path(text: str, path: str) -> None:
     if (
         not _PATH_OK.fullmatch(path)
-        or path.startswith("/")
-        or {".", ".."}.intersection(path.split("/"))
-        or any(char in "\\%" or is_control(char) for char in path)
+        or path.startswith("~")
+        or _DRIVE_PREFIX.match(path)
+        or {"", ".", ".."}.intersection(path.split("/"))
+        or any(char in "\\%" or char in _SLASH_LIKE or is_control(char) for char in path)
     ):
         raise RefError(
             text,
-            "path must be relative without dot segments, spaces, '#', '\\', '%', "
-            "or control characters",
+            "path must be relative without empty or dot segments, a home or drive prefix, "
+            "spaces, '#', '\\', '%', slash lookalikes, or control characters",
         )
 
 

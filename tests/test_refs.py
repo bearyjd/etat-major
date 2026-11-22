@@ -78,6 +78,21 @@ def test_invalid_refs(text):
     assert repr(text) in str(exc.value) or text == ""
 
 
+@pytest.mark.parametrize("prefix,suffix", [("fp:f:", ""), ("trail:", "#symbol")])
+@pytest.mark.parametrize(
+    "path", ["a//b", "a/b/", "~/x", "~user/x", "C:/x", "c:x", "a∕b", "a／b", "a⁄b", "a⧸b"]
+)
+def test_code_ref_rejects_ambiguous_paths(prefix, suffix, path):
+    with pytest.raises(RefError, match="path must be relative"):
+        parse_ref(prefix + path + suffix)
+
+
+@pytest.mark.parametrize("prefix,suffix", [("fp:f:", ""), ("trail:", "#symbol")])
+@pytest.mark.parametrize("path", ["main.py", "src/sub/main.py", "café/entrée.py", "src/~draft.py"])
+def test_code_ref_accepts_relative_paths(prefix, suffix, path):
+    assert str(parse_ref(prefix + path + suffix)) == prefix + path + suffix
+
+
 def test_non_string_rejected():
     with pytest.raises(RefError):
         parse_ref(7)  # type: ignore[arg-type]

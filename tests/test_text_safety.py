@@ -6,6 +6,7 @@ import pytest
 from etat_major.cli import main
 from etat_major.refs import Ref
 from etat_major.render import render_trace
+from etat_major.text_safety import safe
 from etat_major.trace import (
     AcceptanceLine,
     ArchLine,
@@ -16,6 +17,21 @@ from etat_major.trace import (
     ResearchLine,
     Trace,
 )
+
+
+@pytest.mark.parametrize(
+    ("char", "escaped"),
+    [
+        ("\u2028", r"\u2028"),
+        ("\u2029", r"\u2029"),
+        ("\ue000", r"\ue000"),
+        ("\U000f0000", r"\U000f0000"),
+        ("\ud800", r"\ud800"),
+        ("\u0378", r"\u0378"),
+    ],
+)
+def test_safe_escapes_nonprinting_unicode(char, escaped):
+    assert safe(f"café{char}x") == f"café{escaped}x"
 
 
 def test_trace_escapes_controls_in_dynamic_values():
