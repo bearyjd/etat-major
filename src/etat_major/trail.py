@@ -20,8 +20,7 @@ from pydantic import (
 
 from etat_major.localfiles import open_directory, read_text
 from etat_major.refs import RefError, parse_ref
-from etat_major.taskfile import Text, first_error
-from etat_major.text_safety import safe
+from etat_major.taskfile import TaskFileError, Text, first_error
 
 TRAIL_VERSION = "0.30.5"
 _LIMIT_MIB = 64
@@ -32,7 +31,7 @@ _CONFIDENCES = _VERIFIED | {"inferred", "lsp_dispatch"}
 type NodeKind = Literal["file", "class", "function", "method"]
 
 
-class TrailError(ValueError):
+class TrailError(TaskFileError):
     """A Trail artifact is unreadable or invalid."""
 
 
@@ -177,28 +176,28 @@ def _reject_constant(_: str) -> None:
 
 
 def _read_wiring(path: Path) -> _Wiring:
-    label = safe(path.name, limit=100)
     try:
         with open_directory(path.parent) as fd:
             text = read_text(path, _LIMIT_MIB, dir_fd=fd)
     except (OSError, UnicodeError):
-        raise TrailError(f"{label}: JSON: cannot read file as UTF-8") from None
+        raise TrailError(path, "JSON", "cannot read file as UTF-8") from None
     except ValueError as exc:
-        raise TrailError(f"{label}: JSON: cannot read file: {safe(exc)}") from None
+        raise TrailError(path, "JSON", f"cannot read file: {exc}") from None
     try:
         data = json.loads(text, parse_constant=_reject_constant)
     except (ValueError, RecursionError):
-        raise TrailError(f"{label}: JSON: invalid JSON") from None
+        raise TrailError(path, "JSON", "invalid JSON") from None
     if not isinstance(data, dict):
-        raise TrailError(f"{label}: JSON: expected an object")
+        raise TrailError(path, "JSON", "expected an object")
     meta = data.get("meta")
     version = meta.get("version") if isinstance(meta, dict) else None
     if type(version) is not int or version != 1:
-        raise TrailError(f"{label}: meta.version: only integer version 1 is supported")
+        raise TrailError(path, "meta.version", "only integer version 1 is supported")
     try:
         return _Wiring.model_validate(data)
     except ValidationError as exc:
-        raise TrailError(safe(first_error(Path(label), exc))) from None
+        error = first_error(path, exc)
+        raise TrailError(path, error.field, error.message) from None
 
 
 def load_wiring(path: Path, *, indexed_revision: str | None = None) -> SymbolIndex:

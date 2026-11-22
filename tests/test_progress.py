@@ -88,13 +88,15 @@ class History:
             str(self.releases),
             "--format",
             output,
+            "--as-of",
+            "2026-11-22",
         ]
 
     def report(self, capsys):
         status = main(self.args())
         out = capsys.readouterr()
         assert status == 0, out.err
-        return json.loads(out.out)
+        return json.loads(out.out)["data"]
 
 
 @pytest.fixture
@@ -270,7 +272,7 @@ def test_progress_reports_overdue_milestones_and_architecture_gaps(history, caps
 def test_bad_recorded_pr_data_is_a_file_and_field_error(history, capsys, value, field):
     history.prs.write_text(value, encoding="utf-8")
     assert main(history.args()) == 2
-    err = capsys.readouterr().err
+    err = capsys.readouterr().out
     assert "prs.json" in err and field in err and str(history.repo) not in err
 
 
@@ -289,7 +291,7 @@ def test_progress_rejects_symlinks(history, tmp_path, capsys, source):
         (history.repo / ".git" / "extra").symlink_to(history.prs)
         filename = ".git"
     assert main(history.args()) == 2
-    err = capsys.readouterr().err
+    err = capsys.readouterr().out
     assert filename in err and str(tmp_path) not in err
 
 
@@ -364,7 +366,7 @@ def test_architecture_resolves_components_and_symbols_with_recorded_indexes(hist
         )
         == 0
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(capsys.readouterr().out)["data"]
     assert report["features"]["netlens/0031"]["architecture"] == {
         "fp:n:ui.hostdetail": "existing",
         "fp:n:ui.retired": "stale",
@@ -375,7 +377,7 @@ def test_architecture_resolves_components_and_symbols_with_recorded_indexes(hist
 def test_recorded_pr_diagnostic_does_not_echo_unknown_check_types(history, capsys):
     history.set_prs(history.pr(statusCheckRollup=[{"__typename": str(history.repo)}]))
     assert main(history.args()) == 2
-    err = capsys.readouterr().err
+    err = capsys.readouterr().out
     assert "prs.json" in err and "statusCheckRollup" in err
     assert str(history.repo) not in err
 

@@ -79,7 +79,7 @@ def test_cli_escapes_controls_in_graph_error(capsys, workspace_dir, tmp_path):
         ]
     )
     assert code == 2
-    assert r"invalid\u001b\u000a\u202e.json: missing 'schema'" in capsys.readouterr().err
+    assert r"invalid\u001b\u000a\u202e.json: field 'schema'" in capsys.readouterr().err
 
 
 def test_cli_escapes_controls_in_workspace_issue(capsys, workspace_dir):

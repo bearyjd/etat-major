@@ -1,0 +1,106 @@
+{
+  "data": {
+    "acceptance": [
+      {
+        "id": "a1",
+        "provenance": "human",
+        "state": "open",
+        "text": "Graph updates at least once per second."
+      },
+      {
+        "id": "a2",
+        "provenance": "human",
+        "state": "open",
+        "text": "Graph is covered by an automated test."
+      }
+    ],
+    "architecture": [
+      {
+        "provenance": "human",
+        "ref": "fp:n:ui.hostdetail",
+        "relation": "modifies",
+        "state": "existing"
+      },
+      {
+        "provenance": "human",
+        "ref": "fp:f:app/src/net/Latency.kt",
+        "relation": "new",
+        "state": "gap"
+      }
+    ],
+    "decisions": [
+      {
+        "cites": [
+          {
+            "ref": "research:0007#f1",
+            "state": "ok"
+          }
+        ],
+        "found": true,
+        "provenance": "human",
+        "question": "Should NetLens add a live latency graph?",
+        "ref": "decision:0012",
+        "relation": "linked",
+        "status": "approved"
+      },
+      {
+        "cites": [
+          {
+            "ref": "research:0007#f2",
+            "state": "unsourced"
+          }
+        ],
+        "found": true,
+        "provenance": "human",
+        "question": "Should NetLens sync scan history to a cloud service?",
+        "ref": "decision:0013",
+        "relation": "related",
+        "status": "rejected"
+      }
+    ],
+    "feature": {
+      "outcome": "A graph of round-trip time per host over the last 5 minutes.",
+      "provenance": "human",
+      "ref": "feature:netlens/0031",
+      "status": "planned",
+      "title": "Live latency graph"
+    },
+    "links": [],
+    "omitted_issues": 0,
+    "research": [
+      {
+        "findings": [
+          {
+            "id": "f1",
+            "provenance": "ai-generated",
+            "source": "https://example\u002eorg/thread/123",
+            "text": "Users report slow scans on large subnets.",
+            "unsourced": false
+          },
+          {
+            "id": "f2",
+            "provenance": "ai-generated",
+            "source": null,
+            "text": "Some users find competing UIs dated.",
+            "unsourced": true
+          }
+        ],
+        "found": true,
+        "provenance": "ai-generated",
+        "ref": "research:0007",
+        "status": "reviewed",
+        "title": "What do Android network-tool users complain about?"
+      }
+    ]
+  },
+  "issues": [
+    {
+      "field": "architecture",
+      "message": "gap: fp:f:app/src/net/Latency.kt",
+      "path": "feature:netlens/0031",
+      "severity": "error"
+    }
+  ],
+  "ok": false,
+  "schema": "etat-major/trace@1"
+}

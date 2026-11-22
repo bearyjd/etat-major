@@ -43,9 +43,10 @@ class TaskFileError(ValueError):
     ) -> None:
         self.path = path
         self.field = field
+        self.field_name = field or default_field
         self.message = message
         name = safe(path.name, limit=256)
-        where = f"{name}: field '{safe(field or default_field, limit=80)}'"
+        where = f"{name}: field '{safe(self.field_name, limit=80)}'"
         super().__init__(f"{where}: {safe(message, limit=512)}")
 
 

@@ -1,0 +1,55 @@
+{
+  "data": {
+    "as_of": null,
+    "disconnected_commits": [],
+    "disconnected_prs": [],
+    "features": {
+      "netlens/0031": {
+        "accepted": "unverified",
+        "architecture": {
+          "fp:f:app/src/net/Latency.kt": "gap",
+          "fp:n:ui.hostdetail": "existing"
+        },
+        "state": "planned",
+        "tasks": []
+      }
+    },
+    "omitted_issues": 0,
+    "stale_links": [],
+    "stale_milestones": [],
+    "tasks": {
+      "netlens/0041": {
+        "accepted": [
+          "task:netlens/0041"
+        ],
+        "committed": "unverified",
+        "generated": "unverified",
+        "merged": "unverified",
+        "reviewed": "unverified",
+        "shipped": "unverified",
+        "state": "done",
+        "tested": "unverified"
+      },
+      "netlens/0042": {
+        "accepted": "unverified",
+        "committed": "unverified",
+        "generated": "unverified",
+        "merged": "unverified",
+        "reviewed": "unverified",
+        "shipped": "unverified",
+        "state": "ready",
+        "tested": "unverified"
+      }
+    },
+    "unimplemented_requirements": [
+      [
+        "feature:netlens/0031",
+        "fp:f:app/src/net/Latency.kt"
+      ]
+    ],
+    "version": 1
+  },
+  "issues": [],
+  "ok": true,
+  "schema": "etat-major/progress@1"
+}

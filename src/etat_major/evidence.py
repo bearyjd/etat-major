@@ -250,8 +250,10 @@ def _stale_milestones(
     ws: Workspace,
     features: tuple[FeatureProgress, ...],
     tasks: Mapping[str, TaskProgress],
-    today: date,
+    today: date | None,
 ) -> tuple[str, ...]:
+    if today is None:
+        return ()
     states: dict[str, list[bool]] = defaultdict(list)
     for task in ws.tasks:
         if task.milestone:
@@ -319,7 +321,7 @@ def _derive(
     git: GitEvidence,
     prs: tuple[PullRequest, ...],
     artifacts: tuple[GeneratedArtifact, ...],
-    today: date,
+    today: date | None,
     indexes: ArchitectureIndexes,
 ) -> ProgressReport:
     known = frozenset(map(_key, ws.tasks))
@@ -372,6 +374,7 @@ def load_progress(
     *,
     artifacts: tuple[GeneratedArtifact, ...] = (),
     today: date | None = None,
+    use_clock: bool = True,
     indexes: ArchitectureIndexes = ArchitectureIndexes(),
 ) -> ProgressReport:
     try:
@@ -380,6 +383,6 @@ def load_progress(
         raise TaskFileError(workspace, "workspace", "cannot open intent workspace") from None
     pull_requests = load_prs(prs)
     git = load_git(repo, pull_requests, load_releases(releases), frozenset(map(_key, intent.tasks)))
-    return _derive(
-        intent, git, pull_requests, artifacts, today or datetime.now(UTC).date(), indexes
-    )
+    if today is None and use_clock:
+        today = datetime.now(UTC).date()
+    return _derive(intent, git, pull_requests, artifacts, today, indexes)

@@ -6,6 +6,7 @@ Unresolved references are reported as ``missing`` rather than raised.
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
 from collections import Counter
@@ -15,7 +16,7 @@ from itertools import islice
 from pathlib import Path
 
 from etat_major.localfiles import open_directory as _directory
-from etat_major.planning import Milestone, load_scoped_milestone
+from etat_major.planning import Milestone, load_scoped_milestone, parse_vision
 from etat_major.records import (
     Decision,
     Feature,
@@ -46,12 +47,13 @@ class Issue:
 
 
 class _IssueLog:
-    def __init__(self) -> None:
+    def __init__(self, limit: int | None = _ISSUE_LIMIT) -> None:
+        self.limit = limit
         self.issues: list[Issue] = []
         self.omitted = 0
 
     def append(self, issue: Issue) -> None:
-        if len(self.issues) < _ISSUE_LIMIT:
+        if self.limit is None or len(self.issues) < self.limit:
             self.issues.append(issue)
         else:
             self.omitted += 1
@@ -92,7 +94,7 @@ def linked_decisions(ws: Workspace, feature: Feature) -> tuple[Decision, ...]:
     return tuple(d for d in ws.decisions if d.id in listed or me in d.features)
 
 
-class WorkspaceError(ValueError):
+class WorkspaceError(TaskFileError):
     """The workspace root cannot be opened as a directory."""
 
 
@@ -188,7 +190,7 @@ def _load_dir[T](
                 try:
                     out.append(loader(path, dir_fd=folder_fd))
                 except TaskFileError as exc:
-                    issues.append(Issue(rel.as_posix(), exc.field, exc.message))
+                    issues.append(Issue(rel.as_posix(), exc.field_name, exc.message))
     except OSError as exc:
         issues.append(_issue(root, base, exc))
     return out
@@ -358,26 +360,22 @@ def link_warnings(ws: Workspace, feature: Feature) -> tuple[Issue, ...]:
     return tuple(warnings)
 
 
-def load_workspace(root: Path) -> Workspace:
-    issues = _IssueLog()
+def load_workspace(root: Path, *, validate_all: bool = False) -> Workspace:
+    issues = _IssueLog(None) if validate_all else _IssueLog()
     try:
-        mode = root.lstat().st_mode
-        if stat.S_ISLNK(mode):
-            raise ValueError("symlink is not allowed")
-        if not stat.S_ISDIR(mode):
-            raise ValueError("is not a directory")
         with _directory(root) as fd:
-            resolved = root.resolve(strict=True)
-            if not os.path.samestat(resolved.lstat(), os.fstat(fd)):
-                raise ValueError("workspace directory changed while opening")
-            research = _load_dir(resolved, fd, "research", load_research, issues)
-            decisions = _load_dir(resolved, fd, "decisions", load_decision, issues)
-            features = _load_dir(resolved, fd, "features", _load_feature, issues)
-            tasks = _load_dir(resolved, fd, "tasks", _load_task, issues)
-            milestones = _load_dir(resolved, fd, "milestones", load_scoped_milestone, issues)
+            research = _load_dir(root, fd, "research", load_research, issues)
+            decisions = _load_dir(root, fd, "decisions", load_decision, issues)
+            features = _load_dir(root, fd, "features", _load_feature, issues)
+            tasks = _load_dir(root, fd, "tasks", _load_task, issues)
+            milestones = _load_dir(root, fd, "milestones", load_scoped_milestone, issues)
+            if validate_all:
+                _load_dir(root, fd, "visions", parse_vision, issues)
     except (OSError, ValueError, RuntimeError) as exc:
         detail = (exc.strerror or str(exc)) if isinstance(exc, OSError) else str(exc)
-        raise WorkspaceError(f"workspace {bounded_repr(str(root))}: {detail}") from exc
+        if isinstance(exc, OSError) and exc.errno == errno.ENOTDIR:
+            detail = "not a directory or a symlink is present"
+        raise WorkspaceError(root, "workspace", detail) from None
     ws = Workspace(
         tuple(research),
         tuple(decisions),

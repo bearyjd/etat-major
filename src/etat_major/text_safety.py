@@ -1,5 +1,6 @@
 """Format untrusted values for plain-text output and diagnostics."""
 
+import re
 from unicodedata import category
 
 _ESCAPED_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn"})
@@ -43,3 +44,18 @@ def bounded_repr(value: object) -> str:
         return f"<{type(value).__name__[:78]}>"
     representation = repr(value)
     return representation[:80] + ("…" if len(representation) > 80 else "")
+
+
+# These strings are free-form prose. Typed source URLs and HTTP route paths use their
+# own contracts and bypass this filter.
+_PRIVATE_LOCATION = re.compile(
+    r"""(?ix)
+    (?:[a-z][a-z0-9+.-]*://|[\w.+-]+@[\w.-]+:)
+    [^\s"'<>]+
+    | (?<![\w/])(?:[a-z]:[\\/]|\\\\|~?/)[^\s"'<>]+
+    """
+)
+
+
+def public_text(value: str) -> str:
+    return _PRIVATE_LOCATION.sub("[redacted location]", value)

@@ -25,8 +25,8 @@ from pydantic import (
 
 from etat_major.localfiles import open_directory, read_text
 from etat_major.refs import Ref, RefError, parse_ref
-from etat_major.taskfile import first_error
-from etat_major.text_safety import bounded_repr, safe
+from etat_major.taskfile import TaskFileError, first_error
+from etat_major.text_safety import bounded_repr
 
 SUPPORTED_SCHEMA = "floorplan/graph@1"
 FLOORPLAN_COMMIT = "94f81b463b7617e06d873ac71323ce71644c8399"
@@ -35,7 +35,7 @@ _LIMIT_MIB = 64
 _SCHEMA_LABEL = re.compile(r"(?:floorplan/)?[a-zA-Z0-9_@.-]*")
 
 
-class FloorplanError(ValueError):
+class FloorplanError(TaskFileError):
     """A Floorplan artifact is unreadable or invalid."""
 
 
@@ -103,39 +103,39 @@ def _is_relative_path(value: str) -> bool:
     )
 
 
-def _collect(label: str, data: dict[str, Any], key: str, field: str) -> frozenset[str]:
+def _collect(path: Path, data: dict[str, Any], key: str, field: str) -> frozenset[str]:
     items = data.get(key)
     if not isinstance(items, list):
-        raise FloorplanError(f"{label}: '{key}' must be a list")
+        raise FloorplanError(path, key, "must be a list")
     values: set[str] = set()
     for i, item in enumerate(items):
         value = item.get(field) if isinstance(item, dict) else None
         if not isinstance(value, str) or not value:
-            raise FloorplanError(f"{label}: {key}[{i}] needs a non-empty string '{field}'")
+            raise FloorplanError(path, f"{key}[{i}].{field}", "needs a non-empty string")
         if key == "files" and not _is_relative_path(value):
-            raise FloorplanError(f"{label}: {key}[{i}].{field} must be repository-relative")
+            raise FloorplanError(path, f"{key}[{i}].{field}", "must be repository-relative")
         values.add(value)
     return frozenset(values)
 
 
 def load_graph(path: Path) -> FloorplanIndex:
-    label = safe(path.name, limit=100)
     data = _graph_document(path)
-    return FloorplanIndex(_collect(label, data, "nodes", "id"), _collect(label, data, "files", "p"))
+    return FloorplanIndex(_collect(path, data, "nodes", "id"), _collect(path, data, "files", "p"))
 
 
 def _graph_document(path: Path) -> dict[str, Any]:
-    label = safe(path.name, limit=100)
     data = _read_json(path)
     if "schema" not in data:
-        raise FloorplanError(f"{label}: missing 'schema'; only {SUPPORTED_SCHEMA!r} is supported")
+        raise FloorplanError(
+            path, "schema", f"missing schema; only {SUPPORTED_SCHEMA!r} is supported"
+        )
     schema = data["schema"]
     if schema != SUPPORTED_SCHEMA:
         detail = " " + bounded_repr(schema)
         if isinstance(schema, str) and not _SCHEMA_LABEL.fullmatch(schema):
             detail = ""
         raise FloorplanError(
-            f"{label}: unsupported schema{detail}; only {SUPPORTED_SCHEMA!r} is supported"
+            path, "schema", f"unsupported schema{detail}; only {SUPPORTED_SCHEMA!r} is supported"
         )
     return data
 
@@ -145,20 +145,19 @@ def _reject_json_constant(_: str) -> None:
 
 
 def _read_json(path: Path) -> dict[str, Any]:
-    label = safe(path.name, limit=100)
     try:
         with open_directory(path.parent) as fd:
             text = read_text(path, _LIMIT_MIB, dir_fd=fd)
     except (OSError, UnicodeError):
-        raise FloorplanError(f"{label}: JSON: cannot read file as UTF-8") from None
+        raise FloorplanError(path, "JSON", "cannot read file as UTF-8") from None
     except ValueError as exc:
-        raise FloorplanError(f"{label}: JSON: cannot read file: {safe(exc)}") from None
+        raise FloorplanError(path, "JSON", f"cannot read file: {exc}") from None
     try:
         data = json.loads(text, parse_constant=_reject_json_constant)
     except (ValueError, RecursionError):
-        raise FloorplanError(f"{label}: JSON: invalid JSON") from None
+        raise FloorplanError(path, "JSON", "invalid JSON") from None
     if not isinstance(data, dict):
-        raise FloorplanError(f"{label}: JSON: expected an object")
+        raise FloorplanError(path, "JSON", "expected an object")
     return data
 
 
@@ -167,11 +166,12 @@ def load_plan(path: Path) -> FloorplanPlan:
     data = _read_json(path)
     for key in ("$schema", "schema"):
         if key in data and data[key] != PLAN_SCHEMA:
-            raise FloorplanError(f"{safe(path.name)}: {key}: expected {PLAN_SCHEMA}")
+            raise FloorplanError(path, key, f"expected {PLAN_SCHEMA}")
     try:
         plan = _PlanDocument.model_validate(data)
     except ValidationError as exc:
-        raise FloorplanError(safe(first_error(path, exc))) from None
+        error = first_error(path, exc)
+        raise FloorplanError(path, error.field, error.message) from None
     return FloorplanPlan(frozenset(file.path for file in plan.files))
 
 
@@ -270,7 +270,7 @@ def _unique(path: Path, field: str, values: tuple[str, ...]) -> None:
     seen = set()
     for i, value in enumerate(values):
         if value in seen:
-            raise FloorplanError(f"{safe(path.name)}: {field.format(i)}: duplicate identifier")
+            raise FloorplanError(path, field.format(i), "duplicate identifier")
         seen.add(value)
 
 
@@ -286,7 +286,8 @@ def load_architecture(path: Path) -> ArchitectureDocument:
     try:
         graph = ArchitectureDocument.model_validate(data)
     except ValidationError as exc:
-        raise FloorplanError(safe(first_error(path, exc))) from None
+        error = first_error(path, exc)
+        raise FloorplanError(path, error.field, error.message) from None
     _unique(path, "nodes[{}].id", tuple(item.id for item in graph.nodes))
     _unique(path, "files[{}].p", tuple(item.path for item in graph.files))
     _unique(path, "routes[{}].id", tuple(item.id for item in graph.routes))

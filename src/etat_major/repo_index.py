@@ -18,6 +18,7 @@ from etat_major.floorplan import (
     load_architecture,
 )
 from etat_major.refs import RefError, parse_ref
+from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import safe
 from etat_major.trail import TRAIL_VERSION, Symbol, SymbolEdge, SymbolIndex, TrailError, load_wiring
 
@@ -29,7 +30,7 @@ _TIMESTAMP = re.compile(
 )
 
 
-class RepoIndexError(ValueError):
+class RepoIndexError(TaskFileError):
     """Explicit metadata for an input pair is invalid."""
 
 
@@ -107,10 +108,10 @@ class RepoIndex:
             (component for component in self.architecture.components if component.id == owner), None
         )
 
-    def to_json(self) -> str:
-        """Serialize this snapshot as stable version 1 JSON."""
+    def to_data(self) -> dict[str, object]:
+        """Return the exported version 1 snapshot."""
         architecture = self.architecture
-        payload = {
+        return {
             "version": self.version,
             "repository": self.repository,
             "revision": self.revision,
@@ -129,8 +130,10 @@ class RepoIndex:
                 "edges": [_edge_record(edge) for edge in self.symbols.edges],
             },
         }
-        encoded = json.dumps(payload, sort_keys=True, ensure_ascii=True, indent=2)
-        return "\n".join(map(safe, encoded.split("\n"))) + "\n"
+
+    def to_json(self) -> str:
+        """Serialize this snapshot as stable version 1 JSON."""
+        return json.dumps(self.to_data(), sort_keys=True, ensure_ascii=True, indent=2) + "\n"
 
     def to_text(self) -> str:
         """Render layer counts and the paths behind the coverage differences."""
@@ -181,10 +184,9 @@ def _trail_endpoint(value: str) -> bool:
 
 
 def _validate_trail(path: Path, trail: SymbolIndex) -> None:
-    label = safe(path.name, limit=100)
     for i, node in enumerate(trail.symbols):
         if not _trail_endpoint(node.id):
-            raise TrailError(f"{label}: nodes[{i}].id: expected a file or symbol ID")
+            raise TrailError(path, f"nodes[{i}].id", "expected a file or symbol ID")
     for i, edge in enumerate(trail.edges):
         for field in ("source", "target", "relation", "confidence"):
             value = getattr(edge, field)
@@ -192,10 +194,10 @@ def _validate_trail(path: Path, trail: SymbolIndex) -> None:
                 _trail_endpoint(value) if field in {"source", "target"} else _LABEL.fullmatch(value)
             )
             if not valid:
-                raise TrailError(f"{label}: edges[{i}].{field}: invalid graph identifier")
+                raise TrailError(path, f"edges[{i}].{field}", "invalid graph identifier")
     for i, language in enumerate(trail.coverage.languages):
         if not _LABEL.fullmatch(language):
-            raise TrailError(f"{label}: meta.languages[{i}]: invalid language identifier")
+            raise TrailError(path, f"meta.languages[{i}]", "invalid language identifier")
 
 
 def _timestamp(path: Path, value: str | None) -> str | None:
@@ -206,7 +208,7 @@ def _timestamp(path: Path, value: str | None) -> str | None:
             return datetime.fromisoformat(value).astimezone(UTC).isoformat().replace("+00:00", "Z")
         except (ValueError, OverflowError):
             pass
-    raise RepoIndexError(f"{safe(path.name)}: indexed_at: expected an RFC 3339 timestamp")
+    raise RepoIndexError(path, "indexed_at", "expected an RFC 3339 timestamp")
 
 
 def _modules(graph: ArchitectureDocument) -> tuple[Module, ...]:
@@ -241,7 +243,7 @@ def load_repo_index(
 ) -> RepoIndex:
     """Read a pair of versioned artifacts supplied by the caller."""
     if revision is not None and (not isinstance(revision, str) or not _SHA.fullmatch(revision)):
-        raise RepoIndexError(f"{safe(graph_path.name)}: revision: expected a full Git commit SHA")
+        raise RepoIndexError(graph_path, "revision", "expected a full Git commit SHA")
     indexed_at = _timestamp(graph_path, indexed_at)
     graph = load_architecture(graph_path)
     trail = load_wiring(trail_path)

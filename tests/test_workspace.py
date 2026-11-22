@@ -254,7 +254,7 @@ def test_workspace_skips_a_2000_deep_tree(tmp_path):
         os.close(fd)
 
 
-def test_workspace_resolves_at_most_the_root(workspace_dir, monkeypatch):
+def test_workspace_uses_directory_descriptor_without_resolving(workspace_dir, monkeypatch):
     original = Path.resolve
     resolved = []
 
@@ -265,7 +265,7 @@ def test_workspace_resolves_at_most_the_root(workspace_dir, monkeypatch):
     monkeypatch.setattr(Path, "resolve", track_resolve)
     ws = load_workspace(workspace_dir)
     assert ws.issues == ()
-    assert resolved == [workspace_dir]
+    assert resolved == []
 
 
 def test_workspace_limits_records_read_per_directory(tmp_path):

@@ -1,13 +1,12 @@
 """Render the local progress report for the CLI."""
 
-import json
 from dataclasses import asdict
 
 from etat_major.evidence import ProgressReport, Rung
 from etat_major.text_safety import safe
 
 
-def render_json(report: ProgressReport) -> str:
+def progress_data(report: ProgressReport) -> dict[str, object]:
     rows = {item.key: {"state": item.state, **asdict(item.evidence)} for item in report.tasks}
     feature_rows = {
         item.key: {
@@ -18,7 +17,7 @@ def render_json(report: ProgressReport) -> str:
         }
         for item in report.features
     }
-    public = {
+    return {
         "version": report.version,
         "tasks": rows,
         "features": feature_rows,
@@ -28,8 +27,6 @@ def render_json(report: ProgressReport) -> str:
         "stale_links": report.stale_links,
         "unimplemented_requirements": report.unimplemented_requirements,
     }
-    encoded = json.dumps(public, ensure_ascii=True, indent=2, sort_keys=True)
-    return "\n".join(safe(line) for line in encoded.split("\n")) + "\n"
 
 
 def render_text(report: ProgressReport) -> str:

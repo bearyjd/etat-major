@@ -1,0 +1,202 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "ok", "data", "issues"],
+  "properties": {
+    "schema": {"const": "etat-major/index@1"},
+    "ok": {"type": "boolean"},
+    "data": {"anyOf": [{"type": "null"}, {"$ref": "#/$defs/data"}]},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}}
+  },
+  "$defs": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "field", "message", "severity"],
+      "properties": {
+        "path": {"type": "string"},
+        "field": {"type": "string"},
+        "message": {"type": "string"},
+        "severity": {"enum": ["error", "warning"]}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "repository", "revision", "indexed_at", "indexers", "coverage", "architecture", "symbols"],
+      "properties": {
+        "version": {"const": 1},
+        "repository": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+        "revision": {
+          "anyOf": [{"type": "null"}, {"type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"}]
+        },
+        "indexed_at": {"anyOf": [{"type": "null"}, {"type": "string", "format": "date-time"}]},
+        "indexers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["layer", "name", "provenance", "schema", "commit", "version"],
+            "properties": {
+              "layer": {"enum": ["architecture", "symbols"]},
+              "name": {"enum": ["floorplan", "trail"]},
+              "provenance": {"const": "human"},
+              "schema": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+              "commit": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+              "version": {"anyOf": [{"type": "null"}, {"type": "string"}]}
+            }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["languages", "files_indexed", "files_skipped", "architecture_only", "symbols_only"],
+          "properties": {
+            "languages": {"type": "array", "items": {"type": "string"}},
+            "files_indexed": {"type": "integer", "minimum": 0},
+            "files_skipped": {"anyOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
+            "architecture_only": {"type": "array", "items": {"type": "string"}},
+            "symbols_only": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "architecture": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["components", "files", "links", "routes", "modules"],
+          "properties": {
+            "components": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "kind", "layer", "provenance"],
+                "properties": {
+                  "id": {"type": "string"},
+                  "kind": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+                  "layer": {"const": "architecture"},
+                  "provenance": {"const": "inferred"}
+                }
+              }
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "component_id", "language", "lines", "layer", "provenance"],
+                "properties": {
+                  "path": {"type": "string"},
+                  "component_id": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+                  "language": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+                  "lines": {"anyOf": [{"type": "null"}, {"type": "integer", "minimum": 0}]},
+                  "layer": {"const": "architecture"},
+                  "provenance": {"const": "verified"}
+                }
+              }
+            },
+            "links": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["source", "target", "kind", "layer", "provenance"],
+                "properties": {
+                  "source": {"type": "string"},
+                  "target": {"type": "string"},
+                  "kind": {"enum": ["import", "http"]},
+                  "layer": {"const": "architecture"},
+                  "provenance": {"const": "inferred"}
+                }
+              }
+            },
+            "routes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "method", "path", "file", "layer", "provenance"],
+                "properties": {
+                  "id": {"type": "string"},
+                  "method": {"type": "string"},
+                  "path": {"type": "string"},
+                  "file": {"anyOf": [{"type": "null"}, {"type": "string"}]},
+                  "layer": {"const": "architecture"},
+                  "provenance": {"const": "inferred"}
+                }
+              }
+            },
+            "modules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "imports", "kind", "layer", "provenance"],
+                "properties": {
+                  "path": {"type": "string"},
+                  "imports": {"type": "array", "items": {"type": "string"}},
+                  "kind": {"const": "module"},
+                  "layer": {"const": "architecture"},
+                  "provenance": {"const": "inferred"}
+                }
+              }
+            }
+          }
+        },
+        "symbols": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nodes", "edges"],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "kind", "path", "range", "layer", "provenance"],
+                "properties": {
+                  "id": {"type": "string"},
+                  "kind": {"enum": ["file", "class", "function", "method"]},
+                  "path": {"type": "string"},
+                  "range": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1},
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "layer": {"const": "symbols"},
+                  "provenance": {"const": "verified"}
+                }
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from", "to", "relation", "confidence", "layer", "provenance"],
+                "properties": {
+                  "from": {"type": "string"},
+                  "to": {"type": "string"},
+                  "relation": {"type": "string"},
+                  "confidence": {"type": "string"},
+                  "layer": {"const": "symbols"},
+                  "provenance": {"enum": ["verified", "inferred"]}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "if": {"properties": {"ok": {"const": true}}},
+  "then": {
+    "properties": {
+      "data": {"type": "object"},
+      "issues": {"not": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+    }
+  },
+  "else": {
+    "properties": {"issues": {"contains": {"properties": {"severity": {"const": "error"}}}}}
+  }
+}

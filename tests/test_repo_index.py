@@ -106,7 +106,7 @@ def test_index_cli_json_is_stable_when_input_arrays_are_reordered(tmp_path, caps
     trail_path.write_text(json.dumps(trail))
     assert main(args) == 0
     assert capsys.readouterr().out == baseline
-    view = json.loads(baseline)
+    view = json.loads(baseline)["data"]
     assert view["version"] == 1
     assert [entry["id"] for entry in view["architecture"]["components"]] == ["future", "validation"]
     assert view["symbols"]["nodes"][0]["range"] == [1, 4]
@@ -200,11 +200,11 @@ def test_invalid_snapshot_metadata_has_field_and_file(metadata):
 def test_cli_can_export_caller_supplied_pair_metadata(capsys):
     args = ["index", "--graph", str(GRAPH), "--trail", str(TRAIL), "--format", "json"]
     assert main(args + ["--revision", "a" * 40, "--indexed-at", "2026-11-21T13:00:00+01:00"]) == 0
-    output = json.loads(capsys.readouterr().out)
+    output = json.loads(capsys.readouterr().out)["data"]
     assert output["revision"] == "a" * 40
     assert output["indexed_at"] == "2026-11-21T12:00:00Z"
     assert main(args + ["--revision", "HEAD"]) == 2
-    assert "graph.json: revision" in capsys.readouterr().err
+    assert json.loads(capsys.readouterr().out)["issues"][0]["field"] == "revision"
 
 
 def test_json_keeps_identifiers_and_new_safe_trail_labels(tmp_path):
