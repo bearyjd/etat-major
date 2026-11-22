@@ -1,58 +1,45 @@
 # État-major (working title)
 
-Self-hosted command center for coding agents running in tmux. It gives a strategic view (initiative > project > task) over agents, and composes existing tools instead of rebuilding them. Public repo, AGPL-3.0, French naming for projects. Owner: the repo maintainer. Full spec: docs/SPEC.md. This repo is the source of truth; an earlier snapshot exists as a Claude doc and is not kept in sync. If this file and the spec disagree, the spec wins; tell the maintainer.
+Self-hosted, living visual map of repositories: how each works (Understand), what we are building toward (Build), and how we are getting there with evidence (Progress). It is useful with no agent running. It is not a terminal, a coding-agent runner, a scheduler or a general project-management platform. Public repo, AGPL-3.0, French naming for projects. Owner: the repo maintainer.
 
-## North stars (judge every decision against these)
-1. Coding on the go: web interface to tmux from a phone, with audio input and output as an option. Phases 3 and 6; voice after.
-2. Strategic view per project: each project's progress overlaid on a roadmap. Phase 2.
-3. Unattended workflows that tie into meute, with progress tracked. Phase 5.
-4. Multi-user (roadmap, after 1 to 3): a second user (family member), under their own login and their own subscription.
+Governing documents: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.md) (design, contracts, trust model) and [docs/VISUALIZATION-ROADMAP.md](docs/VISUALIZATION-ROADMAP.md) (milestones). They win over [docs/SPEC.md](docs/SPEC.md), whose control-plane, router, runner and phase plans are superseded. If this file and the architecture document disagree, the architecture document wins; tell the maintainer.
+
+## Product goals (judge every decision against these)
+1. Understand: a verifiable map of how each repository works, with provenance and coverage limits always visible.
+2. Build: a Git-backed roadmap and board linked to the code it touches.
+3. Progress: completion shown only through evidence (commits, PRs, checks, tests, releases, human acceptance), otherwise `unverified`.
+4. A second family user later, under their own logins, once credential isolation is verified (see the architecture document).
 
 ## Hard constraints
-1. Drive the real CLIs (`claude`, `codex`) inside tmux under each user's own login. Never call a model API with a subscription login. Never proxy, harvest or pool OAuth credentials. Never switch accounts to dodge limits.
-2. Never store credentials. A profile holds a pointer (config dir path or env var name), not a secret.
-3. Git holds intent (markdown + frontmatter: title, acceptance criteria, priority, owner, draft/ready/blocked/done). A local uncommitted store (SQLite or JSONL, undecided) holds runtime state: sessions, hook events, spend, approvals. `running`, `needs-you`, `review`, `failed` are derived, never written to files. Only a human writes `done`.
-4. Planning is the board's job; execution is tmux's. A card links to a session and worktree and runs nothing itself.
-5. Agent-agnostic: Claude Code first adapter, Codex next. Four contracts connect components: task file format, event schema, adapter interface, runner API.
-6. Safe by default: runner defaults to dry-run; merges and pushes need human approval; push credentials never enter containers (host-side step pushes after approval); unattended runs are opt-in per user, with an egress allowlist.
-7. Public repo hygiene: no personal paths, hostnames or keys in code; config files plus a seeded demo workspace.
+1. Never store, proxy, harvest or pool Claude or Codex credentials. Never switch accounts to dodge limits. Configuration refers to secrets by pointer (an env var name or path), never by value.
+2. Git holds durable intent (Markdown + YAML frontmatter, Mermaid). Derived data lives in a rebuildable cache that is never authoritative. Stored task statuses are only `draft`, `ready`, `blocked`, `done`; In Progress and Review are derived from Git and PR evidence. Only a human records acceptance for `done`.
+3. Every completion claim links to a commit, PR, check, release or human acceptance. Without proof it is `unverified`. Never use an agent's self-estimate as progress.
+4. Never run, schedule or queue agent work. Codeman owns interactive sessions and Meute owns unattended runs. Exactly one scheduler owns any job. Launching or submitting work happens only through their own interfaces and only after explicit human approval.
+5. The core must work with no Codeman, no Meute and no running agent.
+6. Treat the indexer as replaceable: Trail through a versioned adapter, pinned version, `meta.version` checked. Index a copy or worktree, never write into a source repository, and never run `trail init`.
+7. Untrusted content (repo Markdown, Mermaid, AI-generated text) is sanitized before rendering and labelled by provenance.
+8. Public repo hygiene: no personal paths, hostnames or keys in code or docs; config files plus a seeded demo workspace.
 
-## Users and isolation
-One Unix user or VM per person (tmux sockets are not a boundary). Per-user containers built on atelier. Terminal attach is owner-only. Roles: `owner`, `member`. Identity: per-user token over Tailscale, loopback-only by default. Routing never crosses users: a task may only use its owner's profiles, including every fallback; policies that violate this fail validation at load. First release ships with one user; multi-user comes after phase 6.
+## Trust model
+First deployment is a trusted family on one machine over loopback or a private network. No per-user containers or Unix accounts at first. Open risk: Codeman's multi-user mode shares one OS account and one Claude login by default. Do not add a second user until credential isolation is verified end to end and account eligibility is confirmed. See "Security and trust" in the architecture document.
 
-## Model router
-Works at the agent-CLI level, not HTTP. Profiles are `cli-login` or `api-key`. OmniRoute (or any OpenAI-compatible endpoint) backs `api-key` profiles only. First release: one profile per task, no fallback chain; roles, windows and fallbacks arrive with the runner in phase 5. Show the auth mode (subscription or metered API key) at every launch: a stray `ANTHROPIC_API_KEY` can override a subscription login and bill silently.
+## Milestones
+See the roadmap: M0 reconcile design; M1 RepoIndex adapter for Trail; M2 ProjectIntent loader; M3 ProgressEvidence from Git and GitHub; M4 Understand UI; M5 Build view; M6 Progress view and portfolio; M7 optional Meute and Codeman integrations; M8 hardening and the second user. Each ends at its acceptance criteria before the next starts.
 
-## Milestones (reverse from the finished product)
-1. Foundation: data model, task files, event schema.
-2. Roll-ups: initiative/project/task strategic view, derived from evidence (merged PRs, test results, releases), never agent self-estimates.
-3. Session binding: cards to tmux sessions and worktrees via hooks; web terminal.
-4. Planning agent (may move after 5).
-5. Runner and router: meute becomes the runner; routing-policy test proving no cross-user fallback.
-6. Digest and phone: morning digest, approval inbox, phone polish.
-Each phase ends at a gate; none starts before the previous gate passes.
-
-## Build vs adopt (field reports as of 2026-11-21; candidates to test, not settled)
-- Phone to tmux: Tailscale + tmux + ttyd; Termius or mosh fallback. Keep native `tmux attach` as an escape hatch.
-- Web dashboard: test Codeman first (check license and one-Unix-user-per-person handling).
-- Task files: Backlog.md, unless its format cannot carry acceptance criteria and owner.
-- Worktrees: workmux (or Worktrunk). Events and usage: agents-observe schema, ccusage (counts are approximate).
-- Overnight runner: build thin. Borrow queue design from claude-code-queue and reset parsing from unsnooze. Start fresh sessions from a handoff note instead of resuming large ones (resume can burn a large share of the window). Never encode a headless cost multiplier; measure.
-- Voice: phone dictation into an editable field, optional spoken final reply. Never auto-read terminal logs.
-- Roadmap view: build. No existing tool ties goals to tasks, commits, tests and releases.
+## Build vs adopt (as of 2026-11-21; verify each license in its own repo)
+- Repository structure: Trail first; supplement with tree-sitter or universal-ctags only where a gap is documented.
+- Graph UI: Cytoscape.js (lean) over React Flow; Mermaid for diagrams. Confirm in M4.
+- Phone terminal and voice: Codeman (separate). Herdr is a candidate only if needed later.
+- Task format: our own contract (see `docs/spikes/phase1-spike.md`); Backlog.md is a reference only.
 - Avoid: Vibe Kanban (maintainer status doubtful), amux (Commons Clause), Agent Kanban (FSL), account switching or pooling.
-- Verify every license in the component's own repo before adopting.
-
-## Recommended architecture (lean, not final; confirm with a weekend spike)
-One small control-plane service; adopt everything else. Execution: tmux, one Unix user per person, git worktrees (workmux), rootless containers (atelier). Access: Tailscale, ntfy. Web terminal: Codeman first (ttyd fallback) as a separate process; native `tmux attach` always works. Task files: markdown + frontmatter in git, Backlog.md format if it fits. Events: hooks post to a local API writing to SQLite (schema borrowed from agents-observe). Control plane (build): Python backend (FastAPI, SQLite) computing roll-ups and serving a thin web UI (HTMX or small Svelte/React) and the API. Runner (build): meute, separate Python repo, a client of the API; systemd timers, bounded retries, fresh sessions from a handoff note. No Rust daemon at first. Spike: run Codeman, a Backlog.md-style task folder, and a hook-to-SQLite script; one roll-up query should answer "what needs me". See docs/SPEC.md, "Recommended architecture".
 
 ## Open questions
-Web terminal (Agentboard, ttyd or embedded xterm.js); fork tmux-kanban or Lumbergh vs start fresh; stack (lean: Python backend with a thin frontend; TypeScript end to end is the alternative); meute inside this repo or separate (lean: separate, talking to the API); second user's agent CLI and account eligibility; per-profile usage measurement; voice engines; runtime store (lean: SQLite); repo name, license header, demo workspace. Re-read Anthropic's current terms on `claude -p` and third-party tools before building the overnight runner; they changed several times in 2026.
+Cache format (SQLite or JSON); language coverage beyond Python; large-repository limits; the Codeman deep link that works on a phone; the live schema of Meute's `inbox.py dump`; the second user's CLI, account eligibility and credential isolation; repo name, license header and demo workspace. Re-read Anthropic's current terms before any release; they changed several times in 2026.
 
-## Related projects (separate repos, connect via the four contracts)
-meute (fleet runner), atelier (rootless podman images, agent-enter.sh), Navette (RN + Rust PTY daemon, optional client). Infra: homelab on Tailscale; OmniRoute gateway for api-key profiles.
+## Related projects (separate; connect through the four contracts)
+Codeman (interactive sessions), Meute (unattended runs), Trail (code index), Git and GitHub (source of truth). Contracts: RepoIndex, ProjectIntent, ProgressEvidence, ExecutionLink.
 
 ## How to work in this repo
-- Small, reviewable steps; tests with every contract change.
+- Small, reviewable steps; tests first with every contract change.
 - Reddit research must go through Codex or ChatGPT, not Claude's own search (it cannot reach Reddit). See the `reddit-via-codex` skill.
 - Keep secrets, hostnames and personal paths out of the repo.

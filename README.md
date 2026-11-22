@@ -1,25 +1,28 @@
 # État-major
 
-A self-hosted command center for coding agents running in tmux. It gives one person, or a small family, a strategic view (initiative > project > task) over a fleet of agents, and composes existing tools instead of rebuilding them.
+A self-hosted, living visual map of your repositories: how each one works, what you are building toward, and how you are getting there, with evidence. It is useful with no agent running.
 
-**Status:** pre-implementation. The design is in [docs/SPEC.md](docs/SPEC.md); the evidence behind the component choices is in [docs/RESEARCH.md](docs/RESEARCH.md).
+**Status:** pre-implementation. The product direction is in [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.md) and the plan in [docs/VISUALIZATION-ROADMAP.md](docs/VISUALIZATION-ROADMAP.md). [docs/SPEC.md](docs/SPEC.md) is the earlier agent-command-center design, partly superseded. Evidence behind component choices is in [docs/RESEARCH.md](docs/RESEARCH.md).
 
-## North stars
+## Three views
 
-1. **Coding on the go:** a phone-friendly web interface to tmux, with audio input and output as an option.
-2. **Strategic view per project:** each project's progress overlaid on a roadmap, derived from evidence (merged PRs, tests, releases), not agent self-estimates.
-3. **Unattended workflows:** overnight runs that tie into the meute runner, with progress tracked on the board.
-4. **Multi-user (roadmap):** a second person under their own login and their own subscription.
+1. **Understand:** repository selector, file tree, symbol search, an interactive module and function graph, and source navigation. Verified, inferred and AI-generated information are always labelled apart.
+2. **Build:** vision, milestones, a Now/Next/Later roadmap, a Kanban board, task dependencies and versioned Mermaid diagrams, linked to the code they touch.
+3. **Progress:** commits, pull requests, checks and releases mapped to milestones. Every completion claim links to proof or reads `unverified`.
+
+## What it is not
+
+Not a terminal, a coding-agent runner, a scheduler or a general project-management tool. Interactive agent sessions belong to [Codeman](https://github.com/Ark0N/Codeman) and unattended runs to [Meute](https://github.com/bearyjd/meute); both are optional and separate. Repository structure comes first from Trail through a replaceable adapter. Durable intent lives in Git as Markdown, YAML and Mermaid.
 
 ## Principles
 
-- Drive the real `claude` and `codex` CLIs in tmux under each user's own login. No subscription proxying, pooling or account switching.
-- Git holds intent (markdown tasks); a local store holds runtime state.
-- Safe by default: dry-run, human approval for merges and pushes, no push credentials in containers.
+- Git holds intent. A rebuildable cache holds derived data and is never authoritative.
+- Progress comes from evidence (commits, PRs, checks, tests, releases, human acceptance), never from an agent's own estimate.
+- Never store, proxy or pool Claude or Codex credentials, and never switch accounts to dodge limits.
 
 ## Working in this repo
 
-Read [CLAUDE.md](CLAUDE.md) first. Contributions should keep to the principles above and keep personal paths, hostnames and keys out of the repo.
+Read [CLAUDE.md](CLAUDE.md) first. Keep personal paths, hostnames and keys out of the repo.
 
 ## License
 
