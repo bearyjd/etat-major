@@ -42,17 +42,9 @@ class _AnswerFinding(BaseModel):
 
     @field_validator("url")
     @classmethod
-    def _valid_host(cls, value: str | None) -> str | None:
-        if value is not None:
-            try:
-                parsed = urlsplit(value)
-                host, _port = parsed.hostname, parsed.port
-            except ValueError:
-                host = None
-            if not host or "\\" in value:
-                raise ValueError("expected an HTTP(S) URL with a valid host and optional port")
-            if parsed.username is not None:
-                raise ValueError("source URL must not contain credentials")
+    def _reject_credentials(cls, value: str | None) -> str | None:
+        if value is not None and urlsplit(value).username is not None:
+            raise ValueError("source URL must not contain credentials")
         return value
 
     @field_validator("date", mode="before")

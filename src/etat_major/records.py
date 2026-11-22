@@ -9,8 +9,10 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -48,8 +50,22 @@ def _reject_url_controls(value: Any) -> Any:
     return value
 
 
+def _validate_url_host(value: str) -> str:
+    try:
+        parsed = urlsplit(value)
+        host, _port = parsed.hostname, parsed.port
+    except ValueError:
+        host = None
+    if not host or "\\" in value:
+        raise ValueError("expected an HTTP(S) URL with a valid host and optional port")
+    return value
+
+
 Url = Annotated[
-    StrictStr, Field(pattern=r"(?i)^https?://\S+$"), BeforeValidator(_reject_url_controls)
+    StrictStr,
+    Field(pattern=r"(?i)^https?://\S+$"),
+    BeforeValidator(_reject_url_controls),
+    AfterValidator(_validate_url_host),
 ]
 SourceKind = Literal["reddit", "github-issue", "docs", "article", "store-review", "other"]
 Evidence = Literal["firsthand", "author", "secondhand", "opinion", "unverified"]

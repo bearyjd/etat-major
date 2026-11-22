@@ -349,3 +349,10 @@ def test_traceability_yaml_examples_load_as_workspace(tmp_path):
     assert [record.id for record in workspace.research] == ["0007"]
     assert [record.id for record in workspace.decisions] == ["0012"]
     assert [(record.project, record.id) for record in workspace.features] == [("netlens", "0031")]
+
+
+@pytest.mark.parametrize("suffix", ["[bad", "host:invalid"])
+def test_malformed_source_url_reports_record_field(tmp_path, suffix):
+    scheme, _, _ = SOURCE_URL.partition("://")
+    text = RESEARCH.replace(SOURCE_URL, f"{scheme}://{suffix}")
+    fail(load_research, write(tmp_path, "0007-net.md", text), "sources.0.url", "URL")
