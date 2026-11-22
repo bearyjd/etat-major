@@ -54,7 +54,8 @@ def test_trace_escapes_controls_in_dynamic_values():
 
     rendered = render_trace(trace)
     escaped = r"é\u001b\u000a\u0009\u000d\u007f\u0085\u202e\U000e0001"
-    assert rendered.count(escaped) == 31
+    # The malformed source URL is omitted; other dynamic values are escaped.
+    assert rendered.count(escaped) == 30
     assert len(rendered.splitlines()) == 16
 
 

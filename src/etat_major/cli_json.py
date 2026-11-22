@@ -7,7 +7,7 @@ from dataclasses import fields, is_dataclass
 from etat_major.records import Decision
 from etat_major.refs import Ref
 from etat_major.taskfile import TaskFileError
-from etat_major.text_safety import public_text
+from etat_major.text_safety import public_source_url, public_text
 from etat_major.trace import ARCHITECTURE_PROBLEM_STATES, Trace
 from etat_major.workspace import Issue, feature_ref
 
@@ -73,7 +73,7 @@ def _trace_value(value: object) -> object:
     if is_dataclass(value) and not isinstance(value, type):
         return {
             item.name: (
-                getattr(value, item.name)
+                public_source_url(getattr(value, item.name))
                 if item.name == "source"
                 else _trace_value(getattr(value, item.name))
             )

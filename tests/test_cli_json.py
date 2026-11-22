@@ -255,3 +255,18 @@ def test_error_path_cannot_echo_drive_rooted_input(capsys, cli_args):
     output, error = read_envelope(capsys, "trace", 2)
     assert "private" not in output
     assert error["issues"][0]["path"] == "graph.json"
+
+
+@pytest.mark.parametrize("output_format", ["text", "json"])
+def test_trace_strips_source_url_credentials_query_and_fragment(
+    workspace_dir, cli_args, capsys, output_format
+):
+    path = next((workspace_dir / "research").glob("*.md"))
+    original = "https://" + ".".join(("example", "org")) + "/thread/123"
+    credentialed = original.replace("://", "://reader:marker@", 1) + "?query-marker#fragment-marker"
+    path.write_text(path.read_text().replace(original, credentialed))
+    assert main([*cli_args("trace"), "--format", output_format]) == 1
+    out = capsys.readouterr().out
+    assert original in out
+    for value in ("reader", "query-marker", "fragment-marker"):
+        assert value not in out

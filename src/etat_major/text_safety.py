@@ -2,6 +2,7 @@
 
 import re
 from unicodedata import category
+from urllib.parse import urlsplit, urlunsplit
 
 _ESCAPED_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn"})
 
@@ -59,3 +60,16 @@ _PRIVATE_LOCATION = re.compile(
 
 def public_text(value: str) -> str:
     return _PRIVATE_LOCATION.sub("[redacted location]", value)
+
+
+def public_source_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return None
+    authority = parts.netloc.rsplit("@", 1)[-1]
+    if not authority or "\\" in authority:
+        return None
+    return safe(urlunsplit((parts.scheme, authority, parts.path, "", "")))

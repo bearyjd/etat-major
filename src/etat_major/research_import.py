@@ -5,6 +5,7 @@ import re
 from datetime import date
 from itertools import islice
 from pathlib import Path
+from unicodedata import category
 from urllib.parse import urlsplit
 
 import yaml
@@ -50,6 +51,8 @@ class _AnswerFinding(BaseModel):
                 host = None
             if not host or "\\" in value:
                 raise ValueError("expected an HTTP(S) URL with a valid host and optional port")
+            if parsed.username is not None:
+                raise ValueError("source URL must not contain credentials")
         return value
 
     @field_validator("date", mode="before")
@@ -72,8 +75,8 @@ def _field_value(path: Path, lines: list[str], index: int, field: str) -> str:
     if index >= len(lines) or not lines[index].startswith(prefix):
         raise TaskFileError(path, field, f"line {index + 1}: expected {prefix}")
     text = lines[index][len(prefix) :]
-    if any(map(is_control, text)):
-        raise TaskFileError(path, field, f"line {index + 1}: control characters are forbidden")
+    if any(is_control(c) or category(c) in {"Zl", "Zp", "Co"} for c in text):
+        raise TaskFileError(path, field, f"line {index + 1}: unsafe characters are forbidden")
     if "<" in text or ">" in text:
         raise TaskFileError(path, field, f"line {index + 1}: angle brackets are forbidden")
     return text.strip()

@@ -193,3 +193,21 @@ def test_import_rejects_invalid_url_port(tmp_path, sample, capsys, port):
     assert run_import(tmp_path, answer_file(tmp_path, sample)) != 0
     error = capsys.readouterr().err
     assert "Source URL" in error and "line 3" in error
+
+
+@pytest.mark.parametrize("userinfo", ["reader@", "reader:marker@", "@"])
+def test_import_rejects_credentials_in_source_url(tmp_path, sample, capsys, userinfo):
+    url = URL.replace("://", f"://{userinfo}", 1)
+    assert run_import(tmp_path, answer_file(tmp_path, sample.replace(URL, url))) != 0
+    error = capsys.readouterr().err
+    assert "answer.md" in error and "Source URL" in error
+    assert url not in error
+    assert not (tmp_path / "research").exists()
+
+
+@pytest.mark.parametrize("char", ["\u2028", "\u2029", "\ue000"])
+def test_import_rejects_unsafe_yaml_value_characters(tmp_path, sample, capsys, char):
+    sample = sample.replace("Users report", f"Users{char}report", 1)
+    assert run_import(tmp_path, answer_file(tmp_path, sample)) != 0
+    assert "Claim" in capsys.readouterr().err
+    assert not (tmp_path / "research").exists()

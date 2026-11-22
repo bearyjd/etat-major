@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from etat_major.text_safety import public_text, safe
+from etat_major.text_safety import public_source_url, public_text, safe
 from etat_major.trace import DecisionLine, ResearchLine, Trace
 
 
@@ -10,7 +10,8 @@ def _research(r: ResearchLine) -> list[str]:
     lines = [safe(f"  {r.ref}  {r.status}  {r.provenance}  {public_text(r.title)}").rstrip()]
     for f in r.findings:
         flag = "unsourced" if f.unsourced else "sourced"
-        src = f" ({f.source})" if f.source else ""
+        url = public_source_url(f.source)
+        src = f" ({url})" if url else ""
         lines.append(f"    {f.id}  {flag}  {f.provenance}  {public_text(f.text)}{src}")
     return lines
 
