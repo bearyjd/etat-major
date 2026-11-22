@@ -19,7 +19,7 @@ from etat_major.floorplan import (
 )
 from etat_major.refs import RefError, parse_ref
 from etat_major.taskfile import TaskFileError
-from etat_major.text_safety import safe
+from etat_major.text_safety import public_text, safe
 from etat_major.trail import (
     TRAIL_VERSION,
     Symbol,
@@ -36,6 +36,20 @@ _TIMESTAMP = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})"
 )
+_FLOORPLAN_NODE_KINDS = {
+    "feature",
+    "test",
+    "library",
+    "ui",
+    "external",
+    "data",
+    "worker",
+    "infra",
+    "config",
+    "script",
+    "service",
+}
+_FLOORPLAN_LINK_KINDS = {"import", "http", "queue", "data", "call", "event"}
 
 
 class RepoIndexError(TaskFileError):
@@ -83,6 +97,8 @@ class Coverage:
     files_skipped: int | None
     architecture_only: tuple[str, ...]
     symbols_only: tuple[str, ...]
+    unknown_node_kinds: tuple[str, ...] = ()
+    unknown_link_kinds: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -121,15 +137,15 @@ class RepoIndex:
         architecture = self.architecture
         return {
             "version": self.version,
-            "repository": self.repository,
+            "repository": _public_label(self.repository),
             "revision": self.revision,
             "indexed_at": self.indexed_at,
             "indexers": [asdict(indexer) for indexer in self.indexers],
-            "coverage": asdict(self.coverage),
+            "coverage": _coverage_data(self.coverage),
             "architecture": {
-                "components": [item.model_dump() for item in architecture.components],
+                "components": [_architecture_record(item) for item in architecture.components],
                 "files": [item.model_dump() for item in architecture.files],
-                "links": [item.model_dump() for item in architecture.links],
+                "links": [_architecture_record(item) for item in architecture.links],
                 "routes": [item.model_dump() for item in architecture.routes],
                 "modules": [asdict(module) for module in architecture.modules],
             },
@@ -147,7 +163,8 @@ class RepoIndex:
         """Render layer counts and the paths behind the coverage differences."""
         coverage = self.coverage
         lines = [
-            f"Repository {self.repository or 'unknown'} at {self.revision or 'unknown'}",
+            f"Repository {_public_label(self.repository) or 'unknown'} "
+            f"at {self.revision or 'unknown'}",
             f"Indexed at {self.indexed_at or 'unknown'}",
             f"Architecture (Floorplan): {len(self.architecture.components)} components, "
             f"{len(self.architecture.files)} files, {len(self.architecture.links)} links, "
@@ -157,8 +174,33 @@ class RepoIndex:
             "architecture files with symbols",
             "Architecture only: " + (", ".join(coverage.architecture_only) or "none"),
             "Symbols only: " + (", ".join(coverage.symbols_only) or "none"),
+            "Unknown Floorplan node kinds: " + _kind_list(coverage.unknown_node_kinds),
+            "Unknown Floorplan link kinds: " + _kind_list(coverage.unknown_link_kinds),
         ]
         return "\n".join(map(safe, lines)) + "\n"
+
+
+def _public_label(value: str | None) -> str | None:
+    return safe(public_text(value)) if value is not None else None
+
+
+def _kind_list(kinds: tuple[str, ...]) -> str:
+    return ", ".join(kind or '""' for kind in _public_kinds(kinds)) or "none"
+
+
+def _public_kinds(kinds: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(sorted(safe(public_text(kind)) for kind in kinds))
+
+
+def _coverage_data(coverage: Coverage) -> dict[str, object]:
+    return asdict(coverage) | {
+        "unknown_node_kinds": _public_kinds(coverage.unknown_node_kinds),
+        "unknown_link_kinds": _public_kinds(coverage.unknown_link_kinds),
+    }
+
+
+def _architecture_record(item: Component | ArchitectureLink) -> dict[str, object]:
+    return item.model_dump() | {"kind": _public_label(item.kind)}
 
 
 def _symbol_record(symbol: Symbol) -> dict[str, object]:
@@ -237,12 +279,16 @@ def _coverage(graph: ArchitectureDocument, trail: SymbolIndex) -> Coverage:
     architecture = {file.path for file in graph.files}
     symbols = {node.path for node in trail.symbols}
     languages = {file.language for file in graph.files if file.language is not None}
+    node_kinds = {node.kind for node in graph.nodes if node.kind is not None}
+    link_kinds = {link.kind for link in graph.links}
     return Coverage(
         languages=tuple(sorted(languages.union(trail.coverage.languages))),
         files_indexed=len(architecture | symbols),
         files_skipped=None,
         architecture_only=tuple(sorted(architecture - symbols)),
         symbols_only=tuple(sorted(symbols - architecture)),
+        unknown_node_kinds=tuple(sorted(node_kinds - _FLOORPLAN_NODE_KINDS)),
+        unknown_link_kinds=tuple(sorted(link_kinds - _FLOORPLAN_LINK_KINDS)),
     )
 
 

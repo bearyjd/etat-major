@@ -1,31 +1,105 @@
 {
   "schema": "floorplan/graph@1",
-  "meta": {
-    "repos": [{"name": "netlens"}]
+  "project": {
+    "name": "netlens",
+    "summary": "",
+    "entrypoints": []
   },
-  "project": "netlens",
+  "meta": {
+    "generatedAt": "2026-11-22T14:05:59.838Z",
+    "scanAt": "2026-11-22T14:05:59.625Z",
+    "rootName": "netlens",
+    "audience": "developers",
+    "agent": "claude",
+    "repos": [
+      {
+        "path": ".",
+        "name": "netlens",
+        "branch": "main",
+        "head": ""
+      }
+    ],
+    "counts": {
+      "files": 2,
+      "loc": 330,
+      "unassigned": 0
+    }
+  },
   "nodes": [
     {
       "id": "ui.hostdetail",
+      "parent": null,
       "label": "Host detail screen",
-      "kind": "dir",
+      "kind": "ui",
       "summary": "Shows one host and its scan results.",
-      "paths": ["app/src/ui"]
+      "details": "",
+      "tags": [],
+      "paths": [
+        "app/src/ui/**"
+      ],
+      "packages": [],
+      "hosts": [],
+      "stats": {
+        "files": 1,
+        "loc": 120
+      }
     },
     {
       "id": "net.scan",
+      "parent": null,
       "label": "Scanner",
-      "kind": "dir",
+      "kind": "library",
       "summary": "Subnet scanning.",
-      "paths": ["app/src/net"]
+      "details": "",
+      "tags": [],
+      "paths": [
+        "app/src/net/**"
+      ],
+      "packages": [],
+      "hosts": [],
+      "stats": {
+        "files": 1,
+        "loc": 210
+      }
     }
   ],
   "files": [
-    {"p": "app/src/ui/HostDetail.kt", "n": "ui.hostdetail", "l": "kotlin", "loc": 120},
-    {"p": "app/src/net/Scanner.kt", "n": "net.scan", "l": "kotlin", "loc": 210}
+    {
+      "p": "app/src/ui/HostDetail.kt",
+      "n": "ui.hostdetail",
+      "r": "netlens",
+      "l": "kotlin",
+      "loc": 120,
+      "name": "HostDetail",
+      "d": "",
+      "auto": true,
+      "h": "",
+      "sig": []
+    },
+    {
+      "p": "app/src/net/Scanner.kt",
+      "n": "net.scan",
+      "r": "netlens",
+      "l": "kotlin",
+      "loc": 210,
+      "name": "Scanner",
+      "d": "",
+      "auto": true,
+      "h": "",
+      "sig": []
+    }
   ],
   "routes": [],
   "links": [
-    {"a": "f:app/src/ui/HostDetail.kt", "b": "f:app/src/net/Scanner.kt", "k": "import", "w": 1}
-  ]
+    {
+      "a": "f:app/src/ui/HostDetail.kt",
+      "b": "f:app/src/net/Scanner.kt",
+      "k": "import",
+      "w": 1
+    }
+  ],
+  "flows": [],
+  "tour": [],
+  "health": {},
+  "screens": []
 }

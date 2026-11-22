@@ -4,13 +4,13 @@
       "components": [
         {
           "id": "net.scan",
-          "kind": "dir",
+          "kind": "library",
           "layer": "architecture",
           "provenance": "inferred"
         },
         {
           "id": "ui.hostdetail",
-          "kind": "dir",
+          "kind": "ui",
           "layer": "architecture",
           "provenance": "inferred"
         }
@@ -71,7 +71,9 @@
       "languages": [
         "kotlin"
       ],
-      "symbols_only": []
+      "symbols_only": [],
+      "unknown_link_kinds": [],
+      "unknown_node_kinds": []
     },
     "indexed_at": null,
     "indexers": [
