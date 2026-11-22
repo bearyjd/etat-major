@@ -116,3 +116,24 @@ def test_graph_error_bounds_schema_value(tmp_path):
         load_graph(graph_with(tmp_path, schema=value))
     assert "x" * 81 not in str(exc.value)
     assert "x" * 79 in str(exc.value)
+
+
+def test_graph_rejects_symlink_parent(tmp_path):
+    alias = tmp_path / "alias"
+    alias.symlink_to(FIXTURE.parent, target_is_directory=True)
+    with pytest.raises(FloorplanError, match=r"graph.json.*cannot read"):
+        load_graph(alias / "graph.json")
+
+
+@pytest.mark.parametrize("value", ["/private/graph.json", "git@example.invalid:repo"])
+def test_graph_schema_error_does_not_echo_sensitive_value(tmp_path, value):
+    with pytest.raises(FloorplanError, match=r"graph.json.*schema") as exc:
+        load_graph(graph_with(tmp_path, schema=value))
+    assert value not in str(exc.value)
+
+
+def test_graph_rejects_absolute_file_path(tmp_path):
+    path = graph_with(tmp_path, files=[{"p": "/private/file.py"}])
+    with pytest.raises(FloorplanError, match=r"graph.json.*files\[0\].*p") as exc:
+        load_graph(path)
+    assert "/private" not in str(exc.value)

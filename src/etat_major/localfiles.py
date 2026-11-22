@@ -1,10 +1,33 @@
-"""Read bounded regular files without following the final path component."""
+"""Open symlink-free directories and read bounded regular files."""
 
 import os
 import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 NOFOLLOW = os.O_NOFOLLOW | os.O_NONBLOCK
+
+
+@contextmanager
+def open_directory(path: Path, parent_fd: int | None = None) -> Iterator[int]:
+    """Open each directory component without following symlinks."""
+    if parent_fd is not None:
+        start, parts = path.name, ()
+    elif path.anchor:
+        start, parts = path.anchor, path.parts[1:]
+    else:
+        start, parts = ".", path.parts
+    flags = os.O_RDONLY | os.O_DIRECTORY | NOFOLLOW
+    fd = os.open(start, flags, dir_fd=parent_fd)
+    try:
+        for part in parts:
+            child_fd = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child_fd
+        yield fd
+    finally:
+        os.close(fd)
 
 
 def _check_file(info: os.stat_result, limit_mib: int) -> None:

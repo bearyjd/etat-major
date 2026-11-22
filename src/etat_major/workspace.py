@@ -10,12 +10,11 @@ import os
 import stat
 from collections import Counter
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import islice
 from pathlib import Path
 
-from etat_major.localfiles import NOFOLLOW
+from etat_major.localfiles import open_directory as _directory
 from etat_major.records import (
     Decision,
     Feature,
@@ -99,16 +98,6 @@ def _check_path(path: Path, fd: int) -> int:
     if stat.S_ISLNK(info.st_mode):
         raise ValueError("symlink is not allowed")
     return info.st_mode
-
-
-@contextmanager
-def _directory(path: Path, parent_fd: int | None = None) -> Iterator[int]:
-    target = path if parent_fd is None else path.name
-    fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY | NOFOLLOW, dir_fd=parent_fd)
-    try:
-        yield fd
-    finally:
-        os.close(fd)
 
 
 def _issue(root: Path, path: Path, exc: OSError | ValueError | RuntimeError) -> Issue:
