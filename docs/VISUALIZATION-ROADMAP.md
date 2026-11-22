@@ -21,7 +21,7 @@ Rules for every milestone:
 
 Docs only: architecture, roadmap, and superseded markers in the README, `CLAUDE.md`, `SPEC.md` and `RESEARCH.md`.
 
-- **Done when:** the four docs agree on the product; superseded plans are marked; no document claims a capability that is not built.
+- **Done when:** the README, `CLAUDE.md`, architecture, roadmap, SPEC notes and RESEARCH section agree on the product; superseded plans are marked; no document claims a capability that is not built.
 
 ### M1: RepoIndex adapter for Trail
 
@@ -38,7 +38,7 @@ Read Trail's graph into the `RepoIndex` contract.
 Extend the merged validator to the full intent model.
 
 - **Depends on:** M0.
-- **Build:** vision file, milestones (`horizon`: now, next, later), tasks with `depends_on`, `targets` and diagram paths; dependency cycle detection; a loader for a workspace directory with errors that name file and field.
+- **Build:** extend the merged contract (keep initiative, project, task; add optional `milestone`, `accepted_by`, `accepted_on`, `depends_on`, `targets`; drop `budget_tokens`), vision file, milestones (`horizon`: now, next, later), tasks with `depends_on`, `targets` and diagram paths; dependency cycle detection; a loader for a workspace directory with errors that name file and field.
 - **Rules kept:** only `draft`, `ready`, `blocked`, `done` are valid stored statuses; derived columns are never written to files.
 - **Done when:** a demo workspace loads; a task naming a derived status is rejected; a dependency cycle is rejected; a `targets` entry that does not resolve in a RepoIndex is reported as stale.
 
@@ -46,10 +46,10 @@ Extend the merged validator to the full intent model.
 
 Compute the evidence ladder.
 
-- **Depends on:** M2 (task ids), and M1 only for symbol-level mapping.
-- **Build:** link commits, branches and PRs to tasks by trailer `Task: <id>`, branch `task/<id>-...` or PR body; read PR state, reviews, checks and releases through `gh`; derive In Progress, Review and Blocked; compute `generated` evidence only from Meute artifacts when configured; mark every rung without proof `unverified`; list disconnected work.
+- **Depends on:** M2 (task ids).
+- **Build:** link commits, branches and PRs to tasks by trailer `Task: <project>/<id>`, branch `task/<project>-<id>-...` or PR body; read PR state, reviews, checks and releases through `gh`; derive In Progress, Review and Blocked; mark every rung without proof `unverified`; list disconnected work.
 - **Tests:** a fixture repository with scripted history; PR and check data from recorded `gh` JSON, not the network.
-- **Done when:** on the fixture, each task shows exactly the rungs its records prove and no more; a task with a merged PR but no human acceptance is not `done`; disconnected commits are listed.
+- **Done when:** on the fixture, each task shows exactly the rungs its records prove and no more; a task with a merged PR but no `accepted_by` and `accepted_on` is shown in Review and not `done`; disconnected commits are listed.
 
 ### M4: Read-only web UI, Understand view
 
@@ -57,16 +57,16 @@ A first screen on real data.
 
 - **Depends on:** M1.
 - **Build:** FastAPI serving a read-only JSON API and the UI; repository selector, file tree, symbol search, Cytoscape.js graph with module-to-function zoom, node inspector, source viewer, and a coverage and freshness panel. Confirm Cytoscape.js against React Flow here and check licenses.
-- **Done when:** selecting a repository, finding a function or class, inspecting its references and dependencies, and opening its source works; the UI shows edge provenance and what is not covered; the page works on a phone-width screen; it needs no Codeman, Meute or agent.
+- **Done when:** selecting a repository, finding a function or class, inspecting its callers, callees and imports (and references where the index provides them), and opening its source works; the UI shows edge provenance and what is not covered; the page works on a phone-width screen; it needs no Codeman, Meute or agent.
 
 ### M5: Build view
 
 The planning half.
 
-- **Depends on:** M2, M4.
-- **Build:** vision, milestones with Now/Next/Later, a Kanban with Draft, Ready, In Progress, Review, Done and Blocked (the last two derived columns use M3 when available), dependency view, Mermaid diagrams and wireframes rendered with sanitization; a task's `targets` highlight nodes in the Understand graph.
-- **Edits:** changes are written as Markdown or YAML for review in Git; the UI never keeps a separate copy.
-- **Done when:** the demo roadmap and board render from files; a task click highlights its code nodes; a stale mapping is visible; no edit bypasses Git.
+- **Depends on:** M2, M3, M4.
+- **Build:** vision, milestones with Now/Next/Later, a Kanban with Draft, Ready, In Progress, Review, Done and Blocked (In Progress and Review are derived through M3), dependency view, Mermaid diagrams and wireframes rendered with sanitization; a task's `targets` highlight nodes in the Understand graph.
+- **Edits:** the UI writes Markdown or YAML only into the configured intent workspace, a Git working tree, and shows the resulting diff. État-major commits and pushes nothing; the human commits. The read-only rule applies to indexed source repositories and to the M4 API.
+- **Done when:** the demo roadmap and board render from files; a task click highlights its code nodes; a stale mapping is visible; every edit appears as an uncommitted diff in the intent workspace and no edit lands outside it.
 
 ### M6: Progress view and portfolio
 
@@ -79,13 +79,13 @@ The proof half.
 ### M7: Integrations (optional, last)
 
 - **Depends on:** M5, M6.
-- **Meute (read-only):** parse `state/log` and `reports/**` directly into `generated` evidence and a summary; never call the per-report command that marks reports read. Submit approved work only through `meute promote` or `meute plan --enqueue`, behind explicit human approval.
+- **Meute (read-only):** parse `state/log` and `reports/**` directly into `generated` evidence and a summary. A Meute run links to a task only if its commits carry the `Task:` trailer or its report names the task id; otherwise it stays unlinked; never call the per-report command that marks reports read. Submit approved work only through `meute promote` or `meute plan --enqueue`, behind explicit human approval.
 - **Codeman:** show linked sessions from `GET /api/sessions`; open one by deep link; launch one for an approved task. Verify against the real server first.
 - **Done when:** with both services stopped, nothing else changes; with them running, a task shows its `ExecutionLink`; no second queue or terminal exists.
 
 ### M8: Hardening and the second user
 
-- **Depends on:** M4 through M7.
+- **Depends on:** M4 through M6 (M7 only for the integration checks).
 - **Build:** behaviour and limits on large repositories (graph size, on-demand loading), incremental reindex, freshness alerts, and the credential-isolation check for a second user.
 - **Credential check:** verify end to end that two people on one machine use distinct Claude and Codex logins through the chosen setup (separate OS users with separate Codeman instances, or verified per-user config directories). Confirm account eligibility with Anthropic before the second user is added.
 - **Done when:** a documented large-repository run; the isolation check passes or the second user is deferred with the reason recorded.

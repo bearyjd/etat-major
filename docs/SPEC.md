@@ -1,6 +1,6 @@
 # État-major: Product & Technical Spec
 
-Last updated 2026-11-21. Working title. Status: pre-implementation. This file is the source of truth. It began as a Claude doc whose two diagrams (architecture and roadmap) are not reproduced here; the text below carries the same information.
+Last updated 2026-11-21. Working title. Status: pre-implementation. This file is the earlier agent-command-center design and is partly superseded; see the banner below and VISUALIZATION-ARCHITECTURE.md. It began as a Claude doc whose two diagrams (architecture and roadmap) are not reproduced here; the text below carries the same information.
 
 > **Direction changed (2026-11-21).** The product is now a repository-intelligence and progress-visualization app, not an agent command center. See [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md) and [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md); they win over this file. Sections below carry a **Superseded** or **Kept** note. Superseded text is left for history, not as a plan.
 
@@ -72,7 +72,7 @@ The design is multi-user from the start, but the first releases ship with one us
 
 ## Data model
 
-> **Partly kept.** The task-file contract and the stored-status rule are implemented (`docs/contracts/task-file.md`). The runtime store is superseded by a rebuildable cache; In Progress and Review are now derived from Git evidence.
+> **Partly kept.** The status lifecycle with `running`, `needs-you` and `failed` is superseded by the derived columns in the architecture document. The task-file contract and the stored-status rule are implemented (`docs/contracts/task-file.md`). The runtime store is superseded by a rebuildable cache; In Progress and Review are now derived from Git evidence.
 
 Intent lives in markdown files in a git repo, in three levels. Runtime state lives in an uncommitted local store (SQLite or JSONL) that records hook events, spend and approvals. The strategic view is computed from both.
 
@@ -192,7 +192,7 @@ One small control-plane service, with everything else adopted. This is a lean fr
 
 ## Strategic view
 
-> **Kept in spirit.** It becomes the Progress view and portfolio page; the morning digest becomes an optional Meute-artifact summary.
+> **Partly superseded.** It becomes the Progress view and portfolio page, but its inputs (`running`, `needs-you`, `failed`, hook events, spend) no longer exist; "needs attention" is recomputed from Git, PR and check evidence. The morning digest becomes an optional summary of Meute run artifacts.
 
 The home screen answers four questions without opening a single session. Every number is computed from the task files and hook events.
 

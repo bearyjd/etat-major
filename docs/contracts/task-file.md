@@ -60,7 +60,7 @@ derived from runtime state and are rejected with an error naming the file and th
 **"Only a human writes `done`"** cannot be proven from file content, so the validator accepts
 `done` and does not try to. Enforcement belongs to the git workflow: protect `main`, require human
 review of any change that sets `done`, and have agent sessions work in worktrees without
-permission to merge. Roll-ups count `done` only together with `evidence`.
+permission to merge. Roll-ups count `done` only together with `evidence`. Note (2026-11-21): `evidence` entries are declared references; under the visualization architecture they count as proof only after Git or GitHub confirms them, and the human acceptance fields are added in a later change.
 
 ## Initiative
 

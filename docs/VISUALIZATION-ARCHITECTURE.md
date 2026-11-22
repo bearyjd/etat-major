@@ -49,7 +49,7 @@ The first SPEC.md described a control plane that supervised agents. That directi
 | **Meute** | Unattended scheduling and execution, run reports | Separate. Read its artifacts; submit approved work only through its own CLI. |
 | **Backlog.md** | A task-file format | Reference only. The spike decided to define our own contract (see `docs/spikes/phase1-spike.md`). |
 
-Exactly one scheduler owns any job, and it is Meute. État-major never writes Meute's state files.
+Exactly one scheduler owns any job. Meute owns the job queue and run logic; its time triggers are external cron or systemd timers set up for Meute. État-major never writes Meute's state files.
 
 ## Verified facts about the neighbours
 
@@ -57,9 +57,10 @@ Findings below come from reading each project's code and docs on 2026-11-21. "Ve
 
 ### Trail 0.30.5 (MIT)
 
-- **Verified:** it parses with tree-sitter (28 languages) into `graft/.graph/wiring.json`, schema `GraphV1`, `meta.version` 1. Nodes are files, classes, functions and methods with path and line span. Edges carry a `relation` (`contains`, `calls`, `imports`, `references`, `implements`, `extends`) and a `confidence` (`extracted`, `inferred`, `lsp_resolved`, `lsp_dispatch`).
+- **Documented by Trail, not reproduced here:** tree-sitter parsing for 28 languages, incremental reindexing by content hash, and the full-fidelity language list below.
+- **Verified:** it writes `graft/.graph/wiring.json`, schema `GraphV1`, `meta.version` 1. Nodes are files, classes, functions and methods with path and line span. Edges carry a `relation` and a `confidence`. The type definitions list the relations `contains`, `calls`, `imports`, `references`, `implements`, `extends` and the confidences `extracted`, `inferred`, `lsp_resolved`, `lsp_dispatch`; only the subset below was seen in practice.
 - **Verified on this repo (Python):** 66 nodes and 167 edges from 5 files in about 2 seconds. Relations seen: `calls`, `contains`, `imports`, `extends`. Confidences seen: `extracted`, `inferred`. `references`, `implements` and the `lsp_*` confidences were not observed.
-- **Verified:** incremental by content hash; the graph is function-level, not only file-level.
+- **Verified:** the graph is function-level, not only file-level.
 - **Gaps:** call edges are name-resolved outside the full-fidelity languages (TypeScript/JavaScript, Python, Go, Java, Kotlin, PHP, Swift, R). Some languages (Bash among them) have symbols only. There is no module-level graph, only directory and file clustering in `trail map`. No data-flow analysis.
 - **Risks:** pre-1.0; renamed from "graft" (old names still appear); no documented schema-compatibility promise; `wiring.json` embeds body text, so it may be large on big repos (unverified). `trail build` writes `graft/`, `.gitignore` and `.ignore` into its target, so index a copy or a worktree. `trail init` edits agent configuration in the home directory and must not be used here. Telemetry is on by default; disable it with `trail telemetry disable`.
 - **Adapter rule:** pin the Trail version, reject any `meta.version` other than 1, read the edge type from `relation`, keep `confidence` as provenance. Keep `web-tree-sitter` or `universal-ctags` as the fallback indexer.
@@ -70,7 +71,7 @@ Findings below come from reading each project's code and docs on 2026-11-21. "Ve
 - **Verified read paths:** `state/log` (tab-separated, one line per invocation, key=value fields); run reports at `reports/<repo>/<task>-<date>.md` with YAML front matter and `### [SEVERITY]` findings; write-tier runs leave a local `meute/<task>-<date>` branch that is never pushed; `lib/inbox.py dump` prints one JSON object.
 - **Caution:** the per-report form of `lib/inbox.py` shells out to `bin/meute show`, which marks a report as read. Read files and `state/log` directly instead.
 - **Verified submit paths:** there is no generic submit interface. The real ones are `meute promote` (a finding becomes a tier-3 ticket) and `meute plan --enqueue` (read-only runs). Shell out to these; never write `state/tickets.yaml` or the plan queue.
-- **Overlap risk: high.** Meute already has a web UI and a TUI with an inbox and a Run tab. État-major must not rebuild them. Its README still says "no web UI", which is stale.
+- **Overlap risk: high.** Meute's repository contains a web UI and a TUI (files and routes found in its source; their behaviour was not run) with an inbox and a Run tab. État-major must not rebuild them. Its README still says "no web UI", which is stale.
 - **Unverified:** the exact JSON schema of `inbox.py dump` against live state; how the feature branch with the web UI differs from `main`.
 
 ### Codeman 1.51.1 (MIT)
@@ -79,7 +80,7 @@ Findings below come from reading each project's code and docs on 2026-11-21. "Ve
 - **Session links:** the API returns no URL. `/session/:id` serves a single-session window, and the SPA reads a `#session=<id>` fragment. Which of these a phone browser honours is unverified.
 - **Auth:** optional HTTP Basic plus a cookie. No bearer or API-key scheme. With no password configured, nothing is enforced.
 - **Multi-user:** opt-in. It separates workspaces and filters sessions by owner. **It does not isolate credentials.** By its own documentation all sessions run as one OS account and share one tmux socket, one `~/.claude`, and therefore one Claude login and subscription. A per-launch `CLAUDE_CONFIG_DIR` or `CODEX_HOME` override is the only lever, and it is a privileged key (admin or granted users only). Whether it survives restart for non-granted users is unverified, and it was not tested end to end.
-- **Voice:** dictation streams audio to Anthropic's speech endpoint using the server's own Claude login. Under a shared account, a second user's speech goes through the owner's login. The voice design doc was read; full implementation was not verified.
+- **Voice (unverified):** a design document says dictation streams audio to Anthropic's speech endpoint using the server's own Claude login, which would send a second user's speech through the owner's login. Only the design document was read, so the implementation is unverified.
 
 ## Data contracts
 
@@ -119,18 +120,18 @@ Git-backed Markdown with YAML frontmatter. It extends the merged task-file contr
 
 - **Vision file:** vision, goals and links to architecture diagrams (`diagrams/*.mmd`).
 - **Milestones:** id, title, target date, `horizon` (`now`, `next`, `later`), outcome.
-- **Tasks:** id, title, milestone, owner, priority, acceptance criteria (list), `depends_on` (task ids), `targets` (file paths, module paths or symbol IDs), and an intent status.
+- **Tasks:** id, title, optional `milestone`, owner, priority, acceptance criteria (list), `depends_on` (task ids), `targets` (file paths, module paths or symbol IDs), and an intent status.
 - **Diagrams:** Mermaid files and wireframes (image or Mermaid) linked from a milestone or task.
 
-Stored statuses are only `draft`, `ready`, `blocked`, `done`, as the merged validator enforces. The Kanban columns In Progress and Review are derived (see below). `done` needs recorded human acceptance. Trust assumption: Git author metadata cannot prove a human wrote a change; in the trusted-family setup that is accepted, and no approval mechanism is designed here.
+The hierarchy stays initiative, project, task as in the merged contract; `milestone` is an added optional link, and `budget_tokens` (a runner-era field) is dropped in M2. Task ids are unique within a project, so the link key is `<project>/<id>`. Stored statuses are only `draft`, `ready`, `blocked`, `done`, as the merged validator enforces. The Kanban columns In Progress and Review are derived (see below). `done` needs a recorded human acceptance: `accepted_by` and `accepted_on` fields written together with `status: done` (added to the contract in M2). Trust assumption: Git author metadata cannot prove a human wrote a change; in the trusted-family setup that is accepted, and no approval mechanism is designed here.
 
 A `targets` entry that no longer resolves in the current RepoIndex is shown as a stale mapping, not hidden.
 
 ### ProgressEvidence
 
-A derived record linking a task to proof. Evidence is gathered from Git and GitHub and cached; the claim "done" never comes from an agent's own assertion.
+A derived record linking a task to proof. Evidence is gathered from Git and GitHub and cached; the claim "done" never comes from an agent's own assertion. An `evidence` list in a task file (see the task-file contract) is a set of declared references, i.e. hints to look up. It counts as proof only after the referenced PR, check or release is confirmed in Git or GitHub.
 
-Linking key, in order of preference: a commit trailer `Task: <id>`, a branch named `task/<id>-...`, a PR body line `Task: <id>`. Work with none of these is **disconnected work**.
+Linking key, in order of preference: a commit trailer `Task: <project>/<id>`, a branch named `task/<project>-<id>-...`, a PR body line `Task: <project>/<id>`. Work with none of these is **disconnected work**.
 
 Each task carries an evidence ladder. A rung is shown only if a record proves it; otherwise it is `unverified`:
 
@@ -142,9 +143,9 @@ Each task carries an evidence ladder. A rung is shown only if a record proves it
 | reviewed | A PR review approval, or a recorded human review |
 | merged | A merged PR or a commit on the default branch |
 | shipped | A release or tag containing the merge commit |
-| accepted | A recorded human acceptance, required for `done` |
+| accepted | `accepted_by` and `accepted_on` present alongside `status: done` |
 
-Derived columns: **In Progress** is a linked branch or open draft PR with no merged PR. **Review** is an open, non-draft PR. **Blocked** is the stored status or an unmet `depends_on`.
+Derived columns: **In Progress** is a linked branch or open draft PR with no merged PR. **Review** is an open, non-draft PR, or a merged PR whose task has no acceptance yet. **Blocked** is the stored status or an unmet `depends_on`.
 
 ### ExecutionLink
 
@@ -170,9 +171,9 @@ The views are connected: a task highlights its target nodes; a module shows its 
 
 ## Integration boundaries
 
-- **Codeman:** read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Basic auth credentials come from configuration by reference (an environment variable name), never stored. Launching is always behind explicit human approval, and État-major never sets credential-bearing `envOverrides` for anyone.
+- **Codeman:** read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Basic auth credentials come from configuration by reference (an environment variable name), never stored. Launching is an optional later hand-off, always behind explicit human approval, and État-major never sets `envOverrides` at all: any per-person credential directory is configured in Codeman, outside État-major. Each launch is one explicit human click; nothing is queued or retried.
 - **Meute:** read `state/log` and `reports/**` directly; submit only through `meute promote` or `meute plan --enqueue`, after human approval. No competing queue.
-- **Git and CI:** `git log` and `gh` for PRs, reviews, checks and releases. Read-only.
+- **Git and CI:** `git log` and `gh` for PRs, reviews, checks and releases. Read-only, using the user's existing `gh` login; État-major stores no token.
 - **Trail:** through the RepoIndex adapter, behind an interface so another indexer can replace it.
 
 ## Security and trust

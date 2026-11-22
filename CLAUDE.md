@@ -14,7 +14,7 @@ Governing documents: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARC
 1. Never store, proxy, harvest or pool Claude or Codex credentials. Never switch accounts to dodge limits. Configuration refers to secrets by pointer (an env var name or path), never by value.
 2. Git holds durable intent (Markdown + YAML frontmatter, Mermaid). Derived data lives in a rebuildable cache that is never authoritative. Stored task statuses are only `draft`, `ready`, `blocked`, `done`; In Progress and Review are derived from Git and PR evidence. Only a human records acceptance for `done`.
 3. Every completion claim links to a commit, PR, check, release or human acceptance. Without proof it is `unverified`. Never use an agent's self-estimate as progress.
-4. Never run, schedule or queue agent work. Codeman owns interactive sessions and Meute owns unattended runs. Exactly one scheduler owns any job. Launching or submitting work happens only through their own interfaces and only after explicit human approval.
+4. Never run, schedule or queue agent work. Codeman owns interactive sessions and Meute owns unattended runs. Exactly one scheduler owns any job. État-major itself starts and queues nothing. A later optional hand-off (M7) may call their documented interfaces only on an explicit human click per action, stores nothing about the request beyond an ExecutionLink, and never sets credential-bearing environment overrides.
 5. The core must work with no Codeman, no Meute and no running agent.
 6. Treat the indexer as replaceable: Trail through a versioned adapter, pinned version, `meta.version` checked. Index a copy or worktree, never write into a source repository, and never run `trail init`.
 7. Untrusted content (repo Markdown, Mermaid, AI-generated text) is sanitized before rendering and labelled by provenance.
@@ -31,7 +31,7 @@ See the roadmap: M0 reconcile design; M1 RepoIndex adapter for Trail; M2 Project
 - Graph UI: Cytoscape.js (lean) over React Flow; Mermaid for diagrams. Confirm in M4.
 - Phone terminal and voice: Codeman (separate). Herdr is a candidate only if needed later.
 - Task format: our own contract (see `docs/spikes/phase1-spike.md`); Backlog.md is a reference only.
-- Avoid: Vibe Kanban (maintainer status doubtful), amux (Commons Clause), Agent Kanban (FSL), account switching or pooling.
+- Avoid: Vibe Kanban (maintainer status doubtful, unverified), amux (Commons Clause), Agent Kanban (FSL), account switching or pooling.
 
 ## Open questions
 Cache format (SQLite or JSON); language coverage beyond Python; large-repository limits; the Codeman deep link that works on a phone; the live schema of Meute's `inbox.py dump`; the second user's CLI, account eligibility and credential isolation; repo name, license header and demo workspace. Re-read Anthropic's current terms before any release; they changed several times in 2026.
