@@ -24,7 +24,9 @@ workspace/
   tasks/netlens/0042-...md                   # Task (existing contract)
 ```
 
-Ids are unique within their kind and project. Cross-references use `kind:project/id`, for example `feature:netlens/0031`.
+**Reference grammar.** Every cross-reference is `<kind>:<id>`. Project-scoped records (`feature`, `task`, `milestone`) use `<project>/<n>`, for example `feature:netlens/0031`, `task:netlens/0042`, `milestone:netlens/m3`. `research` and `decision` ids are global (`research:0007`, `decision:0012`). A finding inside research is `research:0007#f1`. Code references are prefixed by layer: `fp:n:<component>` or `fp:f:<path>` (Floorplan), `trail:<path>#<symbol>` (Trail). Loaders reject any other spelling.
+
+**Minimum for Slice 1.** Records need only `id`, `status`, `provenance`, and for research a `source` (url, date). Every other field shown below is optional and may be added when a view needs it; do not build validators for fields nothing reads yet.
 
 ## Records
 
@@ -84,31 +86,32 @@ project: netlens
 title: Live latency graph
 problem: Users cannot see latency trends during a scan.
 outcome: A graph of round-trip time per host over the last 5 minutes.
-status: planned             # stored intent; see lifecycle
+status: planned             # stored intent only: idea | researching | proposed | planned
 priority: 2
 research: [research:0007]
-decisions: [decision:0012]
-milestones: [m3]
-tasks: [netlens/0042, netlens/0043]
+decisions: [decision:0012]   # approved/rejected/postponed come from the linked Decision
+milestones: [milestone:netlens/m3]
+tasks: [task:netlens/0042, task:netlens/0043]
 acceptance:
   - id: a1
     text: Graph updates at least once per second.
   - id: a2
     text: Graph is covered by an automated test.
 architecture:               # ArchitectureLink records
-  - ref: n:ui.hostdetail    # planned or existing component
-    relation: modifies      # new | modifies | uses
-    state: planned          # planned | built
-    provenance: human
-  - ref: f:app/src/main/kotlin/net/Latency.kt
+  - ref: fp:n:ui.hostdetail            # existing component this feature changes
+    relation: modifies                 # new | modifies | uses
+  - ref: fp:f:app/src/main/kotlin/net/Latency.kt
     relation: new
-    state: planned
-    provenance: human
 ```
 
 ### ArchitectureLink
 
-Embedded in a Feature (above) or a Task. Fields: `ref` (a Floorplan `n:` or `f:` id, a Trail `path#symbol` id, or a path), `relation` (`new`, `modifies`, `uses`), `state` (`planned` or `built`), `provenance`, and optionally `repository` and `revision`. `state: built` is derived: the ref exists in the indexed revision. A planned ref that never appears is a **gap**; an existing ref a feature claims to modify that has vanished is **stale**.
+Embedded in a Feature or a Task, never a separate file. Stored fields: `ref` (layer-prefixed, see the grammar) and `relation` (`new`, `modifies`, `uses`); `provenance` is `human` unless stated. Nothing about built or planned is stored; it is computed against an indexed revision:
+
+- `new`: ref absent is a **gap** (planned, not yet built); ref present is **built**.
+- `modifies` or `uses`: ref present is **existing** (not evidence of progress); ref absent is **stale** (the link points at code that no longer exists, or was renamed; the rename reconciler in Phase 2 resolves renames, until then a rename reads stale).
+
+**Precedence.** A Feature's ArchitectureLinks are the authoritative statement of planned architecture. A Floorplan `plan.json` blueprint is a generated view of the `new` links (it cannot reference existing code); it is never edited as the source.
 
 ## Lifecycle
 
@@ -116,14 +119,18 @@ Embedded in a Feature (above) or a Task. Fields: `ref` (a Floorplan `n:` or `f:`
 
 | Stage | Stored in the file? | How it is known |
 | --- | --- | --- |
-| Idea, Researching, Proposed | Yes (human intent) | The Feature file; Researching has at least one ResearchArtifact |
-| Approved, Rejected, Postponed | Yes, with a linked Decision | A Decision with `decided_by: human` |
+| Idea, Researching, Proposed | Yes (human intent) | The Feature file; Researching expects at least one ResearchArtifact |
+| Approved, Rejected, Postponed | **Derived from the linked Decision**, which is the single authority | A Decision with `decided_by: human`. A Feature file may not say `planned` without an approved Decision |
 | Planned | Yes | The human has created tasks from the approved Feature |
-| Implementing | **Derived** | A linked task has a branch or open PR, and no acceptance yet |
-| Verified | **Derived** | Every acceptance item has evidence (passing check on the merge, or recorded human review) and the tasks are accepted by a human |
+| Implementing | **Derived** | A linked task has a branch or open draft PR (the Kanban In Progress column) and is not yet accepted |
+| Verified | **Derived** | All linked tasks are merged with a passing check on the merge commit, and the Feature carries `accepted_by` and `accepted_on` (the same human-acceptance fields as tasks, added with the Phase 4 contract). Per-acceptance-item verification is an open question; until then the human states in the acceptance that the criteria are met |
 | Released | **Derived** | A release or tag contains the merge commits |
 
 Not every idea moves forward. Moving a Feature to Approved needs a human-recorded Decision; nothing auto-advances.
+
+**Kanban mapping.** In Progress = branch or open draft PR; Review = open non-draft PR, or merged without acceptance; Done = `status: done` with acceptance; Blocked = stored status or unmet dependency. A task marked `done` with no PR evidence is shown Done but `unverified`.
+
+**Tooling never decides for a human.** The importer, the UI and any agent write only `proposed`, `unreviewed` or `draft` values. They never write `approved`, `reviewed`, `decided_by`, `accepted_by` or `accepted_on`. A test enforces this. Git author metadata cannot prove a human made a change; the trusted-family setup accepts that and designs no further mechanism.
 
 ## Two-way navigation (what the model must answer)
 

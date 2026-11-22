@@ -26,7 +26,7 @@ Last updated 2026-11-21. Working title. Status: pre-implementation. This file is
 
 ## North stars
 
-> **Superseded** by the three views and goals in the architecture document. Phone terminal and voice now belong to Codeman; unattended runs to Meute.
+> **Superseded** by the four views and goals in the architecture document. Phone terminal and voice now belong to Codeman; unattended runs to Meute.
 
 Four requirements every decision is judged against. Items 1 to 3 shape the first releases; item 4 is on the roadmap.
 

@@ -4,11 +4,11 @@ Evaluated 2026-11-21 by reading source and running the deterministic parts on co
 
 ## Decision
 
-Use two engines with distinct jobs, consumed read-only through adapters, and skip the third.
+Use two engines with distinct jobs, consumed read-only through adapters, and skip the third. The case for two engines rests on verified, mechanical capabilities (Floorplan: cross-language files, imports and routes, blueprints; Trail: function nodes and call edges with confidence). Floorplan's LLM-written architecture layer is **unverified**, so the two-engine decision is provisional until that layer is tried on a real repository.
 
 | Tool | Role in État-major | Why |
 | --- | --- | --- |
-| **Floorplan** | Architecture layer: components, files, imports, endpoints, flows, blueprints | Cross-language, wide and cheap to build; its map is the best entry point for "what exists". |
+| **Floorplan** | Architecture layer: files, imports, endpoints, blueprints; components and flows if its architecture layer proves useful | Cross-language and cheap to build mechanically; the mechanical map is directory-level until a model-written layer is added and verified. |
 | **Trail** | Symbol layer: functions, classes, call and extends edges with confidence labels | Floorplan has no call edges and no per-edge confidence. |
 | **Understand Anything** | Skip as an indexer. Optional, manual, advisory prose only | Its graph is LLM-assembled, not reproducible and costs model quota; it duplicates Trail. |
 
@@ -19,7 +19,7 @@ Two engines are justified only because each does something the other demonstrabl
 Source: https://github.com/haydenschmitty/floorplan
 
 **VERIFIED**
-- MIT license. First commit 2026-10-28; 230 commits and 12 releases in about three weeks; one author wrote most commits. About 6,000 stars. Pre-1.0 and moving fast.
+- MIT license. First commit 2026-10-28; 230 commits and 12 releases in about three weeks; one author wrote most commits. Pre-1.0 and moving fast.
 - Zero dependencies and no install hooks. The Node scripts run straight from a clone (`node skills/floorplan/scripts/*.mjs <root>`). It is a Claude Code and Codex skill; the scripts do the mechanical work and an LLM writes the architecture layer.
 - Scan and build need no model and no key. On a 5-file Python repo: about 0.4 s. On a 271-file Kotlin, Python, Rust and shell repo (39,655 lines): 13 nodes and 547 import edges in about 1.3 s.
 - Outputs are plain JSON with schema markers: `graph.json` (`floorplan/graph@1`), `architecture.json` (`floorplan/architecture@1`, documented in the repo's `schema.md`), `plan.json` (`floorplan/plan@1`, documented in `blueprint.md`), `recent-work.json`. Every script has a `--json` mode with stable exit codes and a documented unattended workflow.
@@ -50,15 +50,15 @@ See [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md) for the full 
 Source: https://github.com/Egonex-AI/Understand-Anything
 
 **VERIFIED**
-- A Claude Code plugin (also Codex and others). `/understand` is a long prompt that orchestrates about a dozen LLM subagents. About 93,000 stars; 442 commits since 2026-04-19.
+- A Claude Code plugin (also Codex and others). `/understand` is a long prompt that orchestrates about a dozen LLM subagents. 442 commits since 2026-04-19.
 - Its deterministic scripts (file scan, import map, per-file structure) ran in under a second on a copy of this repo: 47 functions, 8 classes, call names scoped to one file. They are intermediate steps, not a graph.
-- The final graph (`.ua/knowledge-graph.json`: 27 node types, 38 edge types, weights 0 to 1, layers, tour) is **assembled by an LLM**. There is no command that produces it without a model. Cross-file `calls` edges are LLM-inferred, so node and edge sets differ between runs.
+- The final graph (`.ua/knowledge-graph.json`: 27 node types, 38 edge types, weights 0 to 1, layers, tour) is **assembled by an LLM** per its own source. There is no command that produces it without a model. Cross-file `calls` edges are LLM-inferred, so node and edge sets are expected to vary between runs (by design; not observed here).
 - Source is sent to whichever model the host agent uses.
 - Path-based ids are stable.
 
 **UNVERIFIED:** a full run and its token cost.
 
-**Recommendation:** skip as an indexer. If summaries, tours or a domain view are wanted, run it manually and read `.ua/knowledge-graph.json` read-only, joined to Trail on `function:<path>:<name>`, labelled `ai-generated`.
+**Recommendation:** skip as an indexer. If summaries, tours or a domain view are wanted, run it manually and read `.ua/knowledge-graph.json` read-only, joined to Trail by splitting `function:<path>:<name>` into Trail's `<path>#<name>`, labelled `ai-generated`.
 
 ## Capability matrix
 
@@ -70,7 +70,7 @@ Source: https://github.com/Egonex-AI/Understand-Anything
 | Call edges | No | Yes, with confidence | LLM-inferred, numeric weight |
 | HTTP endpoints and routes | Yes | No | No |
 | Planned-software blueprints | Yes (greenfield only) | No | No |
-| Recent-work highlighting | Yes | No | No |
+| Recent-work highlighting | Yes (model-written; unverified) | No | No |
 | Deterministic and reproducible | Yes (mechanical layer) | Yes | No |
 | Needs a model | For architecture layer and descriptions | No | For the graph itself |
 | Prose summaries and tours | Some | No | Yes, its unique value |
@@ -79,13 +79,14 @@ Source: https://github.com/Egonex-AI/Understand-Anything
 
 État-major reads artifacts; it does not run the model-backed steps.
 
-1. **Floorplan adapter.** Reads `graph.json` (and `plan.json`, `architecture.json`). Accepts only `floorplan/graph@1`; any other schema string fails with a clear error. Pin a Floorplan commit and parse a recorded fixture in CI. The adapter may invoke the deterministic `scan`, `build` and `refresh` scripts on a copy or worktree. It never runs the LLM steps, `serve.mjs` or the Ask bar. The architecture layer is produced by a human or by an agent the human started (in Codeman or Meute), then read as a local cache; a human may commit an approved `architecture.json` to Git.
+1. **Floorplan adapter.** Reads `graph.json` (and `plan.json`, `architecture.json`). Accepts only `floorplan/graph@1`; any other schema string fails with a clear error. Pin a Floorplan commit and parse a recorded fixture in CI. The adapter may invoke the deterministic `scan`, `build` and `refresh` scripts on a copy or worktree. It never runs the LLM steps, `serve.mjs` or the Ask bar. The model-backed architecture layer is something a human runs manually, in their own agent session, outside État-major and never on a schedule; running it sends source to the model provider, which the human accepts knowingly. État-major then reads the resulting `architecture.json` as a local cache, and a human may commit an approved copy to Git. Floorplan writes its output into a `floorplan/` folder of the target, so run it on a copy or worktree.
 2. **Trail adapter.** As described in the architecture document.
-3. **Join.** Both layers are keyed by repository-relative file path, with a revision SHA. Floorplan `f:<path>` ids and Trail `path#symbol` ids share the path prefix.
-4. **Metadata sidecar.** Feature, milestone and research links live in État-major's own files and point at `n:<component>` or `f:<path>` ids. Floorplan's own `annotations` are not used.
-5. **Rename reconciler.** Because file ids are paths, a reconciler maps old paths to new ones between runs (Git rename detection) so links survive moves.
-6. **Planned versus built overlay.** Diff the blueprint's `f:` ids against the current code map: planned-only, built, existing.
-7. **Safety.** Strip the absolute root and remote from imported data; treat all text as untrusted when rendering.
+3. **Provenance.** Trail edges keep their own confidence. Floorplan's links are regex-resolved, so they map to `inferred`; `verified` is reserved for parse-derived facts from a deterministic tool (for example file existence, line counts, a resolved parse). Floorplan's `inferred: true` http links stay `inferred`.
+4. **Join.** Both layers are keyed by repository-relative file path, with a revision SHA. Floorplan `f:<path>` ids and Trail `path#symbol` ids share the path prefix.
+5. **Metadata sidecar.** Feature, milestone and research links live in État-major's own files and point at `n:<component>` or `f:<path>` ids. Floorplan's own `annotations` are not used.
+6. **Rename reconciler.** Because file ids are paths, a reconciler maps old paths to new ones between runs (Git rename detection) so links survive moves.
+7. **Planned versus built overlay.** Diff the blueprint's `f:` ids against the current code map: planned-only, built, existing.
+8. **Safety.** Strip the absolute root and remote from imported data; treat all text as untrusted when rendering.
 
 ## Open uncertainties
 

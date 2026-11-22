@@ -9,13 +9,13 @@ Governing documents: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARC
 1b. Understand: a verifiable map of how each repository works, with provenance and coverage limits always visible.
 2. Build: a Git-backed roadmap and board linked to the code it touches.
 3. Progress: completion shown only through evidence (commits, PRs, checks, tests, releases, human acceptance), otherwise `unverified`.
-4. A second family user later, under their own logins, once credential isolation is verified (see the architecture document).
+4. A second user later, under their own logins, once credential isolation is verified in the Codeman deployment (see the architecture document). État-major itself handles no credentials.
 
 ## Hard constraints
 1. Never store, proxy, harvest or pool Claude or Codex credentials. Never switch accounts to dodge limits. Configuration refers to secrets by pointer (an env var name or path), never by value.
 2. Git holds durable intent (Markdown + YAML frontmatter, Mermaid). Derived data lives in a rebuildable cache that is never authoritative. Stored task statuses are only `draft`, `ready`, `blocked`, `done`; In Progress and Review are derived from Git and PR evidence. Only a human records acceptance for `done`.
 3. Every completion claim links to a commit, PR, check, release or human acceptance. Without proof it is `unverified`. Never use an agent's self-estimate as progress.
-4. Never run, schedule or queue agent work. Codeman owns interactive sessions and Meute owns unattended runs. Exactly one scheduler owns any job. État-major itself starts and queues nothing. A later optional hand-off (M7) may call their documented interfaces only on an explicit human click per action, stores nothing about the request beyond an ExecutionLink, and never sets credential-bearing environment overrides.
+4. Never run, schedule or queue agent work. Codeman owns interactive sessions and Meute owns unattended runs. Exactly one scheduler owns any job. État-major itself starts and queues nothing. A later optional hand-off (roadmap Phase 6) may call their documented interfaces (roadmap Phase 6) only on an explicit human click per action, stores nothing about the request beyond an ExecutionLink, and never sets credential-bearing environment overrides.
 5. The core must work with no Codeman, no Meute, no live Floorplan service and no running agent.
 5b. Research and decisions live in Git as Markdown. AI-produced research is `ai-generated` and `unreviewed` until a person checks its sources; a finding without a source URL and date is `unsourced`. Never invent threads or citations. Only a human records a Decision. Check `decisions/` before proposing a feature.
 5c. ChatGPT is the preferred external research partner, especially for Reddit. The handoff is manual: État-major writes a brief, the human reviews and pastes it, and brings the answer back for review. No automatic sending, no scraping of ChatGPT sessions, no undocumented API, no background research agent.

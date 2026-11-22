@@ -22,7 +22,7 @@ Rules for every phase:
 
 Floorplan, Trail and Understand Anything inspected and run on copies; decision recorded in [TOOL-EVALUATION.md](TOOL-EVALUATION.md): Floorplan for the architecture layer, Trail for symbols, Understand Anything skipped as an indexer.
 
-- **Acceptance (met):** a current-state map generated on two repositories; a blueprint generated for a proposed feature; exported JSON inspected; integration feasibility and limits documented.
+- **Acceptance (met):** mechanical (model-free) maps generated on two repositories; a blueprint built from a hand-written `plan.json` for a proposed feature; exported JSON inspected; integration feasibility and limits documented.
 - **Still unverified:** the quality and per-refresh cost of an LLM-written Floorplan architecture layer. Verify on a real repository before relying on the architecture layer.
 
 ## Slice 1: the thinnest research-to-code trace
@@ -31,11 +31,11 @@ The first thing to build, before any web UI. It proves the model.
 
 - **Depends on:** Phase 1.
 - **Build:**
-  - Loaders (with validators) for ResearchArtifact, Decision, Feature and ArchitectureLink Markdown files, following [TRACEABILITY.md](TRACEABILITY.md).
-  - A reader for `floorplan/graph@1` that rejects any other schema string and strips the absolute root and remote.
-  - `etat-major trace feature:<project>/<id>`: prints research, decisions, the feature's target components and files, and open acceptance items, each with provenance, marking missing links `unverified` or `gap`, and checking that each ArchitectureLink ref exists in the supplied graph.
+  - Loaders (with validators) for ResearchArtifact, Decision and Feature Markdown files (ArchitectureLinks are embedded in a Feature), following [TRACEABILITY.md](TRACEABILITY.md), plus an `etat-major` console script entry in `pyproject.toml`.
+  - A reader for `floorplan/graph@1` that rejects any other schema string and strips the absolute root and remote (sanitize the recorded fixture before committing it).
+  - `etat-major trace feature:<project>/<id>`: prints research, decisions, the feature's target components and files, and acceptance items (all open until Phase 5), each with provenance, marking missing links `unverified` or `gap`, and checking that each ArchitectureLink ref exists in the supplied graph.
 - **Fixtures:** a small demo workspace with one research artifact, one decision (plus one rejected decision), one feature and a recorded `graph.json`. Tests parse the recorded files, never the network.
-- **Done when:** on the demo workspace, `trace` prints the full chain; a ref that no longer exists is reported `stale`; a planned ref with no matching file is reported `gap`; a finding without a source URL is flagged `unsourced`; a rejected decision is listed and not hidden.
+- **Done when:** on the demo workspace, `trace` prints the full chain; a `modifies` or `uses` ref that no longer exists is reported `stale` (a renamed file reads stale until Phase 2); a `new` ref with no matching file is reported `gap`; a finding without a source URL is flagged `unsourced`; `etat-major decisions list` shows rejected and postponed decisions alongside approved ones; `trace` also lists decisions that cite the same research.
 
 ## Phase 2: repository visualization
 
@@ -53,7 +53,7 @@ The first thing to build, before any web UI. It proves the model.
 
 - **Depends on:** Slice 1, and Phase 2 for the architecture links.
 - **Build:** full loaders and the lifecycle (Idea to Released, plus Rejected and Postponed); the Decision search ("has this question been decided?"); the manual ChatGPT handoff, that is `research brief` (writes a prompt file after a redaction check) and `research import` (parses a pasted answer into an `unreviewed`, `ai-generated` draft, flags unsourced items, keeps URLs verbatim); the review step that marks an artifact `reviewed`.
-- **Done when:** a brief is generated for a feature with no local paths, hostnames or keys; pasting a recorded sample answer yields a draft whose unsourced items are flagged; an unreviewed artifact cannot back an approved Decision; a stored Feature file cannot hold a derived lifecycle stage; nothing is sent anywhere automatically.
+- **Done when:** the importer and UI never write `approved`, `reviewed`, `decided_by`, `accepted_by` or `accepted_on` (tested); a brief is generated for a feature with no local paths, hostnames or keys; pasting a recorded sample answer yields a draft whose unsourced items are flagged; an unreviewed artifact cannot back an approved Decision; a stored Feature file cannot hold a derived lifecycle stage; nothing is sent anywhere automatically.
 
 ## Phase 4: planning visualization
 
@@ -76,12 +76,12 @@ The first thing to build, before any web UI. It proves the model.
 - **Codeman:** show linked sessions from `GET /api/sessions`; open one by deep link; launch one for an approved task on an explicit human click. État-major never sets `envOverrides`. Verify against the real server first.
 - **Cross-repository portfolio and mobile refinement.**
 - **Hardening:** large-repository limits, incremental reindex, freshness alerts, and the credential-isolation check for a second user (separate OS users with separate Codeman instances, or verified per-user config directories, plus account-eligibility confirmation with Anthropic).
-- **Done when:** with all services stopped nothing else changes; with them running a task shows its ExecutionLink; no second queue or terminal exists; a large-repository run is documented; the isolation check passes or the second user is deferred with the reason recorded.
+- **Done when:** with all services stopped nothing else changes; with them running a task shows its ExecutionLink; no second queue or terminal exists; a large-repository run is documented; the isolation check result (pass, or fail with the reason) is recorded and the second user is added only on a pass.
 
 ## Dependency order
 
-Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) → Phase 4 → Phase 5 → Phase 6.
+Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) → Phase 4 → Phase 5 → Phase 6. The Meute `generated` rung of the evidence ladder arrives in Phase 6, not Phase 5. The "module to why" query is tested in Phase 5.
 
 ## Recommended next step
 
-Build Slice 1. It is the smallest piece that proves the product's central claim (a navigable research-to-code trace), needs no web UI and no running service, and uses a recorded Floorplan `graph.json` fixture. Before Phase 2, spend one session verifying what an LLM-written Floorplan architecture layer actually looks like and costs on a real repository.
+Build Slice 1. It is the smallest piece that proves the product's central claim (a navigable research-to-code trace), needs no web UI and no running service, and uses a recorded Floorplan `graph.json` fixture. Before Phase 2, verify what a model-written Floorplan architecture layer looks like and costs on a real repository. A human runs that once, manually, in their own agent session on a copy of the repository (this sends source to the model provider); it is not scheduled and État-major never runs it.

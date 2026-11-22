@@ -16,7 +16,7 @@ The central relationship is traceable in both directions: **Research → Decisio
 ## Non-goals
 
 - Running or supervising coding agents. Codeman owns interactive sessions; Meute owns unattended runs.
-- A scheduler, queue or runner of any kind.
+- A scheduler, queue or runner of any kind. The only exception is a later, click-gated hand-off to Codeman or Meute through their own documented interfaces (roadmap Phase 6); État-major starts and queues nothing itself.
 - A terminal or tmux subsystem.
 - Handling Claude or Codex authentication in any way: no subscription proxy, token pooling or account switching.
 - A proprietary planning database. Git is the source of truth for intent, including research and decisions.
@@ -93,7 +93,7 @@ Findings below come from reading each project's code and docs on 2026-11-21. "Ve
 
 Four small, tool-neutral contracts. Each is a documented file or JSON shape with a version field. None depends on Trail, Codeman or Meute being installed.
 
-Provenance values used throughout: `verified` (derived by a deterministic tool), `inferred` (heuristic), `ai-generated` (a model wrote it), `human` (a person asserted it). The UI always shows provenance and never upgrades it.
+Provenance values used throughout: `verified` (a fact derived by a deterministic parse or lookup), `inferred` (heuristic), `ai-generated` (a model wrote it), `human` (a person asserted it). The UI always shows provenance and never upgrades it.
 
 ### RepoIndex
 
@@ -136,7 +136,7 @@ Git-backed Markdown with YAML frontmatter. It extends the merged task-file contr
 - **Tasks:** id, title, optional `milestone`, owner, priority, acceptance criteria (list), `depends_on` (task ids), `targets` (file paths, module paths or symbol IDs), and an intent status.
 - **Diagrams:** Mermaid files and wireframes (image or Mermaid) linked from a milestone or task.
 
-The hierarchy stays initiative, project, task as in the merged contract; `milestone` is an added optional link, and `budget_tokens` (a runner-era field) is dropped in M2. Task ids are unique within a project, so the link key is `<project>/<id>`. Stored statuses are only `draft`, `ready`, `blocked`, `done`, as the merged validator enforces. The Kanban columns In Progress and Review are derived (see below). `done` needs a recorded human acceptance: `accepted_by` and `accepted_on` fields written together with `status: done` (added to the contract in M2). Trust assumption: Git author metadata cannot prove a human wrote a change; in the trusted-family setup that is accepted, and no approval mechanism is designed here.
+The hierarchy stays initiative, project, task as in the merged contract; `milestone` is an added optional link, and `budget_tokens` (a runner-era field) is dropped in roadmap Phase 4. Task ids are unique within a project, so the link key is `<project>/<id>`. Stored statuses are only `draft`, `ready`, `blocked`, `done`, as the merged validator enforces. The Kanban columns In Progress and Review are derived (see below). `done` needs a recorded human acceptance: `accepted_by` and `accepted_on` fields written together with `status: done` (added to the contract in roadmap Phase 4). Trust assumption: Git author metadata cannot prove a human wrote a change; in the trusted-family setup that is accepted, and no approval mechanism is designed here.
 
 A `targets` entry that no longer resolves in the current RepoIndex is shown as a stale mapping, not hidden.
 
@@ -185,7 +185,7 @@ The views share one model and link in both directions: click a module to see the
 
 ## Integration boundaries
 
-- **Codeman:** read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Basic auth credentials come from configuration by reference (an environment variable name), never stored. Launching is an optional later hand-off, always behind explicit human approval, and État-major never sets `envOverrides` at all: any per-person credential directory is configured in Codeman, outside État-major. Each launch is one explicit human click; nothing is queued or retried.
+- **Codeman:** read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Codeman's own service password, if set, is read at call time from an environment variable named in configuration and never stored. These are not Claude or Codex credentials. Launching is an optional later hand-off, always behind explicit human approval, and État-major never sets `envOverrides` at all: any per-person credential directory is configured in Codeman, outside État-major. Each launch is one explicit human click; nothing is queued or retried.
 - **Meute:** read `state/log` and `reports/**` directly; submit only through `meute promote` or `meute plan --enqueue`, after human approval. No competing queue.
 - **Git and CI:** `git log` and `gh` for PRs, reviews, checks and releases. Read-only, using the user's existing `gh` login; État-major stores no token.
 - **Floorplan:** read its `graph.json`, `architecture.json` and `plan.json` through a versioned adapter that accepts only known schema strings. Run only its deterministic scripts, on a copy or worktree. It stays independently upgradeable; État-major does not fork it.
@@ -202,7 +202,7 @@ The views share one model and link in both directions: click a module to see the
 - **Telemetry:** disable Trail telemetry in the adapter's environment.
 - **Provenance:** every completion claim links to a commit, PR, check, release or human acceptance, otherwise it is `unverified`.
 
-## Technology (recommendation, to confirm in the first UI milestone)
+## Technology (recommendation, to confirm in roadmap Phase 2)
 
 - **Backend:** Python, reusing the merged validator (`pydantic`, `PyYAML`). FastAPI to serve a read-only JSON API and static assets. The derived cache is SQLite or JSON files, rebuildable from Git and the indexer.
 - **Frontend:** a thin, server-rendered UI with HTMX. For the architecture map, start by embedding or linking Floorplan's own generated viewer; add Cytoscape.js only for the overlays and the function-level layer that Floorplan does not provide. Cytoscape.js needs no UI framework, supports compound nodes for module nesting and handles large graphs; React Flow would commit the project to a React single-page app for little gain here. Mermaid renders diagrams client-side.
