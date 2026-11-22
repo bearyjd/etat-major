@@ -11,9 +11,8 @@ from etat_major.workspace import Issue
 MAX_DEPTH = 64
 _IDENT = r"[a-zA-Z_][a-zA-Z_0-9]*"
 _WORD = re.compile(_IDENT)
-_SEGMENT = r"[a-zA-Z0-9_][a-zA-Z0-9_.-]*"
-_PROJECT = re.compile(rf":?{_SEGMENT}(?::{_SEGMENT})*")
-_DIRECTORY = re.compile(rf"{_SEGMENT}(?:/{_SEGMENT})*")
+PROJECT_SEGMENT = r"[a-zA-Z0-9_][a-zA-Z0-9_.-]*"
+_PROJECT = re.compile(rf":?{PROJECT_SEGMENT}(?::{PROJECT_SEGMENT})*")
 _COMMENT = re.compile(r"/\*|\*/")
 _TOKEN = re.compile(
     rf"""(?P<skip>\s+|//[^\n]*)|(?P<comment>/\*)"""
@@ -127,8 +126,14 @@ class Script:
     tokens: tuple[Token, ...]
     closing: tuple[int, ...]
 
-    def issue(self, field: str, index: int, message: str) -> Issue:
-        return Issue(self.file.as_posix(), field, f"line {self.tokens[index].line}: {message}")
+    def issue(self, field: str, index: int, message: str, *, blocking: bool = True) -> Issue:
+        return Issue(
+            self.file.as_posix(),
+            field,
+            f"line {self.tokens[index].line}: {message}",
+            severity="warning",
+            blocking=blocking,
+        )
 
     def siblings(self, start: int, stop: int) -> Iterator[int]:
         while start < stop:
@@ -165,117 +170,12 @@ def parse_script(text: str, file: Path) -> Script:
     return Script(file, tokens, tuple(closing))
 
 
-def _project_id(literal: str | None) -> str | None:
+def project_id(literal: str | None) -> str | None:
     if literal == ":":
         return literal
     if literal is not None and _PROJECT.fullmatch(literal):
         return ":" + literal.lstrip(":")
     return None
-
-
-def _include_ranges(script: Script, start: int) -> Iterator[tuple[int, int]]:
-    tokens = script.tokens
-    if start < len(tokens) and tokens[start].value == "(":
-        yield from script.arguments(start + 1, script.closing[start])
-        return
-    stop = start
-    while stop < len(tokens) and tokens[stop].value != ";":
-        if tokens[stop].line > tokens[stop - 1].line and tokens[stop - 1].value != ",":
-            break
-        if tokens[stop].line > tokens[stop - 1].line and tokens[stop].value in {
-            "include",
-            "includeBuild",
-            "includeFlat",
-            "project",
-            "rootProject",
-        }:
-            break
-        stop = script.closing[stop] + 1
-    yield from script.arguments(start, stop)
-
-
-def _included(script: Script, index: int, issues: list[Issue]) -> Iterator[str]:
-    ranges = tuple(_include_ranges(script, index + 1))
-    if not ranges:
-        issues.append(script.issue("include", index, "expected literal project paths"))
-    for start, stop in ranges:
-        project = _project_id(script.tokens[start].literal) if stop == start + 1 else None
-        if project is None:
-            issues.append(script.issue("include", index, "unsupported project path expression"))
-        elif project.count(":") > MAX_DEPTH:
-            issues.append(script.issue("include", start, "project directory depth limit exceeded"))
-        else:
-            yield project
-
-
-def _remap(script: Script, index: int) -> tuple[str | None, str | None]:
-    tokens = script.tokens
-    start = index - 5
-    if start < 0 or start and tokens[start - 1].value == ".":
-        return None, None
-    if script.values(start, index - 3) != ("project", "("):
-        return None, None
-    if script.values(index - 2, index) != (")", "."):
-        return None, None
-    project = _project_id(tokens[index - 3].literal)
-    if script.values(index + 1, index + 4) != ("=", "file", "("):
-        return project, None
-    if script.closing[index + 3] != index + 5:
-        return project, None
-    end = index + 6
-    if end < len(tokens) and tokens[end].value != ";":
-        if tokens[end].line == tokens[end - 1].line or tokens[end].value in {
-            ".",
-            "+",
-            "/",
-            "?",
-            "[",
-            "(",
-        }:
-            return project, None
-    directory = tokens[index + 4].literal
-    if directory and _DIRECTORY.fullmatch(directory) and len(directory.split("/")) <= MAX_DEPTH:
-        return project, directory
-    return project, None
-
-
-def parse_settings(script: Script, issues: list[Issue]) -> dict[str, str]:
-    projects: dict[str, str] = {}
-    remaps: dict[str, tuple[str | None, int]] = {}
-    top_level = set(script.siblings(0, len(script.tokens)))
-    for i, token in enumerate(script.tokens):
-        value = token.value
-        if i not in top_level:
-            if value in {"include", "includeBuild", "includeFlat", "projectDir"}:
-                issues.append(script.issue(value, i, "unsupported nested settings directive"))
-                if value == "projectDir":
-                    project, _ = _remap(script, i)
-                    if project:
-                        remaps[project] = None, i
-            continue
-        if value == "include":
-            if i and script.tokens[i - 1].value == ".":
-                issues.append(script.issue(value, i, "unsupported qualified settings directive"))
-                continue
-            projects.update(
-                (project, project[1:].replace(":", "/")) for project in _included(script, i, issues)
-            )
-        elif value in {"includeBuild", "includeFlat", "buildFileName"}:
-            issues.append(script.issue(value, i, "unsupported settings directive"))
-        elif value == "projectDir":
-            project, directory = _remap(script, i)
-            if project:
-                remaps[project] = directory, i
-            else:
-                issues.append(script.issue("projectDir", i, "unsupported project directory"))
-    for project, (directory, i) in remaps.items():
-        if project in projects and directory is not None:
-            projects[project] = directory
-        else:
-            projects.pop(project, None)
-            if i in top_level:
-                issues.append(script.issue("projectDir", i, "unsupported project directory"))
-    return projects
 
 
 def _direct_project(script: Script, start: int, stop: int) -> str | None:
@@ -286,9 +186,9 @@ def _direct_project(script: Script, start: int, stop: int) -> str | None:
         return None
     for a, b in script.arguments(start + 2, stop - 1):
         if b - a >= 2 and script.values(a, a + 2) in {("path", ":"), ("path", "=")}:
-            return _project_id(tokens[a + 2].literal) if b == a + 3 else None
+            return project_id(tokens[a + 2].literal) if b == a + 3 else None
         if a == start + 2 and b == a + 1:
-            return _project_id(tokens[a].literal)
+            return project_id(tokens[a].literal)
     return None
 
 

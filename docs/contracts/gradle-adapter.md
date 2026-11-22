@@ -23,10 +23,14 @@ probes the explicitly included projects. An included project can be a
 container with no build script.
 
 The supported override is `project(":app").projectDir = file("clients/app")`
-with a simple repository-relative directory. Computed overrides, composite
-builds, flat includes, custom build script names and dynamic includes are
-outside the literal subset. The adapter reports recognized unsupported forms,
-and skips projects whose directory override it cannot resolve.
+with a simple repository-relative directory. The adapter ignores
+`pluginManagement` (including repository declarations),
+`dependencyResolutionManagement`, `enableFeaturePreview`, and
+`rootProject.name`. An `includeBuild` declaration, including inside
+`pluginManagement`, produces a `composite build not followed` warning.
+Computed overrides, flat includes, custom build script names and dynamic
+includes produce diagnostics when recognized. The adapter skips projects
+whose directory override it cannot resolve.
 
 In top-level `dependencies { ... }` blocks, literal project arguments can
 use `project(":core:data")`, `project(path = ":core:data")`, Groovy
@@ -52,9 +56,9 @@ multiple declarations.
 `drift` reads Floorplan file-to-file imports and optionally Trail calls and
 extends edges with known symbol endpoints. Each recorded graph reader enforces
 its own schema and limits, including a 64 MiB file cap for each input.
-The comparison assigns each recorded file to
-the longest matching non-root Gradle directory or Trail scope on a path
-boundary. Unmatched files use the directory preceding `/src/` in conventional
+The comparison assigns each recorded file to the longest matching non-root
+Gradle directory or Trail scope on a path boundary. Unmatched files use the
+directory preceding `/src/` in conventional
 source layouts, then the root project if available. Observed-only directories
 use colon-separated IDs derived from their paths. A module can appear in the
 observed set through an indexed file or a Trail scope even with zero edges.
@@ -78,10 +82,12 @@ the static parser could not resolve.
 ## Output
 
 The [CLI JSON contract](cli-json.md) defines the common envelope and exit
-codes. Gradle uses `0` for a complete read with no findings, `1` for partial
-results or candidate drift, and `2` for invalid arguments or unusable
-required inputs. A malformed build script is scoped to its project and
-reported alongside remaining declarations. Each diagnostic identifies a file
-or command and field. JSON uses the
+codes. Gradle uses `0` for a complete read, `1` for partial results or
+candidate drift, and `2` for invalid arguments or unusable required inputs.
+Composite-build warnings alone preserve exit `0` and `ok: true`. Unsupported
+declarations and unresolved references are warnings and can yield partial
+results. A malformed or unreadable build script produces an error scoped to
+its project alongside the remaining declarations. Each diagnostic identifies
+a file or command and field. JSON uses the
 [deps](schemas/gradle-deps.schema.json) and
 [drift](schemas/gradle-drift.schema.json) version 1 schemas.

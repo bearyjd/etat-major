@@ -1,7 +1,7 @@
 """CLI entry points for the recorded Gradle comparison."""
 
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from etat_major.cli_json import json_result
 from etat_major.floorplan import load_graph
@@ -27,17 +27,24 @@ def run_gradle(args: argparse.Namespace) -> int:
         data = asdict(report)
         if report.has_differences:
             issues += (
-                Issue("gradle-drift", "drift", "candidate dependency or module differences"),
+                Issue(
+                    "gradle-drift",
+                    "drift",
+                    "candidate dependency or module differences",
+                    severity="warning",
+                ),
             )
+    status = int(any(issue.blocking for issue in issues))
     if args.format == "json":
         escaped = tuple(
-            Issue(safe(i.path), safe(i.field or "file"), safe(i.message)) for i in issues
+            replace(i, path=safe(i.path), field=safe(i.field or "file"), message=safe(i.message))
+            for i in issues
         )
-        return json_result(f"gradle-{args.action}", int(bool(issues)), data, issues=escaped)
+        return json_result(f"gradle-{args.action}", status, data, issues=escaped)
     _render(data)
     for issue in issues:
         print(safe(public_text(str(issue))))
-    return int(bool(issues))
+    return status
 
 
 def _render(data: dict) -> None:

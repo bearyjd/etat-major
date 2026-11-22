@@ -242,11 +242,17 @@
   "else": {
     "properties": {
       "issues": {
-        "contains": {
-          "properties": {
-            "severity": {
-              "const": "error"
-            }
+        "minItems": 1
+      }
+    },
+    "if": {
+      "properties": { "data": { "type": "null" } }
+    },
+    "then": {
+      "properties": {
+        "issues": {
+          "contains": {
+            "properties": { "severity": { "const": "error" } }
           }
         }
       }

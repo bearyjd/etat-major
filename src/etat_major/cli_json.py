@@ -34,12 +34,12 @@ def json_format_requested(argv: list[str]) -> bool:
     return bool(formats and formats[-1] == "json")
 
 
-def issue_data(issue: Issue, severity: str = "error") -> dict[str, str]:
+def issue_data(issue: Issue, severity: str | None = None) -> dict[str, str]:
     return {
         "path": public_text(issue.path),
         "field": public_text(issue.field or "file"),
         "message": public_text(issue.message),
-        "severity": severity,
+        "severity": issue.severity if severity is None else severity,
     }
 
 

@@ -1,8 +1,7 @@
 """Load research, decisions, features, and tasks from an intent workspace.
 
 File and cross-file problems are counted, with the first 200 retained as ``Issue`` objects.
-Unresolved references are reported as ``missing`` rather than raised.
-"""
+Unresolved references are reported as ``missing``."""
 
 from __future__ import annotations
 
@@ -40,6 +39,8 @@ class Issue:
     path: str
     field: str | None
     message: str
+    severity: str = "error"
+    blocking: bool = True
 
     def __str__(self) -> str:
         where = f"{self.path}: field '{self.field}'" if self.field else self.path

@@ -6,7 +6,8 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
-from etat_major.gradle_parse import dependency_requests, parse_script, parse_settings
+from etat_major.gradle_parse import dependency_requests, parse_script
+from etat_major.gradle_settings import parse_settings
 from etat_major.localfiles import open_directory, read_text_kib
 from etat_major.taskfile import TaskFileError
 from etat_major.workspace import Issue

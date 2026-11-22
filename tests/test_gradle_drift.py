@@ -45,6 +45,7 @@ def test_drift_compares_declarations_and_recorded_evidence(drift_args, capsys, t
     assert main(drift_args) == 1
     output, envelope = read_envelope(capsys, "gradle-drift", 1)
     assert str(tmp_path) not in output
+    assert [(i["field"], i["severity"]) for i in envelope["issues"]] == [("drift", "warning")]
     data = envelope["data"]
     assert data["modules_only_declared"] == [":unused"]
     assert data["modules_only_observed"] == [":orphan", ":scope-only"]

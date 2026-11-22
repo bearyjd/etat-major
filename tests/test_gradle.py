@@ -163,6 +163,7 @@ dependencies {
         ("settings.gradle.kts", "projectDir"),
         *[("app/build.gradle.kts", "dependencies")] * 4,
     ]
+    assert all(i["severity"] == "warning" for i in value["issues"])
     assert "ambiguous" in value["issues"][-2]["message"]
 
 
