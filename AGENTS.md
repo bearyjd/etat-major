@@ -6,7 +6,7 @@
 - Never store, proxy or pool Claude or Codex credentials. Never call a model or the network from product code.
 - Git holds intent. Derived values (running, review, verified, drift tiers) are computed, never written to files. Only a human records a Decision, acceptance or "reviewed"; tooling writes only `proposed`, `unreviewed` or `draft`.
 - Everything read from disk is untrusted: no symlink following, size caps, depth caps, escape printed text with `safe()`, turn every parse failure into a file-and-field error (no tracebacks). Never print absolute paths or remotes from third-party data.
-- Never execute Gradle, Floorplan's model steps, `trail init`, or anything from a scanned repository. Git may be called only as a read-only subprocess with a fixed argument list and no shell.
+- Never execute Gradle, Floorplan's model steps, `trail init`, or anything from a scanned repository. Git may be called only as a read-only subprocess with a fixed argument list and no shell (the one exception is the narrow wrapper allowance described in `docs/NEXT.md`, tasks 2 and 3).
 - Do not add dependencies. There is no network in the dev environment.
 - Keep personal paths, hostnames, emails and keys out of the repo.
 
