@@ -153,7 +153,7 @@ The minimum trace query, `etat-major trace feature:<project>/<id>`, prints that 
 
 Feature–Decision links are read from either record, and the workspace and trace warn when only one side lists the link.
 
-Validation processes at most 2,000 entries per directory, including the `features/` directory itself. It reports unexpected directories without scanning their contents. The CLI prints up to 200 validation issues and a count of any additional issues detected. Each `invalid:` line is limited to 512 characters after escaping.
+Validation processes at most 2,000 entries per directory, including the `features/` directory itself. It reports unexpected directories without scanning their contents. `etat-major workspace validate --workspace D` reports all detected issues. Other workspace commands retain up to 200 validation issues and report the additional count. Each text `invalid:` line is limited to 512 characters after escaping. See the [CLI JSON contract](contracts/cli-json.md) for structured results.
 
 ### CLI exit codes
 

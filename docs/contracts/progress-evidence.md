@@ -36,4 +36,6 @@ Implementing requires a linked task in the In Progress column. Verified requires
 
 The report includes disconnected commits and PRs, overdue milestones, stale architecture links and unimplemented requirements. A dated milestone is overdue after its target date in UTC. A milestone is complete when it has linked work and all assigned tasks are Done and all linked features are Verified or Released. Absent `new` architecture links count as gaps, and absent `modifies` or `uses` links count as stale when the relevant snapshot is available.
 
-The CLI exits 0 for a produced report, including findings, 1 for workspace validation issues, and 2 for invalid arguments or unreadable or invalid input files. JSON output includes top-level `version`, `tasks`, `features`, `disconnected_commits`, `disconnected_prs`, `stale_milestones`, `stale_links` and `unimplemented_requirements`.
+The CLI exits 0 for a produced report, including findings, 1 for workspace validation issues, and 2 for invalid arguments or unreadable or invalid input files. The [CLI JSON envelope](cli-json.md) carries the report under `data`, which includes `version`, `tasks`, `features`, `disconnected_commits`, `disconnected_prs`, `stale_milestones`, `stale_links` and `unimplemented_requirements`.
+
+For deterministic overdue checks in JSON, pass `--as-of YYYY-MM-DD`. The report records that date in `data.as_of`.

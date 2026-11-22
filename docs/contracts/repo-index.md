@@ -20,6 +20,10 @@ checks each wire schema.
 
 ## JSON shape
 
+The CLI places this snapshot in `data` inside the
+[versioned CLI envelope](cli-json.md). `RepoIndex.to_json()` serializes the
+snapshot itself for Python callers.
+
 ```json
 {
   "version": 1,
