@@ -35,8 +35,8 @@ A report says what an agent or its hook *claims* happened. It is never authorita
 Unknown fields are rejected, at the envelope and in every payload.
 
 **`hook_token`.** Each session gets its own token. The receiver checks it against the session and
-rejects mismatches. It is a wire-only credential: the model excludes it from `model_dump`, JSON
-and `repr`, and the store must not persist it. A valid token still only makes the report a hint.
+rejects mismatches. It is a wire-only credential: the model keeps it out of `model_dump`, JSON,
+`repr` and validation errors; the store must not persist it. A valid token is still only a hint.
 
 ## Kinds and payloads
 

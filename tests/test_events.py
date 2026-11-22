@@ -175,3 +175,37 @@ def test_mismatched_payload_instance_rejected():
     data = make("launch", payload=FailurePayload(reason="x"))
     with pytest.raises(ValidationError):
         parse_event(data)
+
+
+def _leaks(err: ValidationError, secret: str) -> bool:
+    chain = [err, err.__cause__, err.__context__]
+    return any(
+        secret in text
+        for e in chain
+        if isinstance(e, ValidationError)
+        for text in (str(e), repr(e), repr(e.errors()), e.json())
+    )
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"event_id": None},  # missing-style error: input is the whole report
+        {"extra": 1},
+        {"ts": "nope"},
+        {"payload": {}},
+        {"payload": PAYLOADS["usage"]},  # kind mismatch (after validator)
+        {"hook_token": ["tok-secret-9"]},  # the token itself is the bad input
+    ],
+)
+def test_hook_token_not_in_validation_errors(bad):
+    from etat_major.events import Event
+
+    data = make(**{"hook_token": "tok-secret-9", **bad})
+    if bad == {"event_id": None}:
+        del data["event_id"]
+    for parse in (parse_event, Event.model_validate, lambda d: Event(**d)):
+        with pytest.raises(ValidationError) as exc:
+            parse(data)
+        assert exc.value.error_count() >= 1
+        assert not _leaks(exc.value, "tok-secret-9")

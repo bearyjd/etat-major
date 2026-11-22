@@ -17,6 +17,8 @@ from pydantic import (
     Field,
     StrictInt,
     StrictStr,
+    ValidationError,
+    ValidatorFunctionWrapHandler,
     model_validator,
 )
 
@@ -137,6 +139,18 @@ class Event(_Strict):
     def is_hint(self) -> bool:
         """Reports are never authoritative; see the contract."""
         return True
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _no_input_in_errors(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Event:
+        """Drop raw input from errors: it can hold the ``hook_token``."""
+        try:
+            return handler(data)
+        except ValidationError as exc:
+            errors = [{**e, "input": None} for e in exc.errors(include_url=False)]
+            title = exc.title
+        # Raised outside the handler so the original error is not chained.
+        raise ValidationError.from_exception_data(title, errors, hide_input=True)
 
     @model_validator(mode="before")
     @classmethod
