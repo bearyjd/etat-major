@@ -26,6 +26,8 @@ workspace/
 
 **Reference grammar.** Every cross-reference is `<kind>:<id>`. Project-scoped records (`feature`, `task`, `milestone`) use `<project>/<n>`, for example `feature:netlens/0031`, `task:netlens/0042`, `milestone:netlens/m3`. `research` and `decision` ids are global (`research:0007`, `decision:0012`). A finding inside research is `research:0007#f1`. Code references are prefixed by layer: `fp:n:<component>` or `fp:f:<path>` (Floorplan), `trail:<path>#<symbol>` (Trail). Loaders reject any other spelling.
 
+File paths in code references are repository-relative. Use ASCII `/` between non-empty segments. Leading `~`, drive-letter prefixes, dot segments, backslashes and Unicode slash lookalikes are invalid.
+
 **Minimum for Slice 1.** Each record needs an `id` and `status`. Research also needs a `title`, `provenance` and at least one source with a URL and date. A Decision needs a `question` and, when approved, rejected or postponed, `decided_by: human`. A Feature needs a `project` and `title`. The planned status requires an approved linked Decision.
 
 ## Records
@@ -145,6 +147,8 @@ Not every idea moves forward. Moving a Feature to Approved needs a human-recorde
 The minimum trace query, `etat-major trace feature:<project>/<id>`, prints that chain with provenance and marks each missing link `unverified` or `gap`.
 
 Feature–Decision links are read from either record, and the workspace and trace warn when only one side lists the link.
+
+Validation processes at most 2,000 entries per directory, including the `features/` directory itself. It reports unexpected directories without scanning their contents. The CLI prints up to 200 validation issues and a count of any additional issues detected. Each `invalid:` line is limited to 512 characters after escaping.
 
 ### CLI exit codes
 

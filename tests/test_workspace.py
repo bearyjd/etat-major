@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from time import perf_counter
 
 import pytest
 
@@ -204,7 +205,7 @@ def test_workspace_collects_yaml_value_errors(workspace_dir, bad):
 
 
 def test_workspace_reports_stray_feature_files(workspace_dir):
-    stray = ("features/.md", "features/top.md", "features/netlens/deep/deeper/nested.md")
+    stray = ("features/.md", "features/top.md")
     for rel in stray:
         path = workspace_dir / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -213,6 +214,74 @@ def test_workspace_reports_stray_feature_files(workspace_dir):
     assert {i.path for i in ws.issues} == set(stray)
     assert all("features/<project>/" in i.message for i in ws.issues)
     assert len(ws.features) == 1
+
+
+@pytest.mark.parametrize("location", ["research", "decisions", "features/netlens"])
+def test_workspace_reports_unexpected_directories(workspace_dir, location):
+    nested = workspace_dir / location / "unexpected" / "hidden.md"
+    nested.parent.mkdir()
+    nested.touch()
+    (issue,) = load_workspace(workspace_dir).issues
+    assert issue.path == f"{location}/unexpected"
+    assert "unexpected directory" in issue.message
+
+
+def test_workspace_skips_a_2000_deep_tree(tmp_path):
+    project = tmp_path / "features" / "project"
+    project.mkdir(parents=True)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(project, flags)
+    depth = 0
+    try:
+        for _ in range(2000):
+            os.mkdir("d", dir_fd=fd)
+            child = os.open("d", flags, dir_fd=fd)
+            os.close(fd)
+            fd = child
+            depth += 1
+        start = perf_counter()
+        ws = load_workspace(tmp_path)
+        assert perf_counter() - start < 5
+        (issue,) = ws.issues
+        assert issue.path == "features/project/d"
+        assert "unexpected directory" in issue.message
+    finally:
+        for _ in range(depth):
+            parent = os.open("..", flags, dir_fd=fd)
+            os.close(fd)
+            fd = parent
+            os.rmdir("d", dir_fd=fd)
+        os.close(fd)
+
+
+def test_workspace_resolves_at_most_the_root(workspace_dir, monkeypatch):
+    original = Path.resolve
+    resolved = []
+
+    def track_resolve(path, *args, **kwargs):
+        resolved.append(path)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", track_resolve)
+    ws = load_workspace(workspace_dir)
+    assert ws.issues == ()
+    assert resolved == [workspace_dir]
+
+
+def test_workspace_limits_records_read_per_directory(tmp_path):
+    for project, count in (("crowded", 2001), ("small", 1)):
+        folder = tmp_path / "features" / project
+        folder.mkdir(parents=True)
+        for index in range(count):
+            (folder / f"{index}.md").write_text(
+                f"---\nid: '{index}'\nproject: {project}\ntitle: Example\nstatus: idea\n---\n"
+            )
+    ws = load_workspace(tmp_path)
+    assert len(ws.features) == 2001
+    assert ws.get_feature("small", "0") is not None
+    (issue,) = ws.issues
+    assert issue.path == "features/crowded"
+    assert "2000" in issue.message
 
 
 def test_record_size_limit_before_reading(workspace_dir):

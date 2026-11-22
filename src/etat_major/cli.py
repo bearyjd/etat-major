@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from etat_major.floorplan import FloorplanError, FloorplanIndex, load_graph
@@ -18,6 +19,8 @@ from etat_major.trace import TraceError, trace_feature
 from etat_major.workspace import Workspace, WorkspaceError, load_workspace
 
 OK, PROBLEMS, USAGE = 0, 1, 2
+_ISSUE_PATH_LIMIT = 256
+_INVALID_LINE_LIMIT = 512
 
 
 EXIT_CODES = (
@@ -64,7 +67,10 @@ def _open_workspace(path: Path) -> Workspace | None:
         _err(str(exc))
         return None
     for issue in ws.issues:
-        print(f"invalid: {safe(issue)}", file=sys.stderr)
+        issue = replace(issue, path=safe(issue.path, limit=_ISSUE_PATH_LIMIT))
+        print(safe(f"invalid: {issue}", limit=_INVALID_LINE_LIMIT), file=sys.stderr)
+    if ws.omitted_issues:
+        print(f"... {ws.omitted_issues} more issues", file=sys.stderr)
     return ws
 
 

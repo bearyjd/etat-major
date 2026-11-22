@@ -1,7 +1,7 @@
 """Load an intent workspace (``research/``, ``decisions/``, ``features/<project>/``).
 
-Every file and cross-file problem is collected as an ``Issue``; loading never stops at the
-first error and unresolved references are reported as ``missing`` rather than raised.
+File and cross-file problems are counted, with the first 200 retained as ``Issue`` objects.
+Unresolved references are reported as ``missing`` rather than raised.
 """
 
 from __future__ import annotations
@@ -10,8 +10,9 @@ import os
 import stat
 from collections import Counter
 from collections.abc import Callable, Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
 
 from etat_major.localfiles import NOFOLLOW
@@ -27,6 +28,9 @@ from etat_major.refs import Ref
 from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import bounded_repr
 
+_ISSUE_LIMIT = 200
+_DIRECTORY_LIMIT = 2000
+
 
 @dataclass(frozen=True)
 class Issue:
@@ -41,6 +45,18 @@ class Issue:
         return f"{where}: {self.message}"
 
 
+class _IssueLog:
+    def __init__(self) -> None:
+        self.issues: list[Issue] = []
+        self.omitted = 0
+
+    def append(self, issue: Issue) -> None:
+        if len(self.issues) < _ISSUE_LIMIT:
+            self.issues.append(issue)
+        else:
+            self.omitted += 1
+
+
 @dataclass(frozen=True)
 class Workspace:
     research: tuple[ResearchArtifact, ...]
@@ -48,6 +64,7 @@ class Workspace:
     features: tuple[Feature, ...]
     issues: tuple[Issue, ...]
     warnings: tuple[Issue, ...] = ()
+    omitted_issues: int = 0
 
     def get_research(self, record_id: str) -> ResearchArtifact | None:
         return next((r for r in self.research if r.id == record_id), None)
@@ -77,12 +94,10 @@ class WorkspaceError(ValueError):
     """The workspace root cannot be opened as a directory."""
 
 
-def _check_path(root: Path, path: Path, fd: int) -> int:
+def _check_path(path: Path, fd: int) -> int:
     info = os.stat(path.name, dir_fd=fd, follow_symlinks=False)
     if stat.S_ISLNK(info.st_mode):
         raise ValueError("symlink is not allowed")
-    if not path.resolve().is_relative_to(root):
-        raise ValueError("resolved path is outside the workspace")
     return info.st_mode
 
 
@@ -101,64 +116,65 @@ def _issue(root: Path, path: Path, exc: OSError | ValueError | RuntimeError) -> 
     return Issue(path.relative_to(root).as_posix(), None, message)
 
 
-def _entries(root: Path, base: Path, fd: int, issues: list[Issue]) -> Iterator[tuple[Path, int]]:
+def _entries(root: Path, base: Path, fd: int, issues: _IssueLog) -> Iterator[tuple[Path, int]]:
     try:
-        names = sorted(os.listdir(fd))
+        with os.scandir(fd) as entries:
+            names = [entry.name for entry in islice(entries, _DIRECTORY_LIMIT + 1)]
     except OSError as exc:
         issues.append(_issue(root, base, exc))
         return
-    for name in names:
+    if len(names) > _DIRECTORY_LIMIT:
+        names.pop()
+        issues.append(
+            Issue(
+                base.relative_to(root).as_posix(),
+                None,
+                f"directory exceeds {_DIRECTORY_LIMIT} entries",
+            )
+        )
+    for name in sorted(names):
         path = base / name
         try:
-            mode = _check_path(root, path, fd)
-        except (OSError, ValueError, RuntimeError) as exc:
+            mode = _check_path(path, fd)
+        except (OSError, ValueError) as exc:
             issues.append(_issue(root, path, exc))
             continue
         yield path, mode
 
 
 def _walk_markdown(
-    root: Path, base: Path, fd: int, issues: list[Issue], *, descend: bool
+    root: Path, base: Path, fd: int, issues: _IssueLog, *, allow_projects: bool
 ) -> Iterator[tuple[Path, int]]:
-    stack = [(_entries(root, base, fd, issues), fd, ExitStack())]
-    try:
-        while stack:
-            entries, folder_fd, scope = stack[-1]
-            item = next(entries, None)
-            if item is None:
-                stack.pop()
-                scope.close()
+    for path, mode in _entries(root, base, fd, issues):
+        if stat.S_ISDIR(mode):
+            if not allow_projects:
+                issues.append(
+                    Issue(path.relative_to(root).as_posix(), None, "unexpected directory")
+                )
                 continue
-            path, mode = item
-            if descend and stat.S_ISDIR(mode):
-                child_scope = ExitStack()
-                try:
-                    child_fd = child_scope.enter_context(_directory(path, folder_fd))
-                except OSError as exc:
-                    issues.append(_issue(root, path, exc))
-                    continue
-                stack.append((_entries(root, path, child_fd, issues), child_fd, child_scope))
-            elif path.name.endswith(".md"):
-                if stat.S_ISREG(mode):
-                    yield path, folder_fd
-                else:
-                    issues.append(
-                        Issue(path.relative_to(root).as_posix(), None, "expected a regular file")
-                    )
-    finally:
-        for _, _, scope in reversed(stack):
-            scope.close()
+            try:
+                with _directory(path, fd) as child_fd:
+                    yield from _walk_markdown(root, path, child_fd, issues, allow_projects=False)
+            except OSError as exc:
+                issues.append(_issue(root, path, exc))
+        elif path.name.endswith(".md"):
+            if stat.S_ISREG(mode):
+                yield path, fd
+            else:
+                issues.append(
+                    Issue(path.relative_to(root).as_posix(), None, "expected a regular file")
+                )
 
 
 def _load_dir[T](
-    root: Path, root_fd: int, sub: str, loader: Callable[..., T], issues: list[Issue]
+    root: Path, root_fd: int, sub: str, loader: Callable[..., T], issues: _IssueLog
 ) -> list[T]:
     base = root / sub
     try:
-        mode = _check_path(root, base, root_fd)
+        mode = _check_path(base, root_fd)
     except FileNotFoundError:
         return []
-    except (OSError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError) as exc:
         issues.append(_issue(root, base, exc))
         return []
     if not stat.S_ISDIR(mode):
@@ -168,7 +184,7 @@ def _load_dir[T](
     try:
         with _directory(base, root_fd) as fd:
             for path, folder_fd in _walk_markdown(
-                root, base, fd, issues, descend=sub == "features"
+                root, base, fd, issues, allow_projects=sub == "features"
             ):
                 rel = path.relative_to(root)
                 if sub == "features" and len(rel.parts) != 3:
@@ -197,7 +213,7 @@ def _load_feature(path: Path, *, dir_fd: int) -> Feature:
     return feature
 
 
-def _duplicates(records: list[Ref], issues: list[Issue]) -> None:
+def _duplicates(records: list[Ref], issues: _IssueLog) -> None:
     for ref, n in sorted(Counter(records).items(), key=lambda kv: str(kv[0])):
         if n > 1:
             issues.append(
@@ -218,42 +234,42 @@ def _has_research_ref(ws: Workspace, ref: Ref) -> bool:
     )
 
 
-def _check_decision(ws: Workspace, d: Decision) -> list[Issue]:
-    owner, out = Ref("decision", d.id), []
+def _check_decision(ws: Workspace, d: Decision) -> Iterator[Issue]:
+    owner = Ref("decision", d.id)
     for ref in d.evidence:
         if not _has_research_ref(ws, ref):
-            out.append(_missing(owner, "evidence", ref))
-    out += [
-        _missing(owner, "features", ref) for ref in d.features if not ws.get_feature_by_ref(ref)
-    ]
-    return out
+            yield _missing(owner, "evidence", ref)
+    for ref in d.features:
+        if not ws.get_feature_by_ref(ref):
+            yield _missing(owner, "features", ref)
 
 
-def _check_feature(ws: Workspace, f: Feature) -> list[Issue]:
+def _check_feature(ws: Workspace, f: Feature) -> Iterator[Issue]:
     owner = feature_ref(f)
-    out = [_missing(owner, "research", r) for r in f.research if not _has_research_ref(ws, r)]
-    out += [_missing(owner, "decisions", d) for d in f.decisions if not ws.get_decision(d.id)]
+    for ref in f.research:
+        if not _has_research_ref(ws, ref):
+            yield _missing(owner, "research", ref)
+    for ref in f.decisions:
+        if not ws.get_decision(ref.id):
+            yield _missing(owner, "decisions", ref)
     if f.status == "planned" and not any(d.status == "approved" for d in linked_decisions(ws, f)):
-        out.append(
-            Issue(
-                str(owner),
-                "status",
-                "status 'planned' requires a linked Decision with status approved",
-            )
+        yield Issue(
+            str(owner),
+            "status",
+            "status 'planned' requires a linked Decision with status approved",
         )
-    return out
 
 
-def _cross_validate(ws: Workspace) -> list[Issue]:
-    issues: list[Issue] = []
+def _cross_validate(ws: Workspace, issues: _IssueLog) -> None:
     _duplicates([Ref("research", r.id) for r in ws.research], issues)
     _duplicates([Ref("decision", d.id) for d in ws.decisions], issues)
     _duplicates([feature_ref(f) for f in ws.features], issues)
     for d in ws.decisions:
-        issues += _check_decision(ws, d)
+        for issue in _check_decision(ws, d):
+            issues.append(issue)
     for f in ws.features:
-        issues += _check_feature(ws, f)
-    return issues
+        for issue in _check_feature(ws, f):
+            issues.append(issue)
 
 
 def link_warnings(ws: Workspace, feature: Feature) -> tuple[Issue, ...]:
@@ -274,7 +290,7 @@ def link_warnings(ws: Workspace, feature: Feature) -> tuple[Issue, ...]:
 
 
 def load_workspace(root: Path) -> Workspace:
-    issues: list[Issue] = []
+    issues = _IssueLog()
     try:
         mode = root.lstat().st_mode
         if stat.S_ISLNK(mode):
@@ -282,7 +298,9 @@ def load_workspace(root: Path) -> Workspace:
         if not stat.S_ISDIR(mode):
             raise ValueError("is not a directory")
         with _directory(root) as fd:
-            resolved = root.resolve()
+            resolved = root.resolve(strict=True)
+            if not os.path.samestat(resolved.lstat(), os.fstat(fd)):
+                raise ValueError("workspace directory changed while opening")
             research = _load_dir(resolved, fd, "research", load_research, issues)
             decisions = _load_dir(resolved, fd, "decisions", load_decision, issues)
             features = _load_dir(resolved, fd, "features", _load_feature, issues)
@@ -290,7 +308,8 @@ def load_workspace(root: Path) -> Workspace:
         detail = (exc.strerror or str(exc)) if isinstance(exc, OSError) else str(exc)
         raise WorkspaceError(f"workspace {bounded_repr(str(root))}: {detail}") from exc
     ws = Workspace(tuple(research), tuple(decisions), tuple(features), ())
+    _cross_validate(ws, issues)
     warnings = tuple(w for feature in ws.features for w in link_warnings(ws, feature))
     return Workspace(
-        ws.research, ws.decisions, ws.features, tuple(issues + _cross_validate(ws)), warnings
+        ws.research, ws.decisions, ws.features, tuple(issues.issues), warnings, issues.omitted
     )

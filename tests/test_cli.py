@@ -121,6 +121,37 @@ def test_decisions_list_exit_1_on_validation_errors(capsys, workspace_dir):
     assert code == 1 and "0099-bad.md" in err and "decision:0012" in out
 
 
+def test_workspace_reports_only_first_200_issues(capsys, tmp_path):
+    decisions = tmp_path / "decisions"
+    decisions.mkdir()
+    for index in range(201):
+        (decisions / f"{index:04}-bad.md").touch()
+    (decisions / "0201.md").write_text(
+        "---\nid: '0201'\nquestion: Example?\nstatus: proposed\n"
+        "evidence: [research:9998, research:9999]\n---\n"
+    )
+    code, _, err = run(capsys, "decisions", "list", "--workspace", str(tmp_path))
+    assert code == 1
+    lines = err.splitlines()
+    assert len(lines) == 201
+    assert all(line.startswith("invalid: decisions/") for line in lines[:200])
+    assert lines[-1] == "... 3 more issues"
+
+
+def test_workspace_caps_entire_invalid_line_after_escaping(capsys, tmp_path):
+    project = tmp_path / "features" / ("a" * 240)
+    project.mkdir(parents=True)
+    path = project / ("bad" + "\x1b" * 240 + ".md")
+    path.write_text("---\nid: '1'\nproject: example\nstatus: idea\n---\n")
+    code, _, err = run(capsys, "decisions", "list", "--workspace", str(tmp_path))
+    assert code == 1
+    (line,) = err.splitlines()
+    assert line.startswith("invalid: features/")
+    assert "field 'title'" in line
+    assert "\x1b" not in line
+    assert len(line) <= 512
+
+
 def test_cli_performs_no_writes(capsys, workspace_dir, graph_file, monkeypatch):
     before = snapshot(workspace_dir, graph_file)
 
