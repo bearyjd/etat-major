@@ -247,3 +247,11 @@ def test_workspace_link_warnings_do_not_change_exit_status(capsys, cli_args, wor
     assert [(issue["field"], issue["severity"]) for issue in result["issues"]] == [
         ("features", "warning")
     ]
+
+
+def test_error_path_cannot_echo_drive_rooted_input(capsys, cli_args):
+    drive_path = "C:" + "\\private\\graph.json"
+    assert main([*cli_args("trace"), "--graph", drive_path, "--format=json"]) == 2
+    output, error = read_envelope(capsys, "trace", 2)
+    assert "private" not in output
+    assert error["issues"][0]["path"] == "graph.json"

@@ -34,7 +34,7 @@ def json_format_requested(argv: list[str]) -> bool:
 
 def issue_data(issue: Issue, severity: str = "error") -> dict[str, str]:
     return {
-        "path": issue.path,
+        "path": public_text(issue.path),
         "field": public_text(issue.field or "file"),
         "message": public_text(issue.message),
         "severity": severity,
@@ -61,7 +61,7 @@ def json_result(
 
 
 def json_error(command: str, error: TaskFileError) -> int:
-    issue = Issue(error.path.name or ".", error.field_name, error.message)
+    issue = Issue(error.filename, error.field_name, error.message)
     return json_result(command, 2, issues=(issue,))
 
 

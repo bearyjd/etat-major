@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Annotated, Any, Literal
 
 import yaml
@@ -45,7 +45,9 @@ class TaskFileError(ValueError):
         self.field = field
         self.field_name = field or default_field
         self.message = message
-        name = safe(path.name, limit=256)
+        windows_path = PureWindowsPath(path)
+        self.filename = (windows_path.name if windows_path.is_absolute() else path.name) or "."
+        name = safe(self.filename, limit=256)
         where = f"{name}: field '{safe(self.field_name, limit=80)}'"
         super().__init__(f"{where}: {safe(message, limit=512)}")
 

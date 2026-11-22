@@ -122,7 +122,7 @@ def _err(message: str) -> None:
 
 def _print_issues(issues: tuple[Issue, ...], omitted: int, *, generic: bool = False) -> None:
     for issue in issues:
-        path = safe(issue.path, limit=_ISSUE_PATH_LIMIT)
+        path = safe(public_text(issue.path), limit=_ISSUE_PATH_LIMIT)
         field = issue.field or "file"
         message = "invalid workspace record" if generic else public_text(issue.message)
         line = f"invalid: {path}: field '{field}': {message}"
