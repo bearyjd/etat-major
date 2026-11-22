@@ -6,9 +6,11 @@ Pure and read-only: nothing is stored. Link states (``gap``, ``built``, ``existi
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from etat_major.floorplan import FloorplanIndex
+from etat_major.overlay import resolve_file_path
 from etat_major.records import ArchitectureLink, Decision, Feature, ResearchArtifact
 from etat_major.refs import Ref
 from etat_major.text_safety import bounded_repr
@@ -129,10 +131,15 @@ def _decision_line(ws: Workspace, d: Decision, relation: str) -> DecisionLine:
     )
 
 
-def _arch_state(link: ArchitectureLink, graph: FloorplanIndex | None) -> str:
+def _arch_state(
+    link: ArchitectureLink, graph: FloorplanIndex | None, renames: Mapping[str, str] | None
+) -> str:
     if graph is None or link.ref.kind == "trail":
         return "unverified"
-    present = graph.resolve(link.ref)
+    if link.ref.kind == "fp:f":
+        present = graph.has_file(resolve_file_path(link.ref.id, graph, renames))
+    else:
+        present = graph.resolve(link.ref)
     if link.relation == "new":
         return "built" if present else "gap"
     return "existing" if present else "stale"
@@ -177,7 +184,13 @@ def _decision_lines(
     return tuple(lines)
 
 
-def trace_feature(ws: Workspace, graph: FloorplanIndex | None, ref: Ref) -> Trace:
+def trace_feature(
+    ws: Workspace,
+    graph: FloorplanIndex | None,
+    ref: Ref,
+    *,
+    renames: Mapping[str, str] | None = None,
+) -> Trace:
     if ref.kind != "feature":
         raise TraceError(f"expected a feature reference, got {bounded_repr(str(ref))}")
     feature = ws.get_feature_by_ref(ref)
@@ -193,7 +206,8 @@ def trace_feature(ws: Workspace, graph: FloorplanIndex | None, ref: Ref) -> Trac
         research=research,
         decisions=decisions,
         architecture=tuple(
-            ArchLine(a.ref, a.relation, _arch_state(a, graph)) for a in feature.architecture
+            ArchLine(a.ref, a.relation, _arch_state(a, graph, renames))
+            for a in feature.architecture
         ),
         acceptance=tuple(AcceptanceLine(a.id, a.text) for a in feature.acceptance),
         links=tuple(LinkLine(r, "unverified") for r in (*feature.tasks, *feature.milestones)),

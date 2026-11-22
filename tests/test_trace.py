@@ -277,3 +277,20 @@ def test_render_no_graph_and_deterministic(workspace_dir):
 def test_render_empty_architecture_as_unverified(workspace_dir):
     trace = replace(run(workspace_dir), architecture=())
     assert "ARCHITECTURE\n  (none)  unverified\nACCEPTANCE\n" in render_trace(trace)
+
+
+@pytest.mark.parametrize(
+    ("relation", "state", "baseline"), [("modifies", "existing", "stale"), ("new", "built", "gap")]
+)
+def test_trace_resolves_renamed_floorplan_file(
+    workspace_dir, graph_file, relation, state, baseline
+):
+    old = "app/src/net/Latency.kt"
+    new = "app/src/net/Timing.kt"
+    edit(workspace_dir, FEATURE, "relation: new", f"relation: {relation}")
+    edit_graph(graph_file, lambda d: d["files"].append({"p": new}))
+    ws, graph = load_workspace(workspace_dir), load_graph(graph_file)
+    assert states(trace_feature(ws, graph, REF))[f"fp:f:{old}"] == (relation, baseline)
+    trace = trace_feature(ws, graph, REF, renames={old: new})
+    assert states(trace)[f"fp:f:{old}"] == (relation, state)
+    assert not trace.has_problems
