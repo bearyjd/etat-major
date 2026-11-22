@@ -392,3 +392,26 @@ def test_raw_architecture_remotes_are_omitted_from_progress(history, capsys):
     history.feature(f"architecture:\n  - {{ref: 'fp:n:x{remote}', relation: new}}")
     assert main(history.args()) == 0
     assert remote not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("state", ["FAILURE", "PENDING"])
+@pytest.mark.parametrize("on_merge", [False, True])
+def test_mixed_checks_do_not_prove_tested_or_verified(history, capsys, state, on_merge):
+    head = history.commit("Latency work")
+    merge = history.commit("Merge latency")
+    oid = merge if on_merge else head
+    history.task("accepted_by: reviewer\naccepted_on: 2026-01-03", status="done")
+    history.feature("tasks: [task:netlens/0042]\naccepted_by: reviewer\naccepted_on: 2026-01-03")
+    history.set_prs(
+        history.pr(
+            headRefOid=head,
+            mergeCommit={"oid": merge},
+            statusCheckRollup=[
+                {"__typename": "StatusContext", "state": "SUCCESS", "commitOid": oid},
+                {"__typename": "StatusContext", "state": state, "commitOid": oid},
+            ],
+        )
+    )
+    report = history.report(capsys)
+    assert report["tasks"][TASK]["tested"] == "unverified"
+    assert report["features"]["netlens/0031"]["state"] != "verified"

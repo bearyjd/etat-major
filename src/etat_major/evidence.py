@@ -116,9 +116,12 @@ def _check_refs(pr: PullRequest) -> tuple[list[str], bool]:
     merge = _pr_merge(pr)
     for index, check in enumerate(pr.checks or (), start=1):
         oid = check.commit_oid or pr.head_oid
-        if check.passed and (check.commit_oid is None or oid in {merge, pr.head_oid}):
-            refs.append(f"pr:{pr.number}/check:{index}")
-            passes_on_merge |= merge is not None and oid == merge
+        if check.commit_oid is not None and oid not in {merge, pr.head_oid}:
+            continue
+        if not check.passed:
+            return [], False
+        refs.append(f"pr:{pr.number}/check:{index}")
+        passes_on_merge |= merge is not None and oid == merge
     return refs, passes_on_merge
 
 
