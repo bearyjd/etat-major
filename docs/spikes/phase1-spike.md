@@ -31,14 +31,14 @@ From `docs/SPEC.md` (principle 3, the example task file, the status lifecycle):
 | Human-only `done` | No write authorization. Any CLI, MCP or web caller can set any configured status. | Not expressible in the format. |
 | Owner | `assignee` is `string[]` (`src/types/index.ts`). The parser accepts a scalar or a list and normalises to a list, and a missing value becomes `[]`. Nothing limits it to one value. There is no `owner` field. | Carries an owner by convention only. Zero or several values are both valid for Backlog.md. |
 | Acceptance | A Markdown checklist in the body, between `<!-- AC:BEGIN -->` and `<!-- AC:END -->`, as `- [ ] #1 text`. Each item has an index, a text and a checked flag (`src/markdown/structured-sections.ts`). | Structured, but a different shape and place from a YAML list. The checked flag has no counterpart in our contract. |
-| Empty acceptance list | With zero criteria, the serializer writes no section, and removes an existing one (`formatChecklistSection` returns an empty string). | An empty list and a missing list are indistinguishable in a Backlog.md file. Our contract can tell `acceptance: []` from an absent key. |
+
+- **Acceptance mapping, import:** checklist item texts in file order, dropping the `#n` index and checked flag. No section, or a section with no items, gives `acceptance: []`, so an absent key and `[]` are indistinguishable in a Backlog.md file.
+- **Acceptance mapping, export:** `- [ ] #n text`, unchecked, numbered from 1 in list order. `acceptance: []` writes no section. The parser reads one non-empty line per item, so export rejects empty or multiline strings.
 
 ## Why this decision
 
-- Config solves three of the four status names and nothing else.
 - `draft` cannot be used as a status inside Backlog.md's tooling without triggering its drafts workflow.
 - The singleton owner and the YAML acceptance list both need a validator of our own. Once that exists, Backlog.md's schema adds a second source of truth without removing work.
-- The SPEC rule that task files stay editable in Obsidian or any editor holds either way: both formats are Markdown with frontmatter.
 
 ## Rejected alternatives
 
