@@ -124,6 +124,15 @@ Payload = (
 )
 
 
+def _without_token(payload: dict[str, Any], token: Any) -> dict[str, Any]:
+    """Payload text is persisted; a copy of the ``hook_token`` in it must not be."""
+    if not isinstance(token, str) or not token:
+        return payload
+    return {
+        k: v.replace(token, "[redacted]") if isinstance(v, str) else v for k, v in payload.items()
+    }
+
+
 class Event(_Strict):
     event_id: Text
     idempotency_key: Text
@@ -157,7 +166,10 @@ class Event(_Strict):
     def _typed_payload(cls, data: Any) -> Any:
         if isinstance(data, dict) and data.get("kind") in PAYLOADS:
             raw = data.get("payload")
+            if isinstance(raw, PAYLOADS[data["kind"]]):
+                raw = raw.model_dump()
             if isinstance(raw, dict):
+                raw = _without_token(raw, data.get("hook_token"))
                 data = {**data, "payload": PAYLOADS[data["kind"]].model_validate(raw)}
         return data
 

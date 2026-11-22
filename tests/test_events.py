@@ -9,6 +9,7 @@ from etat_major.events import (
     ADAPTERS,
     CAPABILITIES,
     KINDS,
+    FailurePayload,
     capabilities_for,
     parse_event,
 )
@@ -209,3 +210,20 @@ def test_hook_token_not_in_validation_errors(bad):
             parse(data)
         assert exc.value.error_count() >= 1
         assert not _leaks(exc.value, "tok-secret-9")
+
+
+@pytest.mark.parametrize(
+    ("kind", "payload", "field"),
+    [
+        ("failure", {"reason": "curl -H 'X-Hook: tok-demo' exited 22"}, "reason"),
+        ("failure", {"reason": "tok-demo"}, "reason"),
+        ("session_end", {"exit_reason": "token=tok-demo rejected"}, "exit_reason"),
+        ("needs_input", {"request": "question", "prompt": "resend tok-demo?"}, "prompt"),
+        ("failure", FailurePayload(reason="auth tok-demo failed"), "reason"),
+    ],
+)
+def test_hook_token_redacted_from_payload_text(kind, payload, field):
+    event = parse_event(make(kind, payload=payload))
+    assert "tok-demo" not in event.model_dump_json()
+    assert "tok-demo" not in repr(event)
+    assert "[redacted]" in getattr(event.payload, field)

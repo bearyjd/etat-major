@@ -16,7 +16,6 @@ A report says what an agent or its hook *claims* happened. It is never authorita
   Nothing a report says can write `done` (only a human does) or approve a merge or push.
 - Reports can be lost, duplicated, reordered or forged. Consumers dedupe on `idempotency_key`
   and order by `ts` only as a hint.
-- `Event.is_hint` is always `True` in the models, as a reminder at call sites.
 
 ## Envelope
 
@@ -34,9 +33,9 @@ A report says what an agent or its hook *claims* happened. It is never authorita
 
 Unknown fields are rejected, at the envelope and in every payload.
 
-**`hook_token`.** Each session gets its own token. The receiver checks it against the session and
-rejects mismatches. It is a wire-only credential: the model keeps it out of `model_dump`, JSON,
-`repr` and validation errors; the store must not persist it. A valid token is still only a hint.
+**`hook_token`.** Each session gets its own token. It is a wire-only credential: the model keeps
+it out of `model_dump`, JSON, `repr` and validation errors, and replaces any copy of it in payload
+text with `[redacted]`; the store must not persist it. A valid token is still only a hint.
 
 ## Kinds and payloads
 
@@ -55,15 +54,12 @@ rejects mismatches. It is a wire-only credential: the model keeps it out of `mod
 - **`launch`** makes the auth mode visible at every start. A stray `ANTHROPIC_API_KEY` can
   override a subscription login and bill silently, so the UI shows `auth_mode` for each launch.
   `profile` is a profile name, never a secret or path.
-- **`failure`** always carries a human-readable `reason`, and the store keeps it so the
-  needs-you strip can say why.
 - **`usage`** carries raw counts as integers. No cost, price or multiplier field exists and
   extra fields are rejected. Cost is computed later from measured numbers, never encoded here.
 
 ## Adapter capability flags
 
-Adapters declare what they can report; consumers must not assume more. Exposed as
-`CAPABILITIES` and `capabilities_for(adapter)` (frozen models).
+Adapters declare what they can report (`CAPABILITIES`, `capabilities_for`); assume no more.
 
 | Flag | Meaning | `claude-code` | `codex` |
 | --- | --- | --- | --- |
@@ -72,8 +68,7 @@ Adapters declare what they can report; consumers must not assume more. Exposed a
 | `needs_input_detection` | Emits `needs_input` | yes | no |
 | `resume` | Can resume a session | yes | yes |
 
-The Codex row is conservative until its adapter exists: status comes from log parsing, which is
-also a hint. Update the flags when the adapter lands, with a test.
+The Codex row is conservative until its adapter exists: status comes from log parsing, also a hint.
 
 ## Example
 
@@ -90,3 +85,8 @@ also a hint. Update the flags when the adapter lands, with a test.
   "hook_token": "<per-session token>"
 }
 ```
+
+## Open questions
+
+- Binding `task_id`, `adapter` and owner to the authenticated session: owned by u4 (runtime store).
+- Scrubbing other credentials from stored free text such as `reason`: owned by u4 (runtime store).
