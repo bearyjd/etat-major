@@ -11,11 +11,12 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from etat_major.floorplan import FloorplanError, FloorplanIndex, load_graph
+from etat_major.floorplan import FloorplanError, load_graph
 from etat_major.refs import RefError, parse_ref
 from etat_major.render import render_trace
 from etat_major.text_safety import bounded_repr, safe
 from etat_major.trace import TraceError, trace_feature
+from etat_major.trail import TrailError, load_wiring
 from etat_major.workspace import Workspace, WorkspaceError, load_workspace
 
 OK, PROBLEMS, USAGE = 0, 1, 2
@@ -47,6 +48,7 @@ def _parser() -> argparse.ArgumentParser:
     trace.add_argument("ref", help="feature:<project>/<id>")
     trace.add_argument("--workspace", type=Path, required=True, help="intent workspace directory")
     trace.add_argument("--graph", type=Path, help="Floorplan graph.json (floorplan/graph@1)")
+    trace.add_argument("--trail", type=Path, help="Trail wiring.json (version 1)")
     decisions = sub.add_parser("decisions", help="decision records")
     dsub = decisions.add_subparsers(dest="action", required=True)
     dlist = dsub.add_parser(
@@ -83,18 +85,17 @@ def _trace(args: argparse.Namespace) -> int:
     if ref.kind != "feature":
         _err(f"expected a feature reference, got {bounded_repr(str(ref))}")
         return USAGE
-    graph: FloorplanIndex | None = None
-    if args.graph is not None:
-        try:
-            graph = load_graph(args.graph)
-        except FloorplanError as exc:
-            _err(str(exc))
-            return USAGE
+    try:
+        graph = load_graph(args.graph) if args.graph is not None else None
+        trail = load_wiring(args.trail) if args.trail is not None else None
+    except (FloorplanError, TrailError) as exc:
+        _err(str(exc))
+        return USAGE
     ws = _open_workspace(args.workspace)
     if ws is None:
         return USAGE
     try:
-        trace = trace_feature(ws, graph, ref)
+        trace = trace_feature(ws, graph, ref, trail=trail)
     except TraceError as exc:
         _err(str(exc))
         return USAGE

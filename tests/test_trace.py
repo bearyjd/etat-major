@@ -98,7 +98,7 @@ def test_no_graph_everything_unverified(workspace_dir):
     assert not t.has_problems
 
 
-def test_trail_ref_is_always_unverified(workspace_dir, graph_file):
+def test_trail_ref_is_unverified_with_only_floorplan(workspace_dir, graph_file):
     edit(
         workspace_dir,
         FEATURE,

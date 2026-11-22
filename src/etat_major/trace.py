@@ -1,7 +1,7 @@
 """Compute the research-to-code trace of one feature (docs/TRACEABILITY.md).
 
 Pure and read-only: nothing is stored. Link states (``gap``, ``built``, ``existing``,
-``stale``, ``unverified``, ``missing``) are derived here against an optional Floorplan index.
+``stale``, ``unverified``, ``missing``) are derived against optional Floorplan and Trail indexes.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from etat_major.overlay import resolve_file_path
 from etat_major.records import ArchitectureLink, Decision, Feature, ResearchArtifact
 from etat_major.refs import Ref
 from etat_major.text_safety import bounded_repr
+from etat_major.trail import SymbolIndex
 from etat_major.workspace import Workspace, link_warnings, linked_decisions
 
 ARCHITECTURE_PROBLEM_STATES = frozenset({"stale", "gap"})
@@ -132,11 +133,18 @@ def _decision_line(ws: Workspace, d: Decision, relation: str) -> DecisionLine:
 
 
 def _arch_state(
-    link: ArchitectureLink, graph: FloorplanIndex | None, renames: Mapping[str, str] | None
+    link: ArchitectureLink,
+    graph: FloorplanIndex | None,
+    renames: Mapping[str, str] | None,
+    trail: SymbolIndex | None,
 ) -> str:
-    if graph is None or link.ref.kind == "trail":
+    if link.ref.kind == "trail":
+        if trail is None:
+            return "unverified"
+        present = trail.has_symbol(f"{link.ref.id}#{link.ref.fragment}")
+    elif graph is None:
         return "unverified"
-    if link.ref.kind == "fp:f":
+    elif link.ref.kind == "fp:f":
         present = graph.has_file(resolve_file_path(link.ref.id, graph, renames))
     else:
         present = graph.resolve(link.ref)
@@ -190,6 +198,7 @@ def trace_feature(
     ref: Ref,
     *,
     renames: Mapping[str, str] | None = None,
+    trail: SymbolIndex | None = None,
 ) -> Trace:
     if ref.kind != "feature":
         raise TraceError(f"expected a feature reference, got {bounded_repr(str(ref))}")
@@ -206,7 +215,7 @@ def trace_feature(
         research=research,
         decisions=decisions,
         architecture=tuple(
-            ArchLine(a.ref, a.relation, _arch_state(a, graph, renames))
+            ArchLine(a.ref, a.relation, _arch_state(a, graph, renames, trail))
             for a in feature.architecture
         ),
         acceptance=tuple(AcceptanceLine(a.id, a.text) for a in feature.acceptance),

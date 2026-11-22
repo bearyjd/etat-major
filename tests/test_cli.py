@@ -42,6 +42,47 @@ def test_trace_without_graph_is_unverified_and_exit_0(capsys, workspace_dir):
     assert "unverified" in out and "gap" not in out
 
 
+@pytest.mark.parametrize(
+    ("symbol", "relation", "use_floorplan", "state", "code"),
+    [
+        ("_with_line", "modifies", True, "existing", 0),
+        ("_with_line", "new", False, "built", 0),
+        ("missing", "uses", False, "stale", 1),
+        ("missing", "new", False, "gap", 1),
+    ],
+)
+def test_trace_resolves_trail_links(
+    capsys, workspace_dir, graph_file, symbol, relation, use_floorplan, state, code
+):
+    path = workspace_dir / "features/netlens/0031-latency-graph.md"
+    ref = f"trail:src/etat_major/taskfile.py#{symbol}"
+    body = path.read_text().replace(
+        "fp:f:app/src/net/Latency.kt\n    relation: new", f"{ref}\n    relation: {relation}"
+    )
+    path.write_text(body)
+    trail = Path(__file__).parent / "fixtures/trail/wiring.json"
+    args = ("trace", "feature:netlens/0031", "--workspace", str(workspace_dir))
+    floorplan = ("--graph", str(graph_file)) if use_floorplan else ()
+    actual, out, err = run(capsys, *args, *floorplan, "--trail", str(trail))
+    assert actual == code and not err
+    assert f"{ref}  {relation}  {state}  human" in out
+    floorplan_state = "existing" if use_floorplan else "unverified"
+    assert f"fp:n:ui.hostdetail  modifies  {floorplan_state}  human" in out
+    assert f"{ref}  {relation}  unverified  human" in run(capsys, *args, *floorplan)[1]
+
+
+def test_trace_bad_trail_is_usage_error_with_safe_diagnostic(capsys, workspace_dir, tmp_path):
+    trail = tmp_path / "wiring\x1b.json"
+    trail.write_text(json.dumps({"meta": {"version": 2}}))
+    code, out, err = run(
+        capsys, "trace", "feature:netlens/0031", "--workspace", str(workspace_dir),
+        "--trail", str(trail),
+    )  # fmt: skip
+    assert code == 2 and not out
+    assert r"wiring\u001b.json" in err and "meta.version" in err
+    assert "\x1b" not in err and str(tmp_path) not in err and "Traceback" not in err
+
+
 def test_trace_output_is_deterministic(capsys, workspace_dir, graph_file):
     args = ("trace", "feature:netlens/0031", "--workspace", str(workspace_dir))
     assert run(capsys, *args)[1] == run(capsys, *args)[1]
