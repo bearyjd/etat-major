@@ -287,3 +287,49 @@ def test_duplicate_key_rejected(tmp_path, text, field):
         parse_task(task(tmp_path, text))
     assert e.value.field == field
     assert "duplicate" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        sub("status: ready\n", "<<: {status: running}\nstatus: ready\n"),
+        sub("id: 0042\n", "id: 0042\n<<: &base {status: running}\n"),
+        sub("    ref: example-org", "    <<: {kind: bogus}\n    ref: example-org"),
+    ],
+    ids=["derived-status-masked", "anchored", "nested"],
+)
+def test_yaml_merge_key_rejected(tmp_path, text):
+    with pytest.raises(TaskFileError) as e:
+        parse_task(task(tmp_path, text))
+    assert e.value.field == "<<"
+    assert "merge" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    ("body", "lines"),
+    [
+        ("intro\n\n<div\nclass=x>\nraw\n</div>", [3]),
+        ("intro\nhello <img\nsrc=x\nonerror=alert(1)> and\n<b>bold</b>", [2, 5]),
+        ("``` a`b\n<script>alert(1)</script>\n```", [2]),
+        ("````\n```\n<script>alert(1)</script>\n````\n\n<p>out</p>", [6]),
+        ("~~~\n~~~ not a closer\n<script>alert(1)</script>\n~~~", []),
+        ("`code\n<b>` then\n<i>real</i>", [3]),
+        ("> quoted\n> <span>x</span>", [2]),
+        ("one\n[x](javascript:alert(1))\n![y](data:text/html,z)\n<vbscript:x>", [2, 3, 4]),
+        ("[x][r]\n\n[r]: JavaScript:alert(1)", [1]),
+    ],
+    ids=[
+        "multiline-block-tag",
+        "multiline-inline-tag",
+        "backtick-in-info-is-not-a-fence",
+        "shorter-run-does-not-close",
+        "closer-with-info-does-not-close",
+        "multiline-code-span",
+        "blockquote",
+        "script-urls",
+        "reference-link",
+    ],
+)
+def test_markup_warnings_name_exact_source_lines(tmp_path, body, lines):
+    t = parse_task(task(tmp_path, sub("Free-form description.", body)))
+    assert t.warnings == tuple(f"line {n}: raw HTML or script markup in body" for n in lines)

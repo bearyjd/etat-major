@@ -16,8 +16,8 @@ workspace/
 ```
 
 Each file is markdown with a YAML frontmatter block (`---` fences) followed by a free-form body.
-Unknown or repeated frontmatter fields are rejected. Files in a `drafts/` folder (native Backlog.md drafts)
-are not task files and are rejected; use `status: draft` on a normal task.
+Unknown or repeated frontmatter fields and YAML merge keys (`<<`) are rejected. Files in a
+`drafts/` folder (native Backlog.md drafts) are rejected; use `status: draft` on a normal task.
 
 ## Task
 
@@ -72,9 +72,9 @@ Fields: `id` (equals filename stem), `title`, `initiative`, `owner` required; `r
 
 ## Body safety
 
-The body may be agent-written. The parser returns `warnings` (one per line, with line number) when
-the body contains raw HTML tags, HTML comments or `javascript:`/`vbscript:`/`data:` link targets
-outside code spans and fenced code. Flagging does not reject the file; renderers must still
+The body may be agent-written. The parser tokenizes it as CommonMark and returns `warnings` (one
+per line, numbered where the markup starts) for raw HTML and `javascript:`/`vbscript:`/`data:`
+link or image targets outside code. Flagging does not reject the file; renderers must still
 sanitise or escape the body and must show or drop flagged content.
 
 ## Errors

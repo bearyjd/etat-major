@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import yaml
+from markdown_it import MarkdownIt, rules_inline
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -37,22 +38,31 @@ class TaskFileError(ValueError):
         super().__init__(f"{where}: {message}")
 
 
-class _DuplicateKeyError(Exception):
-    def __init__(self, key: str, line: int) -> None:
+class _KeyError(Exception):
+    def __init__(self, key: str, message: str) -> None:
         self.key = key
-        self.line = line
+        self.message = message
 
 
 class _Loader(yaml.SafeLoader):
     """SafeLoader that keeps zero-padded numbers such as 0042 as strings
-    and rejects a key repeated within one mapping."""
+    and rejects merge keys and keys repeated within one mapping, either of
+    which would let one value silently replace another before validation."""
 
     def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
         seen: set[str] = set()
         for key_node, _ in node.value:
+            line = key_node.start_mark.line + 1
+            if key_node.tag == "tag:yaml.org,2002:merge":
+                raise _KeyError(
+                    "<<", f"YAML merge key on frontmatter line {line}; write each field out"
+                )
             if isinstance(key_node, yaml.ScalarNode):
                 if key_node.value in seen:
-                    raise _DuplicateKeyError(key_node.value, key_node.start_mark.line + 1)
+                    raise _KeyError(
+                        key_node.value,
+                        f"duplicate key on frontmatter line {line}; write each key once",
+                    )
                 seen.add(key_node.value)
         return super().construct_mapping(node, deep)
 
@@ -129,10 +139,8 @@ def split_frontmatter(text: str, path: Path) -> tuple[dict[str, Any], str]:
         raise TaskFileError(path, None, "missing or unclosed YAML frontmatter ('---' block)")
     try:
         meta = yaml.load(m.group(1) or "", Loader=_Loader)  # noqa: S506 - safe subclass
-    except _DuplicateKeyError as exc:
-        raise TaskFileError(
-            path, exc.key, f"duplicate key on frontmatter line {exc.line}; write each key once"
-        ) from None
+    except _KeyError as exc:
+        raise TaskFileError(path, exc.key, exc.message) from None
     except yaml.YAMLError as exc:
         raise TaskFileError(path, None, f"invalid YAML frontmatter: {exc}") from exc
     if not isinstance(meta, dict):
@@ -140,21 +148,49 @@ def split_frontmatter(text: str, path: Path) -> tuple[dict[str, Any], str]:
     return meta, text[m.end() :]
 
 
-_FENCE = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.DOTALL | re.MULTILINE)
-_INLINE = re.compile(r"`[^`\n]*`")
-_TAG = re.compile(r"</?[A-Za-z!][A-Za-z0-9-]*(?=[\s/>])[^>]*>|<!--")
-_JS_URL = re.compile(r"\]\(\s*(?:javascript|vbscript|data):", re.IGNORECASE)
+_SCRIPT_URL = re.compile(r"\s*(?:javascript|vbscript|data):", re.IGNORECASE)
+_URL_ATTR = {"link_open": "href", "image": "src"}
+
+
+def _with_line(rule: Any) -> Any:
+    """Wrap an inline rule so the token it emits records its line within the block."""
+
+    def wrapped(state: Any, silent: bool) -> bool:
+        pos, n = state.pos, len(state.tokens)
+        ok = rule(state, silent)
+        if ok and not silent:
+            token = next(t for t in state.tokens[n:] if t.type != "text")
+            token.meta = {"line": state.src.count("\n", 0, pos)}
+        return bool(ok)
+
+    return wrapped
+
+
+_MD = MarkdownIt("commonmark")
+_MD.validateLink = lambda url: True  # type: ignore[method-assign]  # keep script links as links
+for _name, _rule in (
+    ("html_inline", rules_inline.html_inline),
+    ("link", rules_inline.link),
+    ("image", rules_inline.image),
+    ("autolink", rules_inline.autolink),
+):
+    _MD.inline.ruler.at(_name, _with_line(_rule))
 
 
 def scan_markup(body: str) -> tuple[str, ...]:
-    """Flag raw HTML or script markup outside code spans; one message per line."""
-    blanked = _FENCE.sub(lambda m: "\n" * m.group(0).count("\n"), body)
-    found = []
-    for n, line in enumerate(blanked.splitlines(), 1):
-        line = _INLINE.sub("", line)
-        if _TAG.search(line) or _JS_URL.search(line):
-            found.append(f"line {n}: raw HTML or script markup in body")
-    return tuple(found)
+    """Flag raw HTML and script links as a Markdown renderer would see them.
+
+    One message per source line on which such markup starts.
+    """
+    lines: set[int] = set()
+    for block in _MD.parse(body):
+        if block.type == "html_block" and block.map:
+            lines.add(block.map[0] + 1)
+        for child in block.children or ():
+            url = child.attrGet(_URL_ATTR.get(child.type, ""))
+            if child.type == "html_inline" or (url and _SCRIPT_URL.match(str(url))):
+                lines.add(block.map[0] + child.meta["line"] + 1)  # type: ignore[index]
+    return tuple(f"line {n}: raw HTML or script markup in body" for n in sorted(lines))
 
 
 def _first_error(path: Path, exc: ValidationError) -> TaskFileError:
