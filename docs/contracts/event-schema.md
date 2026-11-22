@@ -14,28 +14,23 @@ A report says what an agent or its hook *claims* happened. It is never authorita
   Roll-ups are built from verified evidence, never from agent self-estimates.
 - `failure` and `needs_input` may raise a card to the human early, since a false alarm is cheap.
   Nothing a report says can write `done` (only a human does) or approve a merge or push.
-- Reports can be lost, duplicated, reordered or forged. Consumers dedupe on `idempotency_key`
-  and order by `ts` only as a hint.
+- Reports can be lost, duplicated, reordered or forged; `ts` orders them only as a hint.
 
 ## Envelope
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `event_id` | string | yes | Unique id of this report |
-| `idempotency_key` | string | yes | Same key = same logical event; a retry reuses it, the store keeps one |
+| `idempotency_key` | string | yes | A retry of the same logical event reuses it |
 | `session_id` | string | yes | The agent session that produced it |
 | `task_id` | string | no | Task the session is bound to, when known |
 | `adapter` | `claude-code` \| `codex` | yes | Producing agent CLI |
 | `kind` | see below | yes | Selects the payload shape |
 | `ts` | RFC 3339 string | yes | Must carry a timezone (`Z` or an offset) |
 | `payload` | object | yes | Shape depends on `kind` |
-| `hook_token` | string | yes | Per-session token that authenticates the report |
 
-Unknown fields are rejected, at the envelope and in every payload.
-
-**`hook_token`.** Each session gets its own token. It is a wire-only credential: the model keeps
-it out of `model_dump`, JSON, `repr` and validation errors, and replaces any copy of it elsewhere
-in the report with `[redacted]`; the store must not persist it. A valid token is still only a hint.
+Unknown fields are rejected, at the envelope and in every payload. The envelope carries no
+credential, and validation errors never echo input values or unknown field names.
 
 ## Kinds and payloads
 
@@ -81,12 +76,12 @@ The Codex row is conservative until its adapter exists: status comes from log pa
   "adapter": "claude-code",
   "kind": "launch",
   "ts": "2026-11-21T10:00:00Z",
-  "payload": { "auth_mode": "subscription" },
-  "hook_token": "<per-session token>"
+  "payload": { "auth_mode": "subscription" }
 }
 ```
 
 ## Open questions
 
-- Binding `task_id`, `adapter` and owner to the authenticated session: owned by u4 (runtime store).
-- Scrubbing other credentials from stored free text such as `reason`: owned by u4 (runtime store).
+- Authenticating a report and binding `task_id`, `adapter` and owner to its session: owned by u4.
+- Deduplication scope of `idempotency_key`, and key reuse with different content: owned by u4.
+- Scrubbing credentials from stored free text such as `reason`: owned by u4.

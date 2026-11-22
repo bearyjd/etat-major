@@ -40,7 +40,6 @@ def make(kind="launch", **over):
         "kind": kind,
         "ts": "2026-11-21T10:00:00Z",
         "payload": PAYLOADS[kind],
-        "hook_token": "tok-demo",
     }
     base.update(over)
     return base
@@ -101,7 +100,7 @@ def test_usage_rejects_negative_and_float():
             parse_event(bad)
 
 
-@pytest.mark.parametrize("field", ["event_id", "idempotency_key", "session_id", "hook_token"])
+@pytest.mark.parametrize("field", ["event_id", "idempotency_key", "session_id"])
 def test_required_top_level_fields(field):
     data = make()
     del data[field]
@@ -139,13 +138,6 @@ def test_payload_kind_mismatch_rejected():
         parse_event(make("launch", payload=PAYLOADS["usage"]))
 
 
-def test_hook_token_never_serialised_or_repr():
-    ev = parse_event(make())
-    assert "tok-demo" not in repr(ev)
-    assert "hook_token" not in ev.model_dump()
-    assert "tok-demo" not in ev.model_dump_json()
-
-
 def test_event_is_immutable_and_hint():
     ev = parse_event(make())
     with pytest.raises(ValidationError):
@@ -171,7 +163,6 @@ def test_capabilities():
 
 
 def test_mismatched_payload_instance_rejected():
-    from etat_major.events import FailurePayload
 
     data = make("launch", payload=FailurePayload(reason="x"))
     with pytest.raises(ValidationError):
@@ -196,10 +187,10 @@ def _leaks(err: ValidationError, secret: str) -> bool:
         {"ts": "nope"},
         {"payload": {}},
         {"payload": PAYLOADS["usage"]},  # kind mismatch (after validator)
-        {"hook_token": ["tok-secret-9"]},  # the token itself is the bad input
+        {"hook_token": ["tok-secret-9"]},  # nested, not only a plain string
     ],
 )
-def test_hook_token_not_in_validation_errors(bad):
+def test_credential_in_body_not_in_validation_errors(bad):
     from etat_major.events import Event
 
     data = make(**{"hook_token": "tok-secret-9", **bad})
@@ -213,31 +204,6 @@ def test_hook_token_not_in_validation_errors(bad):
 
 
 @pytest.mark.parametrize(
-    ("kind", "payload", "field"),
-    [
-        ("failure", {"reason": "curl -H 'X-Hook: tok-demo' exited 22"}, "reason"),
-        ("failure", {"reason": "tok-demo"}, "reason"),
-        ("session_end", {"exit_reason": "token=tok-demo rejected"}, "exit_reason"),
-        ("needs_input", {"request": "question", "prompt": "resend tok-demo?"}, "prompt"),
-        ("failure", FailurePayload(reason="auth tok-demo failed"), "reason"),
-    ],
-)
-def test_hook_token_redacted_from_payload_text(kind, payload, field):
-    event = parse_event(make(kind, payload=payload))
-    assert "tok-demo" not in event.model_dump_json()
-    assert "tok-demo" not in repr(event)
-    assert "[redacted]" in getattr(event.payload, field)
-
-
-@pytest.mark.parametrize("field", ["event_id", "idempotency_key", "session_id", "task_id"])
-def test_hook_token_redacted_from_envelope_ids(field):
-    event = parse_event(make(**{field: "sess-tok-demo:1"}))
-    assert "tok-demo" not in event.model_dump_json()
-    assert "tok-demo" not in repr(event)
-    assert getattr(event, field) == "sess-[redacted]:1"
-
-
-@pytest.mark.parametrize(
     "bad",
     [
         {"x-tok-secret-9": 1},  # unknown envelope field named after the token
@@ -246,12 +212,41 @@ def test_hook_token_redacted_from_envelope_ids(field):
         {"extra": {"tok-secret-9": ["tok-secret-9"]}},
     ],
 )
-def test_hook_token_not_in_error_field_names(bad):
+def test_credential_in_body_not_in_error_field_names(bad):
     from etat_major.events import Event
 
     data = make(**{"hook_token": "tok-secret-9", **bad})
     for parse in (parse_event, Event.model_validate, lambda d: Event(**d)):
         with pytest.raises(ValidationError) as exc:
             parse(data)
+        assert exc.value.error_count() >= 1
+        assert not _leaks(exc.value, "tok-secret-9")
+
+
+def test_event_model_and_schema_carry_no_credential():
+    from etat_major.events import Event
+
+    assert "hook_token" not in Event.model_fields
+    assert "hook_token" not in SCHEMA["properties"]
+    assert "hook_token" not in SCHEMA["required"]
+    data = make()
+    assert "hook_token" not in dict(parse_event(data))
+    legacy = {**data, "hook_token": "tok-secret-9"}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(legacy, SCHEMA)
+    with pytest.raises(ValidationError) as exc:
+        parse_event(legacy)
+    assert not _leaks(exc.value, "tok-secret-9")
+
+
+@pytest.mark.parametrize("cut", [1, 20])
+def test_malformed_json_error_does_not_echo_body(cut):
+    from etat_major.events import Event
+
+    raw = json.dumps({**make(), "reason": "Bearer tok-secret-9", "pad": "x" * 20})[:-cut]
+    assert "tok-secret-9" in raw
+    for body in (raw, raw.encode()):
+        with pytest.raises(ValidationError) as exc:
+            Event.model_validate_json(body)
         assert exc.value.error_count() >= 1
         assert not _leaks(exc.value, "tok-secret-9")

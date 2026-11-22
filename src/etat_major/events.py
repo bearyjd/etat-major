@@ -2,8 +2,8 @@
 
 Contract: docs/contracts/event-schema.md. Every report is a hint, not a fact: the
 control plane must corroborate it (session liveness, git, CI) before it changes
-derived state. The per-session ``hook_token`` authenticates a report on the wire
-and is never stored, serialised or shown in ``repr``.
+derived state. An event carries no credential; authentication happens before
+parsing, and validation errors never echo their input.
 """
 
 from __future__ import annotations
@@ -124,27 +124,21 @@ Payload = (
 )
 
 
-def _scrub(value: Any, token: str) -> Any:
-    """Replace every copy of the ``hook_token`` in report text and field names."""
-    if isinstance(value, str):
-        return value.replace(token, "[redacted]")
-    if isinstance(value, BaseModel):
-        value = value.model_dump()
-    if isinstance(value, dict):
-        return {_scrub(k, token): _scrub(v, token) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_scrub(v, token) for v in value]
-    return value
+def _without_input(exc: ValidationError) -> ValidationError:
+    """Rebuild an error without raw input or unknown field names: either can hold a credential."""
+    errors = [
+        {**e, "input": None, "loc": (*e["loc"][:-1], "[unknown]")}
+        if e["type"] == "extra_forbidden"
+        else {**e, "input": None}
+        for e in exc.errors(include_url=False)
+    ]
+    return ValidationError.from_exception_data(exc.title, errors, hide_input=True)
 
 
 def _prepare(data: Any) -> Any:
-    """Scrub the token from all but its own field, then type the payload by kind."""
+    """Type the payload by kind."""
     if not isinstance(data, dict):
         return data
-    token = data.get("hook_token")
-    if isinstance(token, str) and token:
-        data = {**_scrub({k: v for k, v in data.items() if k != "hook_token"}, token)}
-        data["hook_token"] = token
     kind, raw = data.get("kind"), data.get("payload")
     if kind in PAYLOADS and isinstance(raw, dict | BaseModel):
         data = {**data, "payload": PAYLOADS[kind].model_validate(raw)}
@@ -160,7 +154,6 @@ class Event(_Strict):
     kind: Kind
     ts: AwareDatetime
     payload: Payload
-    hook_token: Text = Field(exclude=True, repr=False)
 
     @property
     def is_hint(self) -> bool:
@@ -169,15 +162,22 @@ class Event(_Strict):
 
     @model_validator(mode="wrap")
     @classmethod
-    def _scrub_and_validate(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Event:
-        """Drop raw input from errors: it can hold the ``hook_token``."""
+    def _validate_without_input(cls, data: Any, handler: ValidatorFunctionWrapHandler) -> Event:
         try:
             return handler(_prepare(data))
         except ValidationError as exc:
-            errors = [{**e, "input": None} for e in exc.errors(include_url=False)]
-            title = exc.title
+            clean = _without_input(exc)
         # Raised outside the handler so the original error is not chained.
-        raise ValidationError.from_exception_data(title, errors, hide_input=True)
+        raise clean
+
+    @classmethod
+    def model_validate_json(cls, json_data: str | bytes | bytearray, **kwargs: Any) -> Event:
+        """Malformed JSON fails before the model validators run; clean that error too."""
+        try:
+            return super().model_validate_json(json_data, **kwargs)
+        except ValidationError as exc:
+            clean = _without_input(exc)
+        raise clean
 
     @model_validator(mode="after")
     def _payload_matches_kind(self) -> Event:
