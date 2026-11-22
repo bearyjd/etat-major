@@ -2,18 +2,22 @@
 
 import re
 from collections import defaultdict
-from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
-from etat_major.gradle_parse import dependency_requests, parse_script
+from etat_major.gradle_parse import Script, dependency_requests, parse_script, read_script
+from etat_major.gradle_plugins import (
+    Implementation,
+    applied_plugins,
+    discover_plugins,
+    read_plugin_aliases,
+)
 from etat_major.gradle_settings import parse_settings
-from etat_major.localfiles import open_directory, read_text_kib
+from etat_major.localfiles import open_directory, open_relative_directory
 from etat_major.taskfile import TaskFileError
 from etat_major.workspace import Issue
 
 _FILE_LIMIT = 5000
-INPUT_LIMIT_KIB = 256
 _ACCESSOR_SEPARATOR = re.compile(r"[-_](?=[a-zA-Z0-9])")
 
 
@@ -34,33 +38,24 @@ class Declaration:
 
 
 @dataclass(frozen=True)
+class ImplicitDeclaration(Declaration):
+    plugin_id: str
+    plugin_class: str
+    implicit: bool = True
+
+
+@dataclass(frozen=True)
 class GradleDependencies:
     modules: tuple[Module, ...]
     edges: tuple[Declaration, ...]
     issues: tuple[Issue, ...]
-
-
-def _script(directory: Path, base: str, fd: int) -> tuple[Path, str] | None:
-    for name in (f"{base}.gradle.kts", f"{base}.gradle"):
-        file = directory / name
-        try:
-            return file, read_text_kib(file, INPUT_LIMIT_KIB, dir_fd=fd)
-        except FileNotFoundError:
-            continue
-        except (OSError, UnicodeError):
-            raise TaskFileError(file, "file", "cannot read script as UTF-8") from None
-        except ValueError as exc:
-            raise TaskFileError(file, "file", str(exc)) from None
-    return None
+    implicit_edges: tuple[ImplicitDeclaration, ...] = ()
 
 
 def _module_script(directory: Path, root_fd: int) -> tuple[Path, str] | None:
     try:
-        with ExitStack() as stack:
-            fd = root_fd
-            for part in directory.parts:
-                fd = stack.enter_context(open_directory(Path(part), fd))
-            return _script(directory, "build", fd)
+        with open_relative_directory(directory, root_fd) as fd:
+            return read_script(directory, "build", fd)
     except FileNotFoundError:
         return None
     except OSError:
@@ -82,13 +77,11 @@ def _accessors(projects: dict[str, str]) -> dict[str, list[str]]:
 
 def _declarations(
     module: Module,
-    script_file: tuple[Path, str],
+    script: Script,
     projects: dict[str, str],
     accessors: dict[str, list[str]],
     issues: list[Issue],
 ) -> list[Declaration]:
-    file, text = script_file
-    script = parse_script(text, file)
     edges = []
     for request in dependency_requests(script):
         target = request.target
@@ -112,7 +105,7 @@ def _declarations(
                 candidates[0],
                 request.configuration,
                 request.test_only,
-                file.as_posix(),
+                script.file.as_posix(),
                 script.tokens[request.index].line,
             )
         )
@@ -122,50 +115,112 @@ def _declarations(
 def _read_module(
     module: Module,
     fd: int,
-    projects: dict[str, str],
-    accessors: dict[str, list[str]],
     issues: list[Issue],
-) -> list[Declaration]:
+    root_script: tuple[Path, str] | None,
+) -> Script | None:
     try:
-        script = _module_script(Path(module.directory), fd)
-        return _declarations(module, script, projects, accessors, issues) if script else []
+        script_file = (
+            root_script if module.id == ":" else _module_script(Path(module.directory), fd)
+        )
+        return parse_script(script_file[1], script_file[0]) if script_file else None
     except TaskFileError as exc:
         directory = Path(module.directory)
         path = directory / exc.filename if exc.field != "directory" else directory
         issues.append(Issue(path.as_posix(), exc.field_name, exc.message))
-        return []
+        return None
+
+
+def _implicit_declarations(
+    module: Module,
+    script: Script,
+    projects: dict[str, str],
+    plugins: dict[str, Implementation | None],
+    aliases: dict[str, str],
+    issues: list[Issue],
+) -> list[ImplicitDeclaration]:
+    edges = []
+    for plugin_id, implementation in applied_plugins(script, plugins, aliases, issues):
+        for request in implementation.dependencies:
+            if request.target in projects:
+                edges.append(
+                    ImplicitDeclaration(
+                        module.id,
+                        request.target,
+                        request.configuration,
+                        request.test_only,
+                        request.file,
+                        request.line,
+                        plugin_id,
+                        implementation.name,
+                    )
+                )
+            else:
+                issue = Issue(
+                    request.file,
+                    "dependencies",
+                    f"line {request.line}: unresolved project dependency",
+                    severity="warning",
+                    blocking=False,
+                )
+                if issue not in issues:
+                    issues.append(issue)
+    return edges
+
+
+def _scan_modules(
+    fd: int,
+    projects: dict[str, str],
+    root_script: tuple[Path, str] | None,
+    plugins: dict[str, Implementation | None],
+    issues: list[Issue],
+) -> GradleDependencies:
+    modules = tuple(Module(project, directory) for project, directory in sorted(projects.items()))
+    accessors = _accessors(projects)
+    aliases = read_plugin_aliases(fd, issues) if plugins else {}
+    edges = []
+    implicit_edges = []
+    for module in modules:
+        script = _read_module(module, fd, issues, root_script)
+        if script is None:
+            continue
+        edges.extend(_declarations(module, script, projects, accessors, issues))
+        if plugins:
+            implicit_edges.extend(
+                _implicit_declarations(module, script, projects, plugins, aliases, issues)
+            )
+    return GradleDependencies(modules, tuple(edges), tuple(issues), tuple(implicit_edges))
+
+
+def _settings_issue_order(issue: Issue, file: Path) -> tuple[int, int]:
+    if issue.path != file.as_posix():
+        return (1, 0)
+    line = issue.message.removeprefix("line ").partition(":")[0]
+    return (0, int(line) if line.isdecimal() else 0)
 
 
 def _discover(fd: int) -> GradleDependencies:
-    settings = _script(Path("."), "settings", fd)
-    if settings is None:
+    settings_file = read_script(Path("."), "settings", fd)
+    if settings_file is None:
         raise TaskFileError(Path("settings.gradle"), "file", "missing Gradle settings script")
-    file, text = settings
+    file, text = settings_file
     issues: list[Issue] = []
-    projects = parse_settings(parse_script(text, file), issues)
+    includes: dict[str, int] = {}
+    settings = parse_script(text, file)
+    projects = parse_settings(settings, issues, includes)
     if 2 + 2 * (len(projects.keys() - {":"}) + 1) > _FILE_LIMIT:
         raise TaskFileError(
             file, "include", f"repository exceeds the {_FILE_LIMIT} file probe limit"
         )
     try:
-        root_script = _script(Path("."), "build", fd)
+        root_script = read_script(Path("."), "build", fd)
     except TaskFileError as exc:
         issues.append(Issue(exc.filename, exc.field_name, exc.message))
         root_script = None
     if root_script:
         projects[":"] = ""
-    modules = tuple(Module(project, directory) for project, directory in sorted(projects.items()))
-    accessors = _accessors(projects)
-    edges = []
-    if root_script:
-        try:
-            edges.extend(_declarations(Module(":", ""), root_script, projects, accessors, issues))
-        except TaskFileError as exc:
-            issues.append(Issue(exc.filename, exc.field_name, exc.message))
-    for module in modules:
-        if module.id != ":":
-            edges.extend(_read_module(module, fd, projects, accessors, issues))
-    return GradleDependencies(modules, tuple(edges), tuple(issues))
+    plugins = discover_plugins(settings, includes, fd, issues)
+    issues.sort(key=lambda issue: _settings_issue_order(issue, file))
+    return _scan_modules(fd, projects, root_script, plugins, issues)
 
 
 def load_dependencies(root: Path) -> GradleDependencies:

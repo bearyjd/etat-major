@@ -103,8 +103,32 @@ def _composite_call(script: Script, index: int) -> bool:
     )
 
 
-def _composite_issue(script: Script, index: int) -> Issue:
-    return script.issue("includeBuild", index, "composite build not followed", blocking=False)
+def _composite(
+    script: Script, index: int, end: int, includes: dict[str, int], issues: list[Issue]
+) -> None:
+    start = index + 1
+    if script.values(start, start + 1) == ("(",):
+        candidate = script.tokens[start + 1].literal if end == start + 3 else None
+    else:
+        candidate = script.tokens[start].literal if end == start + 1 else None
+    if candidate and candidate.startswith("./"):
+        candidate = candidate[2:]
+    if (
+        script.statement_start(index)
+        and candidate
+        and _DIRECTORY.fullmatch(candidate)
+        and len(candidate.split("/")) <= MAX_DEPTH
+    ):
+        includes.setdefault(candidate, index)
+        return
+    issues.append(
+        script.issue(
+            "includeBuild",
+            index,
+            "composite build not followed: unsupported path or placement",
+            blocking=False,
+        )
+    )
 
 
 def _statement_end(script: Script, start: int, stop: int) -> int:
@@ -128,15 +152,17 @@ def _statement_end(script: Script, start: int, stop: int) -> int:
     return stop
 
 
-def _ignored_end(script: Script, index: int, issues: list[Issue]) -> int:
+def _ignored_end(script: Script, index: int, issues: list[Issue], includes: dict[str, int]) -> int:
     value = script.tokens[index].value
     next_value = script.values(index + 1, index + 2)
     if value in {"pluginManagement", "dependencyResolutionManagement"} and next_value == ("{",):
         end = script.closing[index + 1]
         if value == "pluginManagement":
+            direct = set(script.siblings(index + 2, end))
             for child in range(index + 2, end):
                 if script.tokens[child].value == "includeBuild" and _composite_call(script, child):
-                    issues.append(_composite_issue(script, child))
+                    stop = _statement_end(script, child + 1, end) if child in direct else child + 1
+                    _composite(script, child, stop, includes, issues)
         return end + 1
     if value == "enableFeaturePreview" and _has_call_argument(script, index):
         return _statement_end(script, index + 1, len(script.tokens))
@@ -145,7 +171,9 @@ def _ignored_end(script: Script, index: int, issues: list[Issue]) -> int:
     return index
 
 
-def _settings_tokens(script: Script, top_level: set[int], issues: list[Issue]) -> Iterator[int]:
+def _settings_tokens(
+    script: Script, top_level: set[int], issues: list[Issue], includes: dict[str, int]
+) -> Iterator[int]:
     skip_until = 0
     groups: list[int] = []
     for i, token in enumerate(script.tokens):
@@ -158,12 +186,12 @@ def _settings_tokens(script: Script, top_level: set[int], issues: list[Issue]) -
             and (not groups or script.tokens[groups[-1]].value == "{")
             and _composite_call(script, i)
         ):
-            issues.append(_composite_issue(script, i))
             end = script.closing[groups[-1]] if groups else len(script.tokens)
             skip_until = _statement_end(script, i + 1, end)
+            _composite(script, i, skip_until if not groups else i + 1, includes, issues)
             continue
         if i in top_level and _statement_start(script, i):
-            skip_until = _ignored_end(script, i, issues)
+            skip_until = _ignored_end(script, i, issues, includes)
             if i < skip_until:
                 continue
         if script.closing[i] != i:
@@ -171,11 +199,15 @@ def _settings_tokens(script: Script, top_level: set[int], issues: list[Issue]) -
         yield i
 
 
-def parse_settings(script: Script, issues: list[Issue]) -> dict[str, str]:
+def parse_settings(
+    script: Script, issues: list[Issue], includes: dict[str, int] | None = None
+) -> dict[str, str]:
+    if includes is None:
+        includes = {}
     projects: dict[str, str] = {}
     remaps: dict[str, tuple[str | None, int]] = {}
     top_level = set(script.siblings(0, len(script.tokens)))
-    for i in _settings_tokens(script, top_level, issues):
+    for i in _settings_tokens(script, top_level, issues, includes):
         value = script.tokens[i].value
         if i not in top_level:
             if value in {"include", "includeFlat", "projectDir"}:

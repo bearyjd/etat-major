@@ -3,7 +3,9 @@
 import os
 import stat
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from heapq import nsmallest
+from itertools import islice
 from pathlib import Path
 from secrets import token_hex
 
@@ -29,6 +31,32 @@ def open_directory(path: Path, parent_fd: int | None = None) -> Iterator[int]:
         yield fd
     finally:
         os.close(fd)
+
+
+@contextmanager
+def open_relative_directory(path: Path, root_fd: int) -> Iterator[int]:
+    """Open a validated relative path from an existing directory descriptor."""
+    with ExitStack() as stack:
+        fd = root_fd
+        for part in path.parts:
+            fd = stack.enter_context(open_directory(Path(part), fd))
+        yield fd
+
+
+def directory_names(fd: int, limit: int, *, stop_at_limit: bool = False) -> list[str]:
+    """Return sorted names with an extra entry to signal an exceeded limit."""
+    with os.scandir(fd) as listing:
+        names = (entry.name for entry in listing)
+        if stop_at_limit:
+            return sorted(islice(names, limit + 1))
+        return nsmallest(limit + 1, names)
+
+
+def entry_mode(path: Path, fd: int) -> int:
+    mode = os.stat(path.name, dir_fd=fd, follow_symlinks=False).st_mode
+    if stat.S_ISLNK(mode):
+        raise ValueError("symlink is not allowed")
+    return mode
 
 
 def _check_file(info: os.stat_result, limit: int, size_error: str) -> None:

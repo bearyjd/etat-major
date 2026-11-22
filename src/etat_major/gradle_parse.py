@@ -5,10 +5,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from etat_major.localfiles import read_text_kib
 from etat_major.taskfile import TaskFileError
 from etat_major.workspace import Issue
 
 MAX_DEPTH = 64
+INPUT_LIMIT_KIB = 256
 _IDENT = r"[a-zA-Z_][a-zA-Z_0-9]*"
 _WORD = re.compile(_IDENT)
 PROJECT_SEGMENT = r"[a-zA-Z0-9_][a-zA-Z0-9_.-]*"
@@ -151,6 +153,52 @@ class Script:
         if start < stop:
             yield start, stop
 
+    def statement_start(self, index: int) -> bool:
+        if index == 0:
+            return True
+        previous, current = self.tokens[index - 1 : index + 1]
+        if previous.value in {"{", "}", ";"}:
+            return True
+        if previous.line == current.line or previous.value in {
+            ".",
+            "=",
+            ",",
+            "+",
+            "-",
+            "/",
+            ":",
+            "else",
+            "do",
+        }:
+            return False
+        if previous.value == ")":
+            depth = 1
+            for i in range(index - 2, -1, -1):
+                depth += (self.tokens[i].value == ")") - (self.tokens[i].value == "(")
+                if not depth:
+                    return i == 0 or self.tokens[i - 1].value not in {
+                        "if",
+                        "for",
+                        "while",
+                        "when",
+                        "catch",
+                    }
+        return True
+
+
+def read_script(directory: Path, base: str, fd: int) -> tuple[Path, str] | None:
+    for name in (f"{base}.gradle.kts", f"{base}.gradle"):
+        file = directory / name
+        try:
+            return file, read_text_kib(file, INPUT_LIMIT_KIB, dir_fd=fd)
+        except FileNotFoundError:
+            continue
+        except (OSError, UnicodeError):
+            raise TaskFileError(file, "file", "cannot read script as UTF-8") from None
+        except ValueError as exc:
+            raise TaskFileError(file, "file", str(exc)) from None
+    return None
+
 
 def parse_script(text: str, file: Path) -> Script:
     tokens = tuple(_tokens(text, file))
@@ -234,7 +282,7 @@ def _request(script: Script, config: str, start: int, stop: int, index: int) -> 
     return Request(target, value == "projects", config, test_only, index)
 
 
-def _statement_end(script: Script, start: int, stop: int) -> int:
+def statement_end(script: Script, start: int, stop: int) -> int:
     tokens = script.tokens
     for i in script.siblings(start, stop):
         if tokens[i].value == ";":
@@ -245,10 +293,11 @@ def _statement_end(script: Script, start: int, stop: int) -> int:
     return stop
 
 
-def _configuration(script: Script, start: int, stop: int) -> Request | None:
-    config = script.tokens[start].value
+def _configuration(script: Script, start: int, stop: int, *, convention: bool) -> Request | None:
+    token = script.tokens[start]
+    config = token.literal if convention and token.kind == "string" else token.value
     arg = start + 1
-    if arg >= stop or not _WORD.fullmatch(config):
+    if arg >= stop or not config or not _WORD.fullmatch(config):
         return None
     if script.tokens[arg].value == "(":
         close = script.closing[arg]
@@ -271,17 +320,23 @@ def dependency_requests(script: Script) -> Iterator[Request]:
             continue
         if i and tokens[i - 1].value == ".":
             continue
-        end = script.closing[i + 1]
-        start = i + 2
-        while start < end:
-            stop = _statement_end(script, start, end)
-            if start < stop:
-                request = _configuration(script, start, stop)
-                if request is not None:
-                    yield request
-                elif _has_project_reference(script, start, stop):
-                    yield Request(None, False, "", False, start)
-            start = stop + (stop < end and tokens[stop].value == ";")
+        yield from dependency_block_requests(script, i + 1)
+
+
+def dependency_block_requests(
+    script: Script, block: int, *, convention: bool = False
+) -> Iterator[Request]:
+    end = script.closing[block]
+    start = block + 1
+    while start < end:
+        stop = statement_end(script, start, end)
+        if start < stop:
+            request = _configuration(script, start, stop, convention=convention)
+            if request is not None:
+                yield request
+            elif _has_project_reference(script, start, stop):
+                yield Request(None, False, "", False, start)
+        start = stop + (stop < end and script.tokens[stop].value == ";")
 
 
 def _has_project_reference(script: Script, start: int, stop: int) -> bool:
