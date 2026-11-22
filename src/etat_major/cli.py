@@ -1,4 +1,4 @@
-"""``etat-major`` command line. Read-only: no network, no model calls, nothing written.
+"""``etat-major`` command line. All commands operate locally.
 
 Exit codes: 0 ok; 1 the trace has missing/stale/gap items or the workspace has validation
 errors; 2 usage errors (bad arguments, unreadable workspace or graph file).
@@ -15,6 +15,9 @@ from etat_major.floorplan import FloorplanError, load_graph
 from etat_major.refs import RefError, parse_ref
 from etat_major.render import render_trace
 from etat_major.repo_index import RepoIndexError, load_repo_index
+from etat_major.research_brief import write_brief
+from etat_major.research_import import import_answer
+from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import bounded_repr, safe
 from etat_major.trace import TraceError, trace_feature
 from etat_major.trail import TrailError, load_wiring
@@ -64,7 +67,20 @@ def _parser() -> argparse.ArgumentParser:
         "list", help="list all decisions, rejected and postponed included", **help_options
     )
     dlist.add_argument("--workspace", type=Path, required=True)
+    _research_parser(sub.add_parser("research", help="prepare and import manual research"))
     return parser
+
+
+def _research_parser(parser: argparse.ArgumentParser) -> None:
+    actions = parser.add_subparsers(dest="action", required=True)
+    brief = actions.add_parser("brief", help="write a research prompt for a feature")
+    brief.add_argument("ref", help="feature:<project>/<id>")
+    brief.add_argument("--workspace", type=Path, required=True)
+    brief.add_argument("--out", type=Path, required=True)
+    paste = actions.add_parser("import", help="save a pasted answer as an unreviewed artifact")
+    paste.add_argument("file", type=Path)
+    paste.add_argument("--workspace", type=Path, required=True)
+    paste.add_argument("--id", required=True, help="four-digit research ID")
 
 
 def _err(message: str) -> None:
@@ -136,9 +152,26 @@ def _index(args: argparse.Namespace) -> int:
     return OK
 
 
+def _research(args: argparse.Namespace) -> int:
+    try:
+        if args.action == "brief":
+            write_brief(args.ref, args.workspace, args.out)
+        else:
+            import_answer(args.file, args.workspace, args.id)
+    except TaskFileError as exc:
+        _err(str(exc))
+        return USAGE
+    return OK
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    handlers = {"trace": _trace, "decisions": _decisions_list, "index": _index}
+    handlers = {
+        "trace": _trace,
+        "decisions": _decisions_list,
+        "index": _index,
+        "research": _research,
+    }
     return handlers[args.command](args)
 
 

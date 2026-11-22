@@ -28,7 +28,7 @@ workspace/
 
 File paths in code references are repository-relative. Use ASCII `/` between non-empty segments. Leading `~`, drive-letter prefixes, dot segments, backslashes and Unicode slash lookalikes are invalid.
 
-**Minimum for Slice 1.** Each record needs an `id` and `status`. Research also needs a `title`, `provenance` and at least one source with a URL and date. A Decision needs a `question` and, when approved, rejected or postponed, `decided_by: human`. A Feature needs a `project` and `title`. The planned status requires an approved linked Decision.
+**Minimum for Slice 1.** Each record needs an `id` and `status`. Research also needs a `title`, `provenance` and at least one source with a URL and date, with an exception for imported drafts described below. A Decision needs a `question` and, when approved, rejected or postponed, `decided_by: human`. A Feature needs a `project` and `title`. The planned status requires an approved linked Decision.
 
 ## Records
 
@@ -62,6 +62,9 @@ unresolved:
 ```
 
 Findings without a `source` are allowed only with `evidence: unverified` and are shown as unsourced.
+Imported findings with an undated URL keep it as `source` and also carry
+`source_date_missing: true`. An `unreviewed`, `ai-generated` artifact may have
+an empty `sources` list when the answer contains no dated citation.
 
 ### Decision
 
@@ -91,6 +94,8 @@ project: netlens
 title: Live latency graph
 problem: Users cannot see latency trends during a scan.
 outcome: A graph of round-trip time per host over the last 5 minutes.
+research_questions:        # optional, used by the manual research brief
+  - How do similar tools present latency trends during a scan?
 status: planned             # stored intent only: idea | researching | proposed | planned
 priority: 2
 research: [research:0007]
@@ -160,20 +165,14 @@ Validation processes at most 2,000 entries per directory, including the `feature
 
 ChatGPT is the preferred external research and brainstorming partner, especially for Reddit, which Claude's search tools cannot reliably reach. The first version is a **manual copy and paste**. There is no automatic sending, no scraping of ChatGPT sessions, no undocumented API and no background research agent. Direct integration may be considered later only if a supported mechanism exists and clearly helps.
 
-1. **Brief.** `etat-major research brief feature:<project>/<id>` writes a Markdown prompt file. It contains the project context you approve, current capabilities, the specific questions, the sources to examine (Reddit, GitHub, documentation), and the required answer format below. It does not read secrets and contains no local paths, hostnames or keys; the command refuses to write if its redaction check finds any.
+1. **Brief.** `etat-major research brief feature:<project>/<id> --workspace D --out FILE` writes a Markdown prompt file. It contains the Feature's project context, the specific questions, the sources to examine (Reddit, GitHub, documentation), and the required answer format below. The command refuses to write if its redaction check detects local paths, hostnames, IP or email addresses, or key-like strings.
 2. **Human review.** You read the brief and decide what leaves your machine. Nothing is sent by État-major.
 3. **Paste into ChatGPT**, then copy its answer.
-4. **Import.** `etat-major research import <file>` parses the answer into a draft ResearchArtifact with `status: unreviewed` and `provenance: ai-generated`. Items without a URL and date are flagged `unsourced`. Source URLs are kept verbatim and never rewritten.
+4. **Import.** `etat-major research import FILE --workspace D --id NNNN` parses the answer into a draft ResearchArtifact with `status: unreviewed` and `provenance: ai-generated`. Items without a URL and date are flagged `unsourced`. Source URLs are kept verbatim.
 5. **Review and approve.** You check the sources, fix classifications (firsthand, author, opinion) and mark the artifact `reviewed`. Only then may it back a Decision.
 6. **Extract.** From the reviewed artifact you record findings, alternatives and, if warranted, a Decision and Feature proposal.
 
-Required answer format requested in the brief:
-
-```text
-For each finding: the claim; the source URL; publication date; whether it is firsthand,
-the tool author, or secondhand; conflicting views with their URLs; and anything you could
-not verify. Do not invent threads or citations; say "not found" instead.
-```
+The brief and importer use the [manual research answer format](contracts/research-answer-format.md).
 
 The importer does not check that a URL is real or says what is claimed. That check is the reviewer's job, which is why imported research is never `verified` automatically.
 
