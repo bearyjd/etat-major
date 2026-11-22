@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from etat_major.text_safety import safe
 from etat_major.trace import DecisionLine, ResearchLine, Trace
 
 
 def _research(r: ResearchLine) -> list[str]:
-    lines = [f"  {r.ref}  {r.status}  {r.provenance}  {r.title}".rstrip()]
+    lines = [safe(f"  {r.ref}  {r.status}  {r.provenance}  {r.title}").rstrip()]
     for f in r.findings:
         flag = "unsourced" if f.unsourced else "sourced"
         src = f" ({f.source})" if f.source else ""
@@ -15,7 +16,7 @@ def _research(r: ResearchLine) -> list[str]:
 
 
 def _decision(d: DecisionLine) -> list[str]:
-    lines = [f"  {d.ref}  {d.status}  {d.relation}  {d.provenance}  {d.question}".rstrip()]
+    lines = [safe(f"  {d.ref}  {d.status}  {d.relation}  {d.provenance}  {d.question}").rstrip()]
     lines += [f"    cites {c.ref}  {c.state}" for c in d.cites]
     return lines
 
@@ -41,4 +42,4 @@ def render_trace(trace: Trace) -> str:
     if trace.warnings:
         out.append("WARNINGS")
         out += [f"  {w}" for w in trace.warnings]
-    return "\n".join(out) + "\n"
+    return "\n".join(map(safe, out)) + "\n"

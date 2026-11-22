@@ -13,37 +13,58 @@ from pathlib import Path
 from etat_major.floorplan import FloorplanError, FloorplanIndex, load_graph
 from etat_major.refs import RefError, parse_ref
 from etat_major.render import render_trace
+from etat_major.text_safety import bounded_repr, safe
 from etat_major.trace import TraceError, trace_feature
-from etat_major.workspace import Workspace, load_workspace
+from etat_major.workspace import Workspace, WorkspaceError, load_workspace
 
 OK, PROBLEMS, USAGE = 0, 1, 2
 
 
+EXIT_CODES = (
+    "Exit codes\n"
+    "0 success, including warnings and unsourced findings\n"
+    "1 missing, stale or gap trace items, or workspace validation issues\n"
+    "2 usage errors, including unknown features and invalid workspaces or graphs"
+)
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        detail = message if len(message) <= 80 else message[:80] + "…"
+        super().error(safe(detail))
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="etat-major")
+    help_options = {"epilog": EXIT_CODES, "formatter_class": argparse.RawDescriptionHelpFormatter}
+    parser = _ArgumentParser(prog="etat-major", **help_options)
     sub = parser.add_subparsers(dest="command", required=True)
-    trace = sub.add_parser("trace", help="print the research-to-code trace of a feature")
+    trace = sub.add_parser(
+        "trace", help="print the research-to-code trace of a feature", **help_options
+    )
     trace.add_argument("ref", help="feature:<project>/<id>")
     trace.add_argument("--workspace", type=Path, required=True, help="intent workspace directory")
     trace.add_argument("--graph", type=Path, help="Floorplan graph.json (floorplan/graph@1)")
     decisions = sub.add_parser("decisions", help="decision records")
     dsub = decisions.add_subparsers(dest="action", required=True)
-    dlist = dsub.add_parser("list", help="list all decisions, rejected and postponed included")
+    dlist = dsub.add_parser(
+        "list", help="list all decisions, rejected and postponed included", **help_options
+    )
     dlist.add_argument("--workspace", type=Path, required=True)
     return parser
 
 
 def _err(message: str) -> None:
-    print(f"error: {message}", file=sys.stderr)
+    print(f"error: {safe(message)}", file=sys.stderr)
 
 
 def _open_workspace(path: Path) -> Workspace | None:
-    if not path.is_dir():
-        _err(f"workspace '{path}' is not a directory")
+    try:
+        ws = load_workspace(path)
+    except WorkspaceError as exc:
+        _err(str(exc))
         return None
-    ws = load_workspace(path)
     for issue in ws.issues:
-        print(f"invalid: {issue}", file=sys.stderr)
+        print(f"invalid: {safe(issue)}", file=sys.stderr)
     return ws
 
 
@@ -54,7 +75,7 @@ def _trace(args: argparse.Namespace) -> int:
         _err(str(exc))
         return USAGE
     if ref.kind != "feature":
-        _err(f"expected a feature reference, got '{ref}'")
+        _err(f"expected a feature reference, got {bounded_repr(str(ref))}")
         return USAGE
     graph: FloorplanIndex | None = None
     if args.graph is not None:
@@ -70,7 +91,7 @@ def _trace(args: argparse.Namespace) -> int:
         trace = trace_feature(ws, graph, ref)
     except TraceError as exc:
         _err(str(exc))
-        return PROBLEMS
+        return USAGE
     sys.stdout.write(render_trace(trace))
     return PROBLEMS if trace.has_problems or ws.issues else OK
 
@@ -79,9 +100,11 @@ def _decisions_list(args: argparse.Namespace) -> int:
     ws = _open_workspace(args.workspace)
     if ws is None:
         return USAGE
+    for warning in ws.warnings:
+        print(f"warning: {safe(warning)}", file=sys.stderr)
     for d in sorted(ws.decisions, key=lambda d: d.id):
         by = d.decided_by or "none"
-        print(f"decision:{d.id}  {d.status}  {by}  {d.question}")
+        print(safe(f"decision:{d.id}  {d.status}  {by}  {d.question}"))
     return PROBLEMS if ws.issues else OK
 
 

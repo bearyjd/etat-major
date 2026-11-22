@@ -64,9 +64,9 @@ def test_trace_exit_1_on_validation_errors(capsys, workspace_dir):
     assert code == 1 and "0099-bad.md" in err and "RESEARCH" in out
 
 
-def test_trace_unknown_feature_exit_1(capsys, workspace_dir):
+def test_trace_unknown_feature_exit_2(capsys, workspace_dir):
     code, _, err = run(capsys, "trace", "feature:netlens/0999", "--workspace", str(workspace_dir))
-    assert code == 1 and "not found" in err
+    assert code == 2 and "not found" in err
 
 
 @pytest.mark.parametrize(
@@ -78,7 +78,7 @@ def test_trace_unknown_feature_exit_1(capsys, workspace_dir):
         ["bogus"],
         ["trace", "feature:0031", "--workspace", "."],  # bad ref spelling
         ["trace", "research:0007", "--workspace", "."],  # not a feature
-        ["trace", "feature:netlens/0031", "--workspace", "/nonexistent-dir-xyz"],
+        ["trace", "feature:netlens/0031", "--workspace", "nonexistent-dir-xyz"],
         ["decisions"],
         ["decisions", "list"],
     ],
@@ -154,3 +154,54 @@ def test_console_script_module_runs(workspace_dir):
         check=False,
     )
     assert proc.returncode == 0 and "decision:0012" in proc.stdout
+
+
+@pytest.mark.parametrize("args", [[], ["trace"], ["decisions", "list"]])
+def test_help_documents_exit_codes(capsys, args):
+    with pytest.raises(SystemExit) as exc:
+        main([*args, "--help"])
+    assert exc.value.code == 0
+    help_text = capsys.readouterr().out
+    assert "Exit codes" in help_text and all(f"{n} " in help_text for n in range(3))
+
+
+def test_decisions_list_on_file_is_usage_error(capsys, graph_file):
+    code, _, err = run(capsys, "decisions", "list", "--workspace", str(graph_file))
+    assert code == 2 and "not a directory" in err
+
+
+@pytest.mark.parametrize("action", ["missing schema", "missing file"])
+def test_trace_graph_missing_schema_or_file_exit_2(capsys, workspace_dir, graph_file, action):
+    if action == "missing schema":
+        graph_file.write_text("{}")
+    else:
+        graph_file.unlink()
+    code, _, err = run(
+        capsys, "trace", "feature:netlens/0031", "--workspace", str(workspace_dir),
+        "--graph", str(graph_file),
+    )  # fmt: skip
+    assert code == 2 and graph_file.name in err
+    assert ("schema" if action == "missing schema" else "cannot read") in err
+
+
+def test_trace_stale_without_gap_exits_1(capsys, workspace_dir, graph_file):
+    data = json.loads(graph_file.read_text())
+    data["nodes"] = [{"id": "other"}]
+    data["files"].append({"p": "app/src/net/Latency.kt", "n": "net.scan"})
+    graph_file.write_text(json.dumps(data))
+    code, out, err = run(
+        capsys, "trace", "feature:netlens/0031", "--workspace", str(workspace_dir),
+        "--graph", str(graph_file),
+    )  # fmt: skip
+    assert code == 1 and "stale" in out and "gap" not in out and not err
+
+
+def test_warnings_do_not_change_exit_codes(capsys, workspace_dir):
+    path = workspace_dir / "decisions/0012-add-latency-graph.md"
+    path.write_text(
+        path.read_text().replace("features: [feature:netlens/0031]\n", "").replace("#f1", "#f2")
+    )
+    code, out, err = run(capsys, "trace", "feature:netlens/0031", "--workspace", str(workspace_dir))
+    assert code == 0 and "one-sided" in out and "unsourced" in out and "invalid:" not in err
+    code, _, err = run(capsys, "decisions", "list", "--workspace", str(workspace_dir))
+    assert code == 0 and "warning:" in err and "one-sided" in err
