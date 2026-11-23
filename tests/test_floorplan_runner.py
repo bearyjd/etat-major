@@ -1,6 +1,7 @@
 import json
 import sys
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
@@ -232,13 +233,31 @@ def test_floorplan_timeout_has_bounded_cleanup_even_when_signals_fail(runner, mo
     assert "private system detail" not in str(failure.value)
 
 
-def test_floorplan_refuses_nested_mounts(runner, monkeypatch, tmp_path):
+@pytest.mark.parametrize("argument", ["copy", "source"])
+def test_floorplan_rejects_double_root_before_access(runner, monkeypatch, argument):
     wrapper, source, copy = runner
+    paths = {"copy": copy, "source": source}
+    paths[argument] = Path(f"/{paths[argument]}")
+
+    def stop(*args):
+        pytest.fail("ambiguous path reached bundle verification")
+
+    monkeypatch.setattr(wrapper, "_bundle_digest", stop)
+    with pytest.raises(TaskFileError, match="expected separate copy and source directories"):
+        wrapper.run_floorplan("scan", **paths)
+
+
+@pytest.mark.parametrize("separator", ["", "\u00a0", "\u3000", "\u2028", "\r"])
+def test_floorplan_refuses_nested_mounts(runner, monkeypatch, tmp_path, separator):
+    wrapper, source, copy = runner
+    parent = tmp_path / f"mount{separator}parent"
+    parent.mkdir()
+    copy = copy.rename(parent / "copy")
     mount = copy / "nested"
     mount.mkdir()
     mountinfo = tmp_path / "mountinfo"
     mountinfo.write_text(f"42 13 8:1 /sender {mount} rw - ext4 /dev/sda rw\n")
-    monkeypatch.setattr(wrapper, "_mountinfo", lambda: mountinfo, raising=False)
+    monkeypatch.setattr(wrapper, "_mountinfo", lambda: mountinfo)
     with pytest.raises(TaskFileError, match="mounted"):
         wrapper.run_floorplan("scan", copy, source)
     assert not (copy / ".calls").exists()

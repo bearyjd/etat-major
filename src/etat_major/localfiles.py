@@ -68,15 +68,23 @@ def _check_file(info: os.stat_result, limit: int, size_error: str) -> None:
         raise ValueError(size_error)
 
 
-def read_text(path: Path, limit_mib: int, *, dir_fd: int | None = None) -> str:
-    return _read_text(path, limit_mib * 1024 * 1024, f"{limit_mib} MiB", dir_fd)
+def read_text(
+    path: Path,
+    limit_mib: int,
+    *,
+    dir_fd: int | None = None,
+    normalize_newlines: bool = True,
+) -> str:
+    return _read_text(path, limit_mib * 1024 * 1024, f"{limit_mib} MiB", dir_fd, normalize_newlines)
 
 
 def read_text_kib(path: Path, limit_kib: int, *, dir_fd: int | None = None) -> str:
     return _read_text(path, limit_kib * 1024, f"{limit_kib} KiB", dir_fd)
 
 
-def _read_text(path: Path, limit: int, label: str, dir_fd: int | None) -> str:
+def _read_text(
+    path: Path, limit: int, label: str, dir_fd: int | None, normalize_newlines: bool = True
+) -> str:
     target = path if dir_fd is None else path.name
     size_error = f"file exceeds the {label} limit"
     _check_file(os.stat(target, dir_fd=dir_fd, follow_symlinks=False), limit, size_error)
@@ -86,7 +94,8 @@ def _read_text(path: Path, limit: int, label: str, dir_fd: int | None) -> str:
         data = stream.read(limit + 1)
         if len(data) > limit:
             raise ValueError(size_error)
-    return data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    text = data.decode("utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n") if normalize_newlines else text
 
 
 def write_new_text(path: Path, text: str, *, dir_fd: int | None = None) -> None:

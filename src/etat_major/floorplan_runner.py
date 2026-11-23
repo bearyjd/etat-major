@@ -333,7 +333,8 @@ def run_floorplan(operation: str, copy: Path, source: Path) -> FloorplanRun:
         raise TaskFileError(Path("floorplan"), "operation", "expected scan, build or refresh")
     copy, source = copy.absolute(), source.absolute()
     if (
-        ".." in (*copy.parts, *source.parts)
+        "//" in (copy.anchor, source.anchor)
+        or ".." in (*copy.parts, *source.parts)
         or ":" in str(copy)
         or copy.is_relative_to(source)
         or source.is_relative_to(copy)

@@ -109,13 +109,11 @@ def relative_file(value: object) -> bool:
 def _check_mounts(copy: Path, mountinfo: Path) -> None:
     try:
         with open_directory(mountinfo.parent) as fd:
-            lines = read_text(mountinfo, 1, dir_fd=fd).splitlines()
+            text = read_text(mountinfo, 1, dir_fd=fd, normalize_newlines=False)
     except (OSError, ValueError):
         raise ValueError("could not verify the Linux mount table") from None
-    if not lines:
-        raise ValueError("could not verify the Linux mount table")
-    for line in lines:
-        fields = line.split()
+    for line in text.removesuffix("\n").split("\n"):
+        fields = line.split(" ")
         if len(fields) < 6 or " - " not in line:
             raise ValueError("could not verify the Linux mount table")
         path = Path(_MOUNT_ESCAPE.sub(lambda match: chr(int(match[1], 8)), fields[4]))
