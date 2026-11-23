@@ -2,7 +2,7 @@
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from etat_major.gradle_parse import Script, dependency_requests, parse_script, read_script
@@ -50,6 +50,7 @@ class GradleDependencies:
     edges: tuple[Declaration, ...]
     issues: tuple[Issue, ...]
     implicit_edges: tuple[ImplicitDeclaration, ...] = ()
+    discovery_issues: tuple[Issue, ...] = ()
 
 
 def _module_script(directory: Path, root_fd: int) -> tuple[Path, str] | None:
@@ -211,6 +212,7 @@ def _discover(fd: int) -> GradleDependencies:
         raise TaskFileError(
             file, "include", f"repository exceeds the {_FILE_LIMIT} file probe limit"
         )
+    discovery_issues = tuple(issues)
     try:
         root_script = read_script(Path("."), "build", fd)
     except TaskFileError as exc:
@@ -220,7 +222,8 @@ def _discover(fd: int) -> GradleDependencies:
         projects[":"] = ""
     plugins = discover_plugins(settings, includes, fd, issues)
     issues.sort(key=lambda issue: _settings_issue_order(issue, file))
-    return _scan_modules(fd, projects, root_script, plugins, issues)
+    graph = _scan_modules(fd, projects, root_script, plugins, issues)
+    return replace(graph, discovery_issues=discovery_issues)
 
 
 def load_dependencies(root: Path) -> GradleDependencies:

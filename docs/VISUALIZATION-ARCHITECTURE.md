@@ -46,7 +46,7 @@ The first SPEC.md described a control plane that supervised agents. That directi
 | Component | Owns | État-major's relationship |
 | --- | --- | --- |
 | **État-major** | Visualization, cross-repository aggregation, project intent files, progress evidence, links to sessions and jobs | The product. Works alone. |
-| **Floorplan** | Architecture maps, endpoints, flows and planned-software blueprints | Architecture layer of `RepoIndex`, read through an adapter; never forked or modified. Replaceable. |
+| **Floorplan** | Recorded file inventory, import links, endpoints and routes | Optional architecture evidence in `RepoIndex`, read through a versioned adapter. Model-written components and blueprints are advisory. |
 | **Trail** | Parsing code into a function-level symbol graph | Symbol layer of `RepoIndex`, through a versioned adapter. Replaceable. |
 | **ChatGPT** | External research and brainstorming, especially Reddit | Manual handoff only: État-major writes a brief, the human pastes it and brings back the answer for review. |
 | **Git and GitHub** | Durable intent (Markdown, YAML, Mermaid), history, PRs, checks, releases | Source of truth. Read through `git` and `gh`. |
@@ -58,7 +58,7 @@ Exactly one scheduler owns any job. Meute owns the job queue and run logic; its 
 
 ## Verified facts about the neighbours
 
-Floorplan, Trail and Understand Anything are evaluated in [TOOL-EVALUATION.md](TOOL-EVALUATION.md): Floorplan for the architecture layer, Trail for symbols, Understand Anything skipped as an indexer. The notes below on Trail, Meute and Codeman come from the earlier pass.
+Floorplan, Trail and Understand Anything are evaluated in [TOOL-EVALUATION.md](TOOL-EVALUATION.md). The later [Floorplan proof-out](FLOORPLAN-PROOF.md) established Git-backed reviewed components as the source of truth and retained Floorplan for deterministic file-level evidence. Trail provides symbols and module scope evidence.
 
 Findings below come from reading each project's code and docs on 2026-11-21. "Verified" means observed in code or by running a read-only command. Items marked unverified were not tested.
 
@@ -97,7 +97,7 @@ Provenance values used throughout: `verified` (a fact derived by a deterministic
 
 ### RepoIndex
 
-A derived, rebuildable snapshot of one repository at one revision. A cache, never authoritative. It has two layers read from two tools and joined by repository-relative path: the **architecture layer** (components, files, import and http links, routes; from Floorplan) and the **symbol layer** (functions, classes, call and extends edges; from Trail). The layers are never merged into one authoritative graph.
+A derived, rebuildable snapshot of one repository at one revision. It reads recorded **architecture evidence** from Floorplan and **symbol evidence** from Trail and joins them by repository-relative path. The [reviewed component model](contracts/components.md) in Git defines component IDs, hierarchy and file ownership. Floorplan's component records remain in the evidence snapshot with their provenance.
 
 ```yaml
 version: 1
@@ -177,7 +177,7 @@ It is a link and a last-seen time, never a lifecycle owner. If the target disapp
 ## The four views
 
 1. **Discover (why).** Research artifacts, competitors, pain points, ideas, evidence, alternatives, decisions (including rejected and postponed ones) and feature proposals, plus an idea pipeline from Idea to Approved. Primary visualization: evidence and decision relationships.
-2. **Understand (what exists).** Repository selector, file tree, symbol search, the architecture map (Floorplan layer), the function-level graph (Trail layer), source navigation and a coverage panel with index freshness (revision against current `HEAD`) and edge provenance. Explanations are labelled `ai-generated` and kept apart from verified relationships. No claim of a complete dynamic call graph is made.
+2. **Understand (what exists).** Repository selector, file tree, symbol search, a reviewed component map with optional Floorplan file and import evidence, the function-level graph (Trail layer), source navigation and a coverage panel with index freshness (revision against current `HEAD`) and edge provenance. Explanations retain their provenance and any human review.
 3. **Design & Build (what should exist).** Vision, approved features, PRDs, Now/Next/Later roadmap, milestones, a Kanban (Draft, Ready, In Progress, Review, Done, Blocked), task dependencies, Mermaid diagrams and wireframes, and Floorplan blueprints of planned architecture attached to features. A feature's `ArchitectureLink` records tie planned work to nodes in the Understand map.
 4. **Progress (how we are getting there).** Commits, PRs, checks and releases mapped to features, tasks and milestones through the evidence ladder; blocked tasks, stale plans, disconnected work, and gaps between planned and implemented architecture (planned components with no code, claimed changes to code that no longer exists). A portfolio page shows each project's movement across repositories. An optional morning summary reads Meute run artifacts.
 

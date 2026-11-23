@@ -235,8 +235,12 @@ def split_frontmatter(text: str, path: Path) -> tuple[dict[str, Any], str]:
         raise TaskFileError(
             path, None, "missing or unclosed YAML frontmatter", default_field="frontmatter"
         )
+    return parse_yaml_mapping(m.group(1) or "", path), text[m.end() :]
+
+
+def parse_yaml_mapping(text: str, path: Path, *, field: str = "frontmatter") -> dict[str, Any]:
     try:
-        meta = yaml.load(m.group(1) or "", Loader=_Loader)  # noqa: S506 - safe subclass
+        meta = yaml.load(text, Loader=_Loader)  # noqa: S506 - safe subclass
     except _KeyError as exc:
         raise TaskFileError(path, _field_name(exc.key), exc.message) from None
     # Explicit YAML scalar tags can fail inside their constructors.
@@ -248,10 +252,10 @@ def split_frontmatter(text: str, path: Path) -> tuple[dict[str, Any], str]:
         RecursionError,
         OverflowError,
     ):
-        raise TaskFileError(path, "frontmatter", "invalid YAML frontmatter") from None
+        raise TaskFileError(path, field, f"invalid YAML {field}") from None
     if not isinstance(meta, dict):
-        raise TaskFileError(path, "frontmatter", "frontmatter must be a YAML mapping")
-    return meta, text[m.end() :]
+        raise TaskFileError(path, field, f"{field} must be a YAML mapping")
+    return meta
 
 
 _SCRIPT_URL = re.compile(r"\s*(?:javascript|vbscript|data):", re.IGNORECASE)
@@ -316,10 +320,11 @@ def check_recorded_array(
         raise error(path, field, "array exceeds 50000 entries")
 
 
-def first_error(path: Path, exc: ValidationError) -> TaskFileError:
-    err = exc.errors(include_input=False, include_url=False)[0]
-    field = _field_name(".".join(str(p) for p in err["loc"]))
-    msg = err["msg"].removeprefix("Value error, ")
+def first_error(path: Path, exc: ValidationError | dict) -> TaskFileError:
+    if isinstance(exc, ValidationError):
+        exc = exc.errors(include_input=False, include_url=False)[0]
+    field = _field_name(".".join(str(p) for p in exc["loc"]))
+    msg = exc["msg"].removeprefix("Value error, ")
     return TaskFileError(path, field, msg)
 
 

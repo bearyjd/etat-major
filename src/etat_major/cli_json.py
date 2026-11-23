@@ -8,7 +8,7 @@ from etat_major.records import Decision
 from etat_major.refs import Ref
 from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import public_source_url, public_text, safe
-from etat_major.trace import ARCHITECTURE_PROBLEM_STATES, Trace
+from etat_major.trace import ARCHITECTURE_PROBLEM_STATES, ArchLine, Trace
 from etat_major.workspace import Issue, feature_ref
 
 COMMAND_NAMES = {
@@ -19,6 +19,10 @@ COMMAND_NAMES = {
     "workspace": "workspace-validate",
     "gradle-deps": "gradle-deps",
     "gradle-drift": "gradle-drift",
+    "components-validate": "components-validate",
+    "components-map": "components-map",
+    "components-coverage": "components-coverage",
+    "components-seed": "components-seed",
 }
 
 
@@ -64,7 +68,7 @@ def json_result(
 
 def json_error(command: str, error: TaskFileError) -> int:
     issue = Issue(error.filename, error.field_name, error.message)
-    if command in {"gradle-deps", "gradle-drift"}:
+    if command in {"gradle-deps", "gradle-drift"} or command.startswith("components-"):
         issue = Issue(safe(error.filename), safe(error.field_name), safe(error.message))
     return json_result(command, 2, issues=(issue,))
 
@@ -86,6 +90,19 @@ def _trace_value(value: object) -> object:
     return public_text(value) if isinstance(value, str) else value
 
 
+def _trace_architecture(row: ArchLine) -> dict[str, object]:
+    data: dict[str, object] = {
+        "ref": public_text(str(row.ref)),
+        "relation": row.relation,
+        "state": row.state,
+        "provenance": row.provenance,
+    }
+    if row.paths is not None:
+        data["paths"] = [safe(path) for path in row.paths]
+        data["ancestors"] = list(row.ancestors)
+    return data
+
+
 def trace_data(trace: Trace, omitted_issues: int) -> dict[str, object]:
     feature = trace.feature
     return {
@@ -98,7 +115,7 @@ def trace_data(trace: Trace, omitted_issues: int) -> dict[str, object]:
         },
         "research": _trace_value(trace.research),
         "decisions": _trace_value(trace.decisions),
-        "architecture": _trace_value(trace.architecture),
+        "architecture": [_trace_architecture(row) for row in trace.architecture],
         "acceptance": _trace_value(trace.acceptance),
         "links": _trace_value(trace.links),
         "omitted_issues": omitted_issues,

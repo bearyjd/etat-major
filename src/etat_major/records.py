@@ -23,14 +23,14 @@ from pydantic import (
     field_validator,
 )
 
-from etat_major.refs import Ref, parse_ref
+from etat_major.refs import PROJECT_ID, Ref, parse_ref
 from etat_major.taskfile import CalendarDate, load_frontmatter_model
 from etat_major.text_safety import bounded_repr, is_control
 
 Text = Annotated[StrictStr, Field(min_length=1)]
 RecordId = Annotated[str, Field(pattern=r"^[0-9]+$")]
 FindingId = Annotated[StrictStr, Field(pattern=r"^[A-Za-z0-9_-]+$")]
-Project = Annotated[StrictStr, Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")]
+Project = Annotated[StrictStr, Field(pattern=rf"^{PROJECT_ID}$")]
 DERIVED_FEATURE_STATUSES = (
     "approved",
     "rejected",
@@ -41,7 +41,7 @@ DERIVED_FEATURE_STATUSES = (
 )
 STORED_FEATURE_STATUSES = ("idea", "researching", "proposed", "planned")
 DECIDED_STATUSES = ("approved", "rejected", "postponed")
-CODE_KINDS = ("fp:n", "fp:f", "trail")
+CODE_KINDS = ("fp:n", "fp:f", "trail", "component")
 
 
 def _reject_url_controls(value: Any) -> Any:
@@ -86,7 +86,7 @@ DecisionRef = _ref_of("decision", label="decision")
 FeatureRef = _ref_of("feature", label="feature")
 TaskRef = _ref_of("task", label="task")
 MilestoneRef = _ref_of("milestone", label="milestone")
-CodeRef = _ref_of(*CODE_KINDS, label="code (fp:n:, fp:f: or trail:)")
+CodeRef = _ref_of(*CODE_KINDS, label="architecture (fp:n:, fp:f:, trail:, or component:)")
 
 
 def _id_text(v: Any) -> Any:

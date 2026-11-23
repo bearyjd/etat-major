@@ -208,6 +208,9 @@ class ArchitectureIndexes:
     trail: SymbolIndex | None = None
 
 
+_EMPTY_ARCHITECTURE_INDEXES = ArchitectureIndexes()
+
+
 def _architecture(
     link: ArchitectureLink,
     git: GitEvidence,
@@ -376,7 +379,7 @@ def load_progress(
     artifacts: tuple[GeneratedArtifact, ...] = (),
     today: date | None = None,
     use_clock: bool = True,
-    indexes: ArchitectureIndexes = ArchitectureIndexes(),
+    indexes: ArchitectureIndexes = _EMPTY_ARCHITECTURE_INDEXES,
 ) -> ProgressReport:
     try:
         intent = load_workspace(workspace)
