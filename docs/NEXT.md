@@ -8,7 +8,11 @@ research, progress, workspace validation, and Gradle analysis. The reviewed
 component model provides validation, mapping, coverage, seed proposals, and
 trace links. The optional [Planning pilot](PLANNING.md) shows a read-only
 project snapshot in a local browser or sandboxed Codeman Web Tab. It uses
-recorded data and local Git evidence.
+recorded data and local Git evidence. Progress and Planning can also read an
+offline [Meute snapshot](contracts/meute-recording.md). Reports attach to a
+task only when the recording identifies an existing task in the project.
+The read-only Fleet Web Tab shows the same recorded Meute snapshot and links
+its matched reports to Planning tasks. See [Fleet setup](PLANNING.md#add-the-fleet-tab).
 
 ## What the real-data proof-out established (details in `docs/FLOORPLAN-PROOF.md`)
 - Floorplan's deterministic import links are useful; its model-written layer failed its accuracy target and blueprints are greenfield only. Use it as an optional provider of file-level import links, not as the source of truth for components.

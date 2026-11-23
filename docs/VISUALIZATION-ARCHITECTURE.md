@@ -172,7 +172,7 @@ url: <deep link, if known>       # Codeman: /session/<id>
 seen_at: 2026-11-21T12:00:00Z
 ```
 
-It is a link and a last-seen time, never a lifecycle owner. If the target disappears the link is shown as stale.
+The recorded Planning input uses an explicit project-qualified task and derives any Codeman URL from a trusted startup origin. The snapshot records when each pointer was last seen. Live discovery and stale detection require a future integration. [Recorded execution links contract](contracts/execution-links.md)
 
 ## The four views
 

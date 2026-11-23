@@ -103,6 +103,7 @@ def _parser() -> argparse.ArgumentParser:
         progress.add_argument(f"--{flag}", type=Path, required=True)
     progress.add_argument("--graph", type=Path, help="optional recorded Floorplan graph")
     progress.add_argument("--trail", type=Path, help="optional recorded Trail wiring")
+    progress.add_argument("--meute", type=Path, help="optional recorded Meute snapshot")
     progress.add_argument("--as-of", help="date for overdue milestone checks (YYYY-MM-DD)")
     workspace = sub.add_parser("workspace", help="inspect an intent workspace")
     validate = workspace.add_subparsers(dest="action", required=True).add_parser(
@@ -306,6 +307,7 @@ def _progress(args: argparse.Namespace) -> int:
         indexes=_load_indexes(args),
         today=as_of,
         use_clock=args.format != "json",
+        meute=args.meute,
     )
     status = PROBLEMS if report.issues else OK
     if args.format == "json":

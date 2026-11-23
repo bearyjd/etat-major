@@ -26,7 +26,7 @@ def progress_data(report: ProgressReport) -> dict[str, object]:
         "stale_milestones": report.stale_milestones,
         "stale_links": report.stale_links,
         "unimplemented_requirements": report.unimplemented_requirements,
-    }
+    } | ({"meute": asdict(report.meute)} if report.meute else {})
 
 
 def render_text(report: ProgressReport) -> str:
@@ -47,6 +47,11 @@ def render_text(report: ProgressReport) -> str:
         safe(f"unimplemented requirement  {owner}  {ref}")
         for owner, ref in report.unimplemented_requirements
     )
+    if snapshot := report.meute:
+        lines.append(safe(f"Meute snapshot  {snapshot.project}  exported {snapshot.exported_at}"))
+        for row in snapshot.reports:
+            link = f"linked to {row.task}" if row.linked else "unlinked"
+            lines.append(safe(f"  {row.ref}  recorded {row.recorded_at}  {row.outcome}  {link}"))
     return "\n".join(lines) + ("\n" if lines else "")
 
 

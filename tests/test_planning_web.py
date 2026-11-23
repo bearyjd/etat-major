@@ -117,7 +117,10 @@ def test_project_view_embeds_in_opaque_sandbox(planning_workspace, client_for):
         assert "style" in page.tags
         assert {"script", "link", "form", "base"}.isdisjoint(page.tags)
         assert len(page.ids) == len(set(page.ids))
-        assert all(href.startswith("#") and href[1:] in page.ids for href in page.hrefs)
+        assert all(
+            href.startswith("./refresh?token=") or (href.startswith("#") and href[1:] in page.ids)
+            for href in page.hrefs
+        )
         assert {"#component-netlens-core.network", "#task-netlens-0042"} <= set(page.hrefs)
         assert "core/network" in response.text and "core</a>" in response.text
         assert "proposed" in response.text

@@ -9,7 +9,6 @@ from itertools import combinations
 from pathlib import Path
 from typing import Annotated, Literal
 
-import yaml
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -32,12 +31,12 @@ from etat_major.component_paths import (
     overlap_checker,
 )
 from etat_major.localfiles import entry_mode, open_directory, read_text
+from etat_major.recorded_yaml import parse_bounded_yaml_mapping
 from etat_major.refs import COMPONENT_ID, PROJECT_ID
 from etat_major.taskfile import (
     CalendarDate,
     TaskFileError,
     first_error,
-    parse_yaml_mapping,
 )
 from etat_major.text_safety import public_text
 from etat_major.workspace import Issue, _cyclic_components, _entries, _IssueLog
@@ -47,8 +46,6 @@ MAX_PATHS = 1000
 MAX_PROJECT_ID_LENGTH = 128
 MAX_COMPONENT_ID_LENGTH = 256
 MAX_COMPONENT_PATH_LENGTH = 256
-_MAX_DEPTH = 32
-_MAX_YAML_EVENTS = 20_000
 
 ProjectId = Annotated[
     StrictStr, Field(pattern=rf"^{PROJECT_ID}$", max_length=MAX_PROJECT_ID_LENGTH)
@@ -186,25 +183,6 @@ def _owner(path: str, patterns: list[tuple[int, str, Component]]) -> Ownership:
     return Ownership(ties=tuple(winners))
 
 
-def _bounded_yaml(text: str, path: Path) -> dict:
-    depth = 0
-    try:
-        for count, event in enumerate(yaml.parse(text, Loader=yaml.SafeLoader), 1):
-            if count > _MAX_YAML_EVENTS:
-                raise TaskFileError(path, "components", "YAML exceeds the 20000-event limit")
-            if isinstance(event, (yaml.MappingStartEvent, yaml.SequenceStartEvent)):
-                depth += 1
-                if depth > _MAX_DEPTH:
-                    raise TaskFileError(path, "components", "YAML exceeds the 32-level depth limit")
-            elif isinstance(event, (yaml.MappingEndEvent, yaml.SequenceEndEvent)):
-                depth -= 1
-            elif isinstance(event, yaml.AliasEvent):
-                raise TaskFileError(path, "components", "YAML aliases are not allowed")
-    except (yaml.YAMLError, RecursionError):
-        raise TaskFileError(path, "components", "invalid component YAML") from None
-    return parse_yaml_mapping(text, path, field="components")
-
-
 def _validation_issues(path: Path, error: ValidationError) -> list[Issue]:
     issues = []
     for item in error.errors(include_input=False, include_url=False):
@@ -307,7 +285,9 @@ def load_components(
         if dir_fd is None:
             with open_directory(path.parent) as parent:
                 return load_components(path, dir_fd=parent)
-        raw = _bounded_yaml(read_text(path, 1, dir_fd=dir_fd), path)
+        raw = parse_bounded_yaml_mapping(
+            read_text(path, 1, dir_fd=dir_fd), path, field="components", label="component"
+        )
     except TaskFileError as exc:
         return None, (Issue(path.name, exc.field_name, public_text(exc.message)),)
     except (OSError, ValueError) as exc:

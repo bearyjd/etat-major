@@ -17,6 +17,7 @@ from etat_major.evidence_records import (
     resolve_task_keys,
 )
 from etat_major.floorplan import FloorplanIndex
+from etat_major.meute import MeuteEvidence, MeuteSnapshot, load_meute, resolve_meute
 from etat_major.planning import BoardColumn, BoardEvidence, derive_board_column
 from etat_major.records import ArchitectureLink, Feature
 from etat_major.taskfile import Task, TaskFileError
@@ -73,6 +74,7 @@ class ProgressReport:
     issues: tuple[Issue, ...]
     omitted_issues: int
     version: Literal[1] = 1
+    meute: MeuteEvidence | None = None
 
 
 def _key(task: Task | Feature) -> str:
@@ -327,6 +329,8 @@ def derive_progress(
     artifacts: tuple[GeneratedArtifact, ...],
     today: date | None,
     indexes: ArchitectureIndexes,
+    *,
+    meute: MeuteSnapshot | None = None,
 ) -> ProgressReport:
     """Resolve evidence against validated intent and optional recorded inputs."""
     known = frozenset(map(_key, ws.tasks))
@@ -336,11 +340,10 @@ def derive_progress(
     linked_artifacts: dict[str, list[str]] = defaultdict(list)
     for task in ws.tasks:
         dependencies[task.project][task.id] = (
-            task.status
-            if _acceptable(task)
-            else ("ready" if task.status == "done" else task.status)
+            "ready" if task.status == "done" and not _acceptable(task) else task.status
         )
-    for artifact in artifacts:
+    recorded = resolve_meute(meute, known) if meute is not None else None
+    for artifact in (*artifacts, *(recorded.artifacts() if recorded else ())):
         linked_artifacts[artifact.task].append(artifact.ref)
     task_rows = {
         key: _task_progress(
@@ -368,6 +371,7 @@ def derive_progress(
         gaps,
         ws.issues,
         ws.omitted_issues,
+        meute=recorded,
     )
 
 
@@ -381,6 +385,7 @@ def load_progress(
     today: date | None = None,
     use_clock: bool = True,
     indexes: ArchitectureIndexes = _EMPTY_ARCHITECTURE_INDEXES,
+    meute: Path | None = None,
 ) -> ProgressReport:
     try:
         intent = load_workspace(workspace)
@@ -390,4 +395,5 @@ def load_progress(
     git = load_git(repo, pull_requests, load_releases(releases), frozenset(map(_key, intent.tasks)))
     if today is None and use_clock:
         today = datetime.now(UTC).date()
-    return derive_progress(intent, git, pull_requests, artifacts, today, indexes)
+    snapshot = load_meute(meute) if meute is not None else None
+    return derive_progress(intent, git, pull_requests, artifacts, today, indexes, meute=snapshot)

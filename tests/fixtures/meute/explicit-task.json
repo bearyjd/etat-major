@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "project": "netlens",
+  "exported_at": "2026-11-22T12:00:00Z",
+  "reports": [
+    {
+      "ref": "reports/example/scan-2026-11-21.md",
+      "recorded_at": "2026-11-21T12:00:00Z",
+      "outcome": "ok",
+      "task": "netlens/0042"
+    }
+  ]
+}

@@ -20,6 +20,9 @@ Each JSON file is capped at 4 MiB. The Git reader uses a local checkout with a r
 
 Optional `--graph` and `--trail` accept recorded Floorplan and Trail indexes. Use snapshots from the revision being reported. Without a Floorplan graph, `fp:f` links are resolved against regular tracked files in Git `HEAD`. Without the corresponding index, component and symbol references stay `unverified`.
 
+Optional `--meute FILE` reads one [recorded Meute snapshot](meute-recording.md)
+offline. A configured input that is unreadable or invalid gives exit code 2.
+
 ## Linking and proofs
 
 - Commit trailers take precedence over a task branch name, which takes precedence over a standalone `Task: <project>/<id>` line in a PR body. Several valid trailers can link one commit to several tasks. Branch names with multiple possible project/id splits resolve when exactly one split matches a workspace task. A PR's merge SHA or explicitly recorded head SHA can supply its trailer link.
@@ -27,7 +30,10 @@ Optional `--graph` and `--trail` accept recorded Floorplan and Trail indexes. Us
 - Each task rung is a sorted array of proof references or the string `unverified`. References use `commit:<sha>`, `pr:<number>`, `pr:<number>/check:<one-based index>`, `tag:<name>` and `task:<project>/<id>`. The report omits raw PR titles and bodies, check URLs, and repository remotes. Declared task evidence cannot establish a rung by itself.
 - A successful completed CheckRun or successful StatusContext proves the `tested` rung. The standard rollup is scoped to the PR head. A locally enriched recording may add `headRefOid` on a PR and `commitOid` on a check. A check proves testing on the merge commit only when its explicit SHA, or its recorded PR head SHA for a head rollup, equals `mergeCommit.oid`. A check explicitly scoped to an unrelated commit contributes no proof.
 - A merged PR or linked commit on the default branch proves `merged`. A published recorded release proves `shipped` when its local tag contains the linked PR's merge commit. Both annotated and lightweight tags work. An approved PR proves `reviewed`.
-- The optional Python argument `artifacts` to `load_progress` accepts `GeneratedArtifact` descriptors with a task key and workspace-relative artifact reference. They supply `artifact:<ref>` proofs. The CLI requires only the recorded GitHub files and local Git history.
+- A Meute report with an explicit key matching an existing task in the snapshot's
+  project supplies `artifact:<ref>` on the `generated` rung. The Python
+  `artifacts` argument to `load_progress` also accepts `GeneratedArtifact`
+  descriptors as before.
 - Done requires task acceptance. Blocked follows stored status or an unmet dependency. Review takes precedence over In Progress when work is merged without acceptance or has an open non-draft PR. An open draft PR or task branch can put a task In Progress.
 
 ## Feature and report states
@@ -39,3 +45,9 @@ The report includes disconnected commits and PRs, overdue milestones, stale arch
 The CLI exits 0 for a produced report, including findings, 1 for workspace validation issues, and 2 for invalid arguments or unreadable or invalid input files. The [CLI JSON envelope](cli-json.md) carries the report under `data`, which includes `version`, `tasks`, `features`, `disconnected_commits`, `disconnected_prs`, `stale_milestones`, `stale_links` and `unimplemented_requirements`.
 
 For deterministic overdue checks in JSON, pass `--as-of YYYY-MM-DD`. The report records that date in `data.as_of`.
+
+With a valid Meute snapshot, `data.meute` includes its `version`, `project`,
+`exported_at` and `reports`. Each row includes the original `ref`,
+`recorded_at`, `outcome`, the explicit `task` key or `null`, and a boolean
+`linked` indicating whether it contributes generated proof. Both timestamps
+describe the recording. The snapshot supplies all the displayed Meute metadata.
