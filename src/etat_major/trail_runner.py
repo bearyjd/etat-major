@@ -64,8 +64,11 @@ def run_trail(
     _check_tree(root)
     before = _artifacts(root)
     try:
-        with TemporaryDirectory(prefix=".etat-major-trail-", dir=root) as home:
-            _prepare_git_metadata(Path(home) / "git")
+        with TemporaryDirectory(prefix=".etat-major-trail-", dir=root.parent) as home:
+            scratch = Path(home)
+            if _overlapping_checkouts(scratch, root) or _overlapping_checkouts(scratch, source):
+                raise TrailRunError(root, "trail build", "temporary home overlaps a checkout")
+            _prepare_git_metadata(scratch / "git")
             _run(tool, root, _environment(home, path_env, root))
     except OSError:
         raise TrailRunError(root, "trail build", "could not start or finish Trail") from None

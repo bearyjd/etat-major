@@ -337,3 +337,37 @@ def test_rejects_checkout_parent_with_path_separator(tmp_path, checkout):
     executable = fake_trail(tmp_path, "raise AssertionError('must not run')")
     with pytest.raises(TrailRunError, match="search-path separator"):
         run_trail(disposable, source_root=source, executable=executable)
+
+
+def test_excludes_runtime_files_from_both_checkouts(tmp_path, checkout, monkeypatch):
+    source, disposable = checkout
+    marker = tmp_path / "home-path"
+    monkeypatch.setenv("TMPDIR", str(disposable))
+    executable = fake_trail(
+        tmp_path,
+        f"""
+import os
+import shutil
+from pathlib import Path
+
+root = Path.cwd()
+source = Path({str(source)!r})
+home = Path(os.environ["HOME"])
+git_dir = Path(os.environ["GIT_DIR"])
+assert home.is_absolute()
+assert not home.is_relative_to(root)
+assert not home.is_relative_to(source)
+assert git_dir.parent == home
+for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "TMPDIR"):
+    assert Path(os.environ[key]) == home
+(home / "runtime.py").touch()
+assert "runtime.py" not in [path.name for path in root.rglob("*")]
+out = Path("graft/.graph/wiring.json")
+out.parent.mkdir(parents=True)
+shutil.copyfile({str(_WIRING)!r}, out)
+Path({str(marker)!r}).write_text(str(home), encoding="utf-8")
+""",
+    )
+    result = run_trail(disposable, source_root=source, executable=executable)
+    assert all("runtime.py" not in symbol.path for symbol in result.index.symbols)
+    assert not Path(marker.read_text(encoding="utf-8")).exists()
