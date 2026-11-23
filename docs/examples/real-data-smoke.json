@@ -1,0 +1,24 @@
+{
+  "index": {
+    "status": 0,
+    "schema": "etat-major/index@1",
+    "data.architecture.files.#": 170,
+    "data.symbols.nodes.#": 160,
+    "data.symbols.edges.#": 20,
+    "data.indexers.0.schema": "floorplan/graph@1",
+    "data.indexers.1.version": "0.30.5",
+    "data.symbols.nodes.0.provenance": "verified"
+  },
+  "gradle deps": {
+    "status": 0,
+    "data.modules.#": 36,
+    "data.edges.#": 4,
+    "data.implicit_edges.#": 2
+  },
+  "gradle drift": {
+    "status": 1,
+    "data.summary.import_backed": 16,
+    "data.summary.unused_candidate": 3,
+    "data.summary.call_only": 1
+  }
+}
