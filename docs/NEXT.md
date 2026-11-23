@@ -20,7 +20,7 @@ recorded data and local Git evidence.
 **Subprocess exception for tasks 2 and 3 only:** each wrapper may exec exactly one external tool (`trail build`, or Floorplan's `scan`/`build`/`refresh` Node scripts) from one dedicated module, with a fixed argument list, no shell, a scrubbed environment (telemetry off, no credentials), a timeout, an output size cap, and only inside a throwaway copy or worktree supplied by the caller. Tests must use a fake executable; the real tool is run only by the maintainer or in the real-data smoke step. Anything else still follows the `AGENTS.md` ban.
 
 2. **Trail runner wrapper. Done.** The [local runner API](contracts/trail-adapter.md#building-a-fresh-local-graph) runs a bounded structural build in a disposable checkout and validates `meta.version`. Verified on real copies using `.trail/cache/` and `graft/`.
-3. **Floorplan runner wrapper.** Run only `scan`, `build` and `refresh` on a copy, pinned commit, no model steps, no viewer. Done when a refresh after a rename keeps component ids and reports the rename mapping.
+3. **Floorplan runner wrapper. Done.** The [local runner contract](FLOORPLAN-RUNNER.md) documents the deterministic operations. A real Android copy retained all 80 authored component IDs across a rename and reported the old and new paths.
 4. **Understand view.** Use the reviewed component declarations and recorded index for repository navigation. Begin after the component model and both runner wrappers are merged.
 5. Real-data smoke script that runs every command on a real repository and compares counts with recorded expectations.
 
