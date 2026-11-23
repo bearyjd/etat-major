@@ -5,8 +5,10 @@ from pathlib import Path
 import pytest
 import yaml
 
+from etat_major import components_seed
 from etat_major.components import load_components
 from etat_major.components_seed import seed_components as seed
+from etat_major.gradle import Module
 from etat_major.taskfile import TaskFileError
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -137,6 +139,63 @@ def test_seed_preserves_modules_with_colliding_normalized_ids(tmp_path):
     assert proposed["feature.one"]["parent"] == "feature"
 
 
+@pytest.mark.parametrize(
+    "pattern", ["feature", "feature/ping/src/**/*.kt", "feature/ping/src/Main*.kt"]
+)
+def test_delta_respects_existing_paths_independent_of_component_id(gradle_root, tmp_path, pattern):
+    original = tmp_path / "netlens.yaml"
+    original.write_text(
+        "version: 1\nproject: netlens\ncomponents:\n"
+        f"- {{id: reviewed, label: Reviewed, kind: screen, paths: ['{pattern}']}}\n",
+        encoding="utf-8",
+    )
+    seed(gradle_root, "netlens", proposal_for=original)
+    assert "feature.ping" not in rows(original.with_suffix(".yaml.proposed"))
+
+
+def test_delta_infers_pathless_parent_from_authored_children(gradle_root, tmp_path):
+    original = tmp_path / "netlens.yaml"
+    original.write_text(
+        "version: 1\nproject: netlens\ncomponents:\n"
+        "- {id: reviewed, label: Reviewed, kind: group, paths: []}\n"
+        "- {id: feature, label: Other, kind: group, paths: []}\n"
+        "- {id: ping, label: Ping, kind: screen, parent: reviewed, paths: [feature/ping]}\n"
+        "- {id: network, label: Net, kind: screen, parent: feature, paths: [core/network]}\n",
+        encoding="utf-8",
+    )
+    seed(gradle_root, "netlens", proposal_for=original)
+    proposed = rows(original.with_suffix(".yaml.proposed"))
+    assert proposed["feature.portscan"]["parent"] == "reviewed"
+    assert proposed["core.data"]["parent"] == "feature"
+
+
+@pytest.mark.parametrize(
+    "directory", ["bad#path", "feature/scan*", "feature/file?", "feature/[ab]"]
+)
+def test_seed_refuses_path_outside_component_grammar(tmp_path, monkeypatch, directory):
+    out = tmp_path / "netlens.yaml"
+    monkeypatch.setattr(
+        components_seed, "_module_evidence", lambda *_: ([Module(":hostile", directory)], [])
+    )
+    with pytest.raises(TaskFileError, match=r"netlens.yaml.*paths"):
+        seed(tmp_path, "netlens", out=out)
+    assert not out.exists()
+
+
+def test_delta_validates_proposals_together_with_existing_model(tmp_path, monkeypatch):
+    (tmp_path / "settings.gradle.kts").write_text('include(":app")', encoding="utf-8")
+    original = tmp_path / "netlens.yaml"
+    original.write_text(
+        "version: 1\nproject: netlens\ncomponents:\n"
+        "- {id: reviewed, label: Reviewed, kind: screen, paths: [reviewed]}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(components_seed, "_allocate", lambda *_: "reviewed")
+    with pytest.raises(TaskFileError, match=r"duplicate component id"):
+        seed(tmp_path, "netlens", proposal_for=original)
+    assert not original.with_suffix(".yaml.proposed").exists()
+
+
 def test_seed_refuses_existing_file_or_dangling_link(gradle_root, tmp_path):
     out = tmp_path / "netlens.yaml"
     out.write_text("authored\n", encoding="utf-8")
@@ -256,3 +315,30 @@ def test_seed_rejects_a_proposal_over_component_limit(tmp_path):
     with pytest.raises(TaskFileError, match=r"field 'components'.*500"):
         seed(tmp_path, "netlens", out=out)
     assert not out.exists()
+
+
+@pytest.mark.parametrize("pattern", ["**/*.kt", "feature/ping/src/**/*.kt"])
+def test_delta_keeps_parent_module_when_ownership_scope_is_inconclusive(tmp_path, pattern):
+    (tmp_path / "settings.gradle.kts").write_text('include(":feature", ":feature:ping")')
+    original = tmp_path / "netlens.yaml"
+    original.write_text(
+        "version: 1\nproject: netlens\ncomponents:\n"
+        f"- {{id: reviewed, label: Reviewed, kind: screen, paths: ['{pattern}']}}\n"
+    )
+    seed(tmp_path, "netlens", proposal_for=original)
+    proposed = rows(original.with_suffix(".yaml.proposed"))
+    assert proposed["feature"]["paths"] == ["feature"]
+    assert ("feature.ping" in proposed) == (pattern == "**/*.kt")
+
+
+def test_delta_uses_pattern_owner_of_module_head(tmp_path):
+    (tmp_path / "settings.gradle.kts").write_text('include(":features:ping")')
+    original = tmp_path / "netlens.yaml"
+    original.write_text(
+        "version: 1\nproject: netlens\ncomponents:\n"
+        "- {id: authored, label: Existing, kind: grouping, paths: ['feature?']}\n"
+    )
+    seed(tmp_path, "netlens", proposal_for=original)
+    proposed = rows(original.with_suffix(".yaml.proposed"))
+    assert set(proposed) == {"features.ping"}
+    assert proposed["features.ping"]["parent"] == "authored"

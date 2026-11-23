@@ -59,7 +59,9 @@ match a common path produce a warning, including siblings at the root.
 
 Coverage partitions unique recorded Floorplan paths into sorted owned and
 unowned lists. It divides owned files by the input count and multiplies by
-100. Empty input reports zero percent. Parents appear nearest first.
+100. Repository-relative paths accepted by Floorplan that cannot match the
+component grammar count as unowned and produce a warning. Control characters
+invalidate the report. Empty input reports zero percent. Parents appear nearest first.
 
 ## Validation and proposals
 
@@ -82,8 +84,13 @@ recorded Trail `module_scopes`. It groups nested modules by their first
 directory segment and marks proposed entries with `inferred_from_gradle` and
 a review comment. Both output modes require a new destination. The
 `--proposal-for` option writes `EXISTING_FILE.proposed` with only missing
-components, for manual review and merge. A delta can reference a parent
-already present in the existing file.
+components, for manual review and merge. A reviewed directory declaration or
+a path scoped to a module suppresses that module's proposal. A generic root
+fallback or a declaration scoped to a deeper module still allows parent
+module proposals. A delta can reference an existing parent, including a
+pathless group with children that establish the directory scope. Before
+publishing, seed validates the complete candidate model, including any
+existing rows that a delta extends.
 
 Use `component:PROJECT/ID` in a Feature ArchitectureLink. Pass
 `etat-major trace --components DIR_OR_FILE` to resolve a link against these

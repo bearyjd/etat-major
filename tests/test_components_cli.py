@@ -267,3 +267,18 @@ def test_coverage_accepts_spaces_in_recorded_repository_files(component_workspac
     args = ["--workspace", str(component_workspace), "--project", "netlens", "--graph", str(graph)]
     value = result(capsys, "coverage", args)
     assert "app/src/App Home.kt" in value["data"]["owned"]
+
+
+@pytest.mark.parametrize("name", ["100%.kt", "tag#1.kt", "tag:1.kt"])
+def test_coverage_retains_nonmatchable_relative_recorded_paths(component_workspace, capsys, name):
+    graph = component_workspace / "recorded.json"
+    source = json.loads((FIXTURES / "floorplan/graph.json").read_text(encoding="utf-8"))
+    path = f"app/src/{name}"
+    source["files"][0]["p"] = path
+    graph.write_text(json.dumps(source), encoding="utf-8")
+    args = ["--workspace", str(component_workspace), "--project", "netlens", "--graph", str(graph)]
+    value = result(capsys, "coverage", args)
+    assert value["data"]["unowned"] == [path]
+    assert value["data"]["percentage"] == 50
+    assert value["issues"][0]["severity"] == "warning"
+    assert path not in value["issues"][0]["message"]

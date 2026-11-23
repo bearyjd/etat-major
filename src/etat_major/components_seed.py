@@ -2,12 +2,13 @@
 
 import os
 import re
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import yaml
 
-from etat_major.component_paths import component_path, literal_prefix
+from etat_major.component_paths import component_path, literal_prefix, matches
 from etat_major.components import (
     MAX_COMPONENT_ID_LENGTH,
     MAX_COMPONENT_PATH_LENGTH,
@@ -16,6 +17,7 @@ from etat_major.components import (
     MAX_PROJECT_ID_LENGTH,
     ComponentModel,
     load_components,
+    validate_component_document,
 )
 from etat_major.gradle import Module, load_dependencies
 from etat_major.localfiles import open_directory, write_new_text
@@ -45,11 +47,14 @@ class _Proposal:
     paths: tuple[str, ...]
     parent: str | None
 
-    def dump(self) -> str:
+    def record(self) -> dict:
         data = {"id": self.id, "label": self.label, "kind": _KIND, "paths": list(self.paths)}
         if self.parent is not None:
             data["parent"] = self.parent
-        return _COMMENT + yaml.safe_dump([data], sort_keys=False)
+        return data
+
+    def dump(self) -> str:
+        return _COMMENT + yaml.safe_dump([self.record()], sort_keys=False)
 
 
 def _trail_scope(supplied: str, trail: Path, index: int) -> None:
@@ -139,33 +144,88 @@ def _allocate(base: str, occupied: set[str]) -> str:
     return component_id
 
 
+def _scoped_parents(existing: ComponentModel | None) -> dict[str, str]:
+    if existing is None:
+        return {}
+    pathless = {row.id for row in existing.components if not row.paths}
+    heads_by_parent: dict[str, set[str]] = defaultdict(set)
+    for row in existing.components:
+        if row.parent not in pathless:
+            continue
+        for path in row.paths:
+            head, separator, _ = literal_prefix(path).partition("/")
+            if separator:
+                heads_by_parent[row.parent].add(head)
+    parents_by_head: dict[str, list[str]] = defaultdict(list)
+    for parent, heads in heads_by_parent.items():
+        if len(heads) == 1:
+            parents_by_head[next(iter(heads))].append(parent)
+    return {head: parents[0] for head, parents in parents_by_head.items() if len(parents) == 1}
+
+
+def _module_scope(pattern: str, directories: set[str]) -> str:
+    prefix = literal_prefix(pattern)
+    scope = prefix.rstrip("/")
+    if prefix != pattern and not prefix.endswith("/"):
+        scope = scope.rpartition("/")[0]
+    while scope and scope not in directories:
+        scope = scope.rpartition("/")[0]
+    return scope
+
+
+def _missing_paths(modules: list[Module], authored_paths: tuple[str, ...], path: Path) -> list[str]:
+    directories = set()
+    for module in modules:
+        if any(char in module.directory for char in "*?["):
+            raise TaskFileError(path, "paths", "expected a literal module directory")
+        directories.add(module.directory or _ROOT_GLOB)
+    scoped = {pattern for pattern in authored_paths if literal_prefix(pattern)}
+    claimed = {_module_scope(pattern, directories) for pattern in scoped}
+    missing = []
+    for directory in sorted(directories):
+        try:
+            component_path(directory)
+        except ValueError as exc:
+            raise TaskFileError(path, "paths", str(exc)) from None
+        if len(directory) > MAX_COMPONENT_PATH_LENGTH:
+            raise TaskFileError(
+                path, "paths", f"module directory exceeds {MAX_COMPONENT_PATH_LENGTH} characters"
+            )
+        if directory == _ROOT_GLOB:
+            owned = directory in authored_paths
+        else:
+            owned = directory in claimed or any(matches(pattern, directory) for pattern in scoped)
+        if not owned:
+            missing.append(directory)
+    return missing
+
+
+def _authored_parents(existing: ComponentModel | None, missing: list[str]) -> dict[str, str]:
+    if existing is None:
+        return {}
+    parents = _scoped_parents(existing)
+    for row in existing.components:
+        if _ROOT_GLOB in row.paths:
+            parents.setdefault(_ROOT_GLOB, row.id)
+    for head in {path.partition("/")[0] for path in missing if "/" in path}:
+        owner = existing.owner_of(head).component
+        if owner and any(literal_prefix(path) and matches(path, head) for path in owner.paths):
+            parents[head] = owner.id
+    return parents
+
+
 def _propose(
     modules: list[Module], existing: ComponentModel | None, destination: Path
 ) -> list[_Proposal]:
     prior = existing.components if existing else ()
-    prior_by_id = {component.id: component for component in prior}
-    occupied = set(prior_by_id)
-    path_owners = {
-        path.removesuffix("/**"): component.id for component in prior for path in component.paths
-    }
-    parents = {component.id: component.id for component in prior if not component.paths}
-    parents.update(path_owners)
+    occupied = {component.id for component in prior}
+    authored_paths = tuple(path for component in prior for path in component.paths)
+    missing = _missing_paths(modules, authored_paths, destination)
+    parents = _authored_parents(existing, missing)
     proposals: list[_Proposal] = []
-    for module in sorted(modules, key=lambda item: (item.directory, item.id)):
-        path = module.directory or _ROOT_GLOB
-        if path in path_owners:
-            continue
-        if len(path) > MAX_COMPONENT_PATH_LENGTH:
-            raise TaskFileError(
-                destination,
-                "paths",
-                f"module directory exceeds {MAX_COMPONENT_PATH_LENGTH} characters",
-            )
+    for path in missing:
         is_root = path == _ROOT_GLOB
         base = "root" if is_root else _path_id(path)
-        authored = prior_by_id.get(base)
-        if authored and any(literal_prefix(item).startswith(path + "/") for item in authored.paths):
-            continue
         parent = parents.get(_ROOT_GLOB)
         head, sep, _ = path.partition("/")
         if sep:
@@ -176,8 +236,7 @@ def _propose(
             parent = parents[head]
         component_id = _allocate(base, occupied)
         proposals.append(_Proposal(component_id, "Root" if is_root else path, (path,), parent))
-        path_owners[path] = component_id
-        parents.setdefault(path, component_id)
+        parents[path] = component_id
         if len(occupied) > MAX_COMPONENTS:
             raise TaskFileError(destination, "components", f"limit is {MAX_COMPONENTS} components")
     if sum(len(row.paths) for row in [*prior, *proposals]) > MAX_PATHS:
@@ -195,6 +254,20 @@ def _yaml_text(project: str, proposals: list[_Proposal]) -> str:
         + "components:\n"
         + "".join(row.dump() for row in proposals)
     )
+
+
+def _validate_proposal(
+    destination: Path, project: str, existing: ComponentModel | None, proposals: list[_Proposal]
+) -> None:
+    rows = [
+        component.model_dump(mode="json", exclude_none=True)
+        for component in (existing.components if existing else ())
+    ]
+    rows.extend(row.record() for row in proposals)
+    _, issues = validate_component_document(
+        {"version": 1, "project": project, "components": rows}, destination
+    )
+    _require_usable(issues)
 
 
 def _publish_proposal(
@@ -216,6 +289,7 @@ def _publish_proposal(
             modules, issues = _module_evidence(root, trail)
             existing = _existing_model(original, project, issues)
             proposals = _propose(modules, existing, destination)
+            _validate_proposal(destination, project, existing, proposals)
             write_new_text(destination, _yaml_text(project, proposals), dir_fd=fd)
     except FileExistsError:
         raise TaskFileError(destination, field, "proposal output already exists") from None

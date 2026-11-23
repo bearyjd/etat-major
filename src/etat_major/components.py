@@ -313,6 +313,12 @@ def load_components(
     except (OSError, ValueError) as exc:
         return None, (Issue(path.name, "file", _io_message(exc)),)
 
+    return validate_component_document(raw, path)
+
+
+def validate_component_document(
+    raw: dict, path: Path
+) -> tuple[ComponentModel | None, tuple[Issue, ...]]:
     issues = []
     try:
         model = ComponentModel.model_validate(raw)

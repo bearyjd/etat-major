@@ -12,7 +12,7 @@ from etat_major.components import ComponentModel, Coverage, load_component_works
 from etat_major.components_seed import seed_components
 from etat_major.floorplan import load_graph
 from etat_major.taskfile import TaskFileError
-from etat_major.text_safety import public_text, safe
+from etat_major.text_safety import is_control, public_text, safe
 from etat_major.workspace import Issue
 
 
@@ -110,12 +110,38 @@ def _map(args: argparse.Namespace, model: ComponentModel, issues: tuple[Issue, .
 
 def _coverage(args: argparse.Namespace, model: ComponentModel, issues: tuple[Issue, ...]) -> int:
     paths = load_graph(args.graph).file_paths
-    report = model.coverage(_checked_path(path, args.graph, "files") for path in paths)
+    matchable, unsupported = [], []
+    for path in paths:
+        if any(map(is_control, path)):
+            raise TaskFileError(
+                args.graph, "files", "expected a safe repository-relative file path"
+            )
+        try:
+            matchable.append(component_file_path(path))
+        except ValueError:
+            unsupported.append(path)
+    report = model.coverage(matchable)
+    if unsupported:
+        count = len(unsupported)
+        issues += (
+            Issue(
+                args.graph.name,
+                "files",
+                f"{count} recorded paths cannot be matched by component declarations",
+                "warning",
+                False,
+            ),
+        )
+        report = replace(
+            report,
+            unowned=tuple(sorted((*report.unowned, *unsupported))),
+            percentage=100 * len(report.owned) / len(paths),
+        )
     issues += tuple(_tie_issue(model.project, path, ties) for path, ties in report.ties)
     data = {
         "project": model.project,
-        "owned": [safe(path) for path in report.owned],
-        "unowned": [safe(path) for path in report.unowned],
+        "owned": [_display(path) for path in report.owned],
+        "unowned": [_display(path) for path in report.unowned],
         "percentage": report.percentage,
     }
     return _result(args, data, issues, _coverage_lines(report))
@@ -123,8 +149,8 @@ def _coverage(args: argparse.Namespace, model: ComponentModel, issues: tuple[Iss
 
 def _coverage_lines(report: Coverage) -> Iterator[str]:
     yield f"{report.percentage:.2f}% owned"
-    yield from (f"owned  {path}" for path in report.owned)
-    yield from (f"unowned  {path}" for path in report.unowned)
+    yield from (f"owned  {_display(path)}" for path in report.owned)
+    yield from (f"unowned  {_display(path)}" for path in report.unowned)
 
 
 def _seed(args: argparse.Namespace) -> int:
