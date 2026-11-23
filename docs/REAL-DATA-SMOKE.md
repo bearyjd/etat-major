@@ -35,7 +35,7 @@ Baseline keys are the operation names printed by the script. Each contains a man
 
 Research and component seed outputs go into a fresh temporary directory. The serve check exercises the CLI startup and read-only GET routes in process using the web and development extras. Add `--understand` when verifying a build with that route. It requires a successful GET and exposes `data.understand` for pinning.
 
-The three Floorplan operations run in order through the existing pinned wrapper. Supply a disposable copy prepared for deterministic build and refresh, including its architecture input. The wrapper modifies that copy. For a read-only run, omit those three expectations and both wrapper paths and use `--partial`. See the [Floorplan runner instructions](FLOORPLAN-RUNNER.md).
+The three Floorplan operations run in order through the existing pinned wrapper. Supply a disposable copy prepared for deterministic build and refresh, including its architecture input. The wrapper modifies that copy. Before running any operation, the script checks that the resolved copy path is separate from each supplied input, including the baseline file, workspace and source checkout. For a read-only run, omit those three expectations and both wrapper paths and use `--partial`. See the [Floorplan runner instructions](FLOORPLAN-RUNNER.md).
 
 ## NetLens snapshot
 

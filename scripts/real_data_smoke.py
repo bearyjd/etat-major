@@ -114,6 +114,32 @@ def arguments(name, args, scratch):
     return argv
 
 
+def guard_copy_inputs(args):
+    fields = (
+        "source",
+        "root",
+        "repo",
+        "workspace",
+        "graph",
+        "trail",
+        "prs",
+        "releases",
+        "meute",
+        "answer",
+        "expectations",
+    )
+    try:
+        copy = Path(args.copy).resolve()
+        for field in fields:
+            value = getattr(args, field)
+            if value is not None:
+                source = Path(value).resolve()
+                if copy.is_relative_to(source) or source.is_relative_to(copy):
+                    raise ValueError(f"floorplan.copy: overlap with {field}")
+    except (OSError, RuntimeError):
+        raise ValueError("floorplan.copy: cannot resolve input paths") from None
+
+
 def serve(argv, understand):
     from fastapi.testclient import TestClient
 
@@ -140,15 +166,23 @@ def serve(argv, understand):
 
 
 def observe(name, argv, scratch, understand):
+    if name == "progress":
+        repo = Path(argv[argv.index("--repo") + 1])
+        with _open_repository(repo) as fd:
+            revision = _resolve_commit(fd, "HEAD")
     with redirect_stdout(io.StringIO()) as stdout, redirect_stderr(io.StringIO()):
         if name == "serve":
             return serve(argv, understand)
         status = cli(argv)
+    if status not in (0, 1):
+        return {"status": status}
     if "--format" in argv:
         result = json.loads(stdout.getvalue())
-        if name == "progress" and status in (0, 1):
-            with _open_repository(Path(argv[argv.index("--repo") + 1])) as fd:
-                result["revision"] = _resolve_commit(fd, "HEAD")
+        if name == "progress":
+            with _open_repository(repo) as fd:
+                if revision != _resolve_commit(fd, "HEAD"):
+                    raise ValueError("progress.revision: HEAD changed during observation")
+            result["revision"] = revision
     elif status == 0 and name == "research import":
         record = load_research(scratch / "research/0001-chatgpt-research.md")
         result = {"data": record.model_dump(mode="json")}
@@ -181,6 +215,8 @@ def main():
         try:
             pins = baseline(args)
             commands = {name: arguments(name, args, scratch) for name in pins}
+            if any(name.startswith("floorplan ") for name in commands):
+                guard_copy_inputs(args)
         except ValueError as exc:
             print(exc)
             return 2
