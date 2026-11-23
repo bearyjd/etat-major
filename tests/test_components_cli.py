@@ -278,7 +278,95 @@ def test_coverage_retains_nonmatchable_relative_recorded_paths(component_workspa
     graph.write_text(json.dumps(source), encoding="utf-8")
     args = ["--workspace", str(component_workspace), "--project", "netlens", "--graph", str(graph)]
     value = result(capsys, "coverage", args)
-    assert value["data"]["unowned"] == [path]
+    expected = "[redacted path:2]" if ":" in name else path
+    assert value["data"]["unowned"] == [expected]
     assert value["data"]["percentage"] == 50
     assert value["issues"][0]["severity"] == "warning"
     assert path not in value["issues"][0]["message"]
+
+
+def test_coverage_preserves_relative_path_punctuation(component_workspace, capsys):
+    owned = [
+        "app/(marketing)/page.tsx",
+        "app/[id]/layout.tsx",
+        "app/[id]/page.tsx",
+        "app/a-/b.kt",
+    ]
+    unowned = ["outside/[id]/layout#1.tsx", "outside/(campaign)/page%1.tsx"]
+    unowned.sort()
+    graph = component_workspace / "names.json"
+    source = json.loads((FIXTURES / "floorplan/graph.json").read_text(encoding="utf-8"))
+    source["files"] = [{"p": path} for path in owned + unowned]
+    graph.write_text(json.dumps(source), encoding="utf-8")
+    args = ["--workspace", str(component_workspace), "--project", "netlens", "--graph", str(graph)]
+    value = result(capsys, "coverage", args)
+    assert value["data"]["owned"] == owned
+    assert value["data"]["unowned"] == unowned
+    assert main(["components", "coverage", *args, "--format", "text"]) == 0
+    text = capsys.readouterr().out
+    assert all(f"owned  {path}\n" in text for path in (*owned, *unowned))
+
+
+def test_coverage_tie_points_to_exact_unowned_path(component_workspace, capsys):
+    model = component_workspace / "components/netlens.yaml"
+    with model.open("a", encoding="utf-8") as stream:
+        stream.write("  - {id: other, label: Other, kind: app, paths: [app]}\n")
+    path = "app/[id]/page.tsx"
+    graph = component_workspace / "tie.json"
+    source = json.loads((FIXTURES / "floorplan/graph.json").read_text(encoding="utf-8"))
+    source["files"] = [{"p": path}, {"p": "src/private.invalid:repo"}]
+    graph.write_text(json.dumps(source), encoding="utf-8")
+    args = ["--workspace", str(component_workspace), "--project", "netlens", "--graph", str(graph)]
+    value = result(capsys, "coverage", args)
+    assert value["data"]["unowned"] == ["[redacted path:2]", path]
+    warning = "ownership tie for unowned path 2: client.app, other"
+    assert any(warning == issue["message"] for issue in value["issues"])
+    assert main(["components", "coverage", *args, "--format", "text"]) == 0
+    assert warning in capsys.readouterr().err
+
+
+def test_coverage_retains_path_privacy(component_workspace, capsys):
+    graph = component_workspace / "private.json"
+    source = json.loads((FIXTURES / "floorplan/graph.json").read_text(encoding="utf-8"))
+    paths = [
+        "app/src/Page.tsx",
+        "app/src/100%.kt",
+        "app/name@private.invalid:repo",
+        "app/name@private.invalid:another",
+        "app/private.invalid:repo",
+        "app/private-host:/repo",
+        "∕private∕path",
+    ]
+    source["files"] = [{"p": path} for path in paths]
+    graph.write_text(json.dumps(source), encoding="utf-8")
+    args = ["--workspace", str(component_workspace), "--project", "netlens", "--graph", str(graph)]
+    value = result(capsys, "coverage", args)
+    assert value["data"]["owned"] == paths[:1]
+    unowned = value["data"]["unowned"]
+    assert paths[1] in unowned
+    assert len(unowned) == len(set(unowned)) == 6
+    assert value["data"]["percentage"] == pytest.approx(100 / 7)
+    assert any("6 recorded paths" in issue["message"] for issue in value["issues"])
+    assert (
+        "private.invalid" not in json.dumps(value)
+        and "∕private∕path" not in value["data"]["unowned"]
+    )
+    assert main(["components", "coverage", *args, "--format", "text"]) == 0
+    rendered = capsys.readouterr()
+    assert "private.invalid" not in rendered.out + rendered.err
+    assert "private-host" not in rendered.out + rendered.err
+    assert "∕private∕path" not in rendered.out + rendered.err
+
+
+def test_coverage_uses_distinct_floorplan_paths_including_unsupported(component_workspace, capsys):
+    graph = component_workspace / "duplicates.json"
+    source = json.loads((FIXTURES / "floorplan/graph.json").read_text(encoding="utf-8"))
+    matchable, unsupported = "app/src/Page.tsx", "app/src/100%.kt"
+    source["files"] = [{"p": path} for path in (matchable, unsupported) * 3]
+    graph.write_text(json.dumps(source), encoding="utf-8")
+    args = ["--workspace", str(component_workspace), "--project", "netlens", "--graph", str(graph)]
+    value = result(capsys, "coverage", args)
+    assert value["data"]["owned"] == [matchable]
+    assert value["data"]["unowned"] == [unsupported]
+    assert value["data"]["percentage"] == 50
+    assert any("1 recorded paths" in issue["message"] for issue in value["issues"])

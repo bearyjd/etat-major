@@ -5,6 +5,7 @@ import sys
 from collections.abc import Iterable, Iterator
 from dataclasses import replace
 from pathlib import Path
+from unicodedata import normalize
 
 from etat_major.cli_json import json_result
 from etat_major.component_paths import component_file_path
@@ -14,6 +15,8 @@ from etat_major.floorplan import load_graph
 from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import is_control, public_text, safe
 from etat_major.workspace import Issue
+
+_NONMATCHING_PUNCTUATION = str.maketrans("%#", "__")
 
 
 def components_parser(parser: argparse.ArgumentParser) -> None:
@@ -108,6 +111,15 @@ def _map(args: argparse.Namespace, model: ComponentModel, issues: tuple[Issue, .
     return _result(args, data, issues, lines)
 
 
+def _coverage_label(path: str, ordinal: int) -> str:
+    try:
+        component_file_path(normalize("NFKC", path).translate(_NONMATCHING_PUNCTUATION))
+    except ValueError:
+        # The colon in the first segment cannot collide with any accepted Floorplan path.
+        return f"[redacted path:{ordinal}]"
+    return safe(path)
+
+
 def _coverage(args: argparse.Namespace, model: ComponentModel, issues: tuple[Issue, ...]) -> int:
     paths = load_graph(args.graph).file_paths
     matchable, unsupported = [], []
@@ -137,11 +149,22 @@ def _coverage(args: argparse.Namespace, model: ComponentModel, issues: tuple[Iss
             unowned=tuple(sorted((*report.unowned, *unsupported))),
             percentage=100 * len(report.owned) / len(paths),
         )
-    issues += tuple(_tie_issue(model.project, path, ties) for path, ties in report.ties)
+    labels = {path: _coverage_label(path, ordinal) for ordinal, path in enumerate(sorted(paths), 1)}
+    report = replace(
+        report,
+        owned=tuple(sorted(labels[path] for path in report.owned)),
+        unowned=tuple(sorted(labels[path] for path in report.unowned)),
+        ties=tuple((labels[path], owners) for path, owners in report.ties),
+    )
+    positions = {path: index for index, path in enumerate(report.unowned, 1)}
+    issues += tuple(
+        _tie_issue(model.project, f"unowned path {positions[path]}", owners)
+        for path, owners in report.ties
+    )
     data = {
         "project": model.project,
-        "owned": [_display(path) for path in report.owned],
-        "unowned": [_display(path) for path in report.unowned],
+        "owned": list(report.owned),
+        "unowned": list(report.unowned),
         "percentage": report.percentage,
     }
     return _result(args, data, issues, _coverage_lines(report))
@@ -149,8 +172,8 @@ def _coverage(args: argparse.Namespace, model: ComponentModel, issues: tuple[Iss
 
 def _coverage_lines(report: Coverage) -> Iterator[str]:
     yield f"{report.percentage:.2f}% owned"
-    yield from (f"owned  {_display(path)}" for path in report.owned)
-    yield from (f"unowned  {_display(path)}" for path in report.unowned)
+    yield from (f"owned  {path}" for path in report.owned)
+    yield from (f"unowned  {path}" for path in report.unowned)
 
 
 def _seed(args: argparse.Namespace) -> int:

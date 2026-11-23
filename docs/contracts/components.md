@@ -60,8 +60,10 @@ match a common path produce a warning, including siblings at the root.
 Coverage partitions unique recorded Floorplan paths into sorted owned and
 unowned lists. It divides owned files by the input count and multiplies by
 100. Repository-relative paths accepted by Floorplan that cannot match the
-component grammar count as unowned and produce a warning. Control characters
-invalidate the report. Empty input reports zero percent. Parents appear nearest first.
+component grammar count as unowned and produce a warning. Coverage preserves
+ordinary path punctuation and uses distinct labels for location-shaped paths
+or other unsafe path text. A coverage tie warning identifies the one-based
+entry in the sorted unowned list. Control characters invalidate the report. Empty input reports zero percent. Parents appear nearest first.
 
 ## Validation and proposals
 
