@@ -45,16 +45,17 @@ The first thing to build, before any web UI. It proves the model.
 
 **Revised after the Floorplan proof-out ([FLOORPLAN-PROOF.md](FLOORPLAN-PROOF.md)).** Do first: (a) fix the Trail adapter to accept every node kind real graphs contain (it rejected a real Kotlin graph), (b) add a Gradle declared-dependency adapter and compare it with actual import links to show drift, (c) keep the Floorplan adapter to the deterministic import-link and glob role, with a reviewed Git-backed component model as the source of truth for components. The Floorplan items below that mention blueprints or the architecture layer apply only as advisory inputs.
 
-**Status** — Recorded Floorplan and Trail adapters, index joins, renames and overlays are implemented. Tool execution, the read-only API and the Understand screen remain.
+**Status** — Recorded Floorplan and Trail adapters, index joins, renames and overlays are implemented. The reviewed component model and both deterministic runner wrappers are implemented. Real smoke covered both Trail output layouts and a Floorplan rename refresh that retained all 80 authored component IDs. The [Understand MVP design](UNDERSTAND-MVP.md) defines the next read-only screen.
 
 - **Depends on:** Slice 1.
 - **Build:**
-  - Floorplan adapter: a pinned Floorplan commit, a CI check that a recorded `graph@1` still parses, optional invocation of only the deterministic `scan`, `build` and `refresh` scripts on a copy or worktree (never the model-backed steps, `serve.mjs` or the Ask bar), a rename reconciler using Git rename detection, and the planned-versus-built overlay computed by diffing a blueprint's `f:` ids against the current code map.
+  - Floorplan adapter: a pinned Floorplan commit, a CI check that a recorded `graph@1` still parses, optional invocation of only the deterministic `scan`, `build` and `refresh` scripts on a disposable copy (never the model-backed steps, `serve.mjs` or the Ask bar), a rename reconciler using Git rename detection, and the planned-versus-built overlay computed by diffing a blueprint's `f:` ids against the current code map.
   - Trail adapter: build in a copy or worktree, read `wiring.json`, accept only `meta.version` 1, map `relation` and `confidence` to provenance, compute coverage and freshness against `HEAD`.
   - A join of the two layers by repository-relative path and revision; both layers and their provenance stay visible.
-  - Read-only FastAPI JSON API and a first Understand screen: repository selector, file tree, symbol search, architecture map (start by embedding or linking Floorplan's generated viewer), function-level graph from Trail, node inspector, source viewer, coverage panel.
-- **Decide here:** whether Floorplan's viewer is enough for architecture or État-major needs its own Cytoscape.js overlays; confirm library licenses.
-- **Done when:** for one repository, you can pick a component, drill to a function, see callers and callees with provenance and coverage limits, and open source; a planned feature's blueprint shows planned, built and existing files; the page works on a phone-width screen with no Codeman, Meute or agent running.
+  - First [Understand MVP](UNDERSTAND-MVP.md): the configured project, with a read-only component, file and symbol inspector and coverage from recorded artifacts. The existing web service renders the page from its startup snapshot.
+  - Later options: a public read-only JSON API, repository selector and interactive architecture or symbol graph. The MVP uses recorded Floorplan output and executes no Floorplan viewer.
+- **Decide for later slices:** whether viewer links or État-major graph overlays add enough value; confirm library licenses.
+- **MVP done when:** for one repository, you can pick a component, drill to a recorded file and symbol, and see callers and callees with provenance and coverage limits. A matching configured source snapshot can provide a bounded excerpt. The page works on a phone-width screen with no Codeman, Meute or agent running. A general source browser and visual blueprint overlays remain later options.
 - **Not promised:** `references`, `implements` or `lsp_*` edges (not observed), call edges for languages without full-fidelity support, or a module graph beyond directories and imports.
 
 ## Phase 3: research and feature model
@@ -67,16 +68,16 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 4: planning visualization
 
-**Status** — Task, vision and milestone models, dependency validation, board-state derivation and blueprint reading are implemented. The roadmap, board, diagram rendering and edit UI remain.
+**Status** — Task, vision and milestone models, dependency validation, board-state derivation and blueprint reading are implemented. The [read-only Planning pilot](PLANNING.md) shows one project's recorded intent, evidence and board state, with nonce-gated snapshot refresh. Diagram rendering and editing remain planned.
 
 - **Depends on:** Phase 3.
 - **Build:** extend the merged task contract (keep initiative, project, task; add optional `milestone`, `accepted_by`, `accepted_on`, `depends_on`, `targets`, and a link to a Feature; drop `budget_tokens`), the vision file, milestones with Now/Next/Later, dependency cycle detection, a Kanban (Draft, Ready, In Progress, Review, Done, Blocked), dependency view, Mermaid diagrams and wireframes rendered with sanitization, and Floorplan blueprints attached to features.
-- **Edits:** the UI writes Markdown or YAML only into the configured intent workspace (a Git working tree) and shows the resulting diff. État-major commits and pushes nothing.
+- **Future edits:** the editor would write Markdown or YAML only into the configured intent workspace (a Git working tree) and shows the resulting diff. État-major commits and pushes nothing.
 - **Done when:** the demo roadmap and board render from files; clicking a feature highlights its planned and existing components; a task naming a derived status is rejected; a dependency cycle is rejected; every edit is an uncommitted diff in the workspace.
 
 ## Phase 5: progress and traceability
 
-**Status** — Progress derives evidence from local Git and recorded GitHub data and reports lifecycle stages, gaps and stale links. Live GitHub access and the progress UI remain.
+**Status** — Progress derives evidence from local Git and recorded GitHub data and reports lifecycle stages, gaps and stale links. The read-only Planning pilot displays recorded Meute and manual review evidence with provenance. Live GitHub access and further progress UI work remain planned.
 
 - **Depends on:** Phases 3 and 4.
 - **Build:** ProgressEvidence from Git and GitHub (link key `Task: <project>/<id>` in a commit trailer, branch or PR body; PRs, reviews, checks and releases through the user's own `gh` login); the evidence ladder; derived In Progress, Review, Implementing, Verified and Released; gap, stale and disconnected-work reports; comparison of the delivered result with the Feature's `outcome`.
@@ -85,19 +86,25 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 6: optional integrations and hardening
 
-**Status** — Codeman and Meute integrations, portfolio and mobile views, and deployment hardening remain planned.
+**Status** — Read-only Planning and Fleet, recorded handoffs and in-memory refresh are implemented. An earlier local Alto pilot exercised those features. Deployment and verification of the current combined release, native existing-session round trips and authenticated Fleet actions remain pending. Portfolio, mobile views and deployment hardening remain planned.
 
 - **Depends on:** Phases 2 to 5.
-- **Meute (read-only):** parse `state/log` and `reports/**` directly into `generated` evidence and a summary; never call the per-report command that marks reports read. A run links to a task only if its commits carry the `Task:` trailer or its report names the task id. Submit approved work only through `meute promote` or `meute plan --enqueue`, on an explicit human click.
-- **Codeman:** show linked sessions from `GET /api/sessions`; open one by deep link; launch one for an approved task on an explicit human click. État-major never sets `envOverrides`. Verify against the real server first.
+- **Meute:** display recorded reports as `generated` evidence when the recording identifies an existing project task. Meute owns Inbox, Run, write authentication and execution. Any future live Fleet control must be an allowlisted, explicit operator action authorized by Meute.
+- **Codeman:** show recorded session links and let the opted-in native parent UI select an existing session after an explicit click and its access checks. Session launch is post-MVP. État-major never sets `envOverrides`.
 - **Cross-repository portfolio and mobile refinement.**
 - **Hardening:** large-repository limits, incremental reindex, freshness alerts, and the credential-isolation check for a second user (separate OS users with separate Codeman instances, or verified per-user config directories, plus account-eligibility confirmation with Anthropic).
 - **Done when:** with all services stopped nothing else changes; with them running a task shows its ExecutionLink; no second queue or terminal exists; a large-repository run is documented; the isolation check result (pass, or fail with the reason) is recorded and the second user is added only on a pass.
 
 ## Dependency order
 
-Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) → Phase 4 → Phase 5 → Phase 6. The Meute `generated` rung of the evidence ladder arrives in Phase 6, not Phase 5. The "module to why" query is tested in Phase 5.
+Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) → Phase 4 → Phase 5 → Phase 6. The recorded Meute integration contributes to the `generated` evidence rung. The "module to why" query is tested in Phase 5.
 
-## Recommended next step
+## Recommended next steps
 
-Build the read-only API and Understand screen using recorded artifacts and the existing CLI index.
+Follow the [Alto delivery workflow](ALTO-MVP-DELIVERY.md) in three separate PRs.
+
+1. Stage the exact merged read-only release. With explicit rollout scope, deploy and verify it on Alto.
+2. Design and implement native **Open session**. Keep the Planning iframe opaque and limited to nominating an existing session. The opted-in Codeman parent rechecks the active frame, access and session owner on an explicit native click. In multi-user mode require an exact owner match. In authenticated single-user mode an ownerless session is eligible. Verify return to the exact Planning task and denial cases at desktop and phone widths.
+3. Keep Fleet actions and execution in Meute. Start with a private authenticated top-level link. Verify Host, Fetch Metadata, write Origin, tokens and explicit operator action on Alto before enabling iframe writes.
+
+The [Understand MVP](UNDERSTAND-MVP.md) can proceed independently of Alto deployment. After the MVP, consider an optional Codeman theme with light and dark modes, accessible contrast and phone-width layouts.
