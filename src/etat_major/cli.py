@@ -26,6 +26,7 @@ from etat_major.components_cli import components_parser, run_components
 from etat_major.evidence import ArchitectureIndexes, load_progress
 from etat_major.evidence_render import progress_data, render_text
 from etat_major.floorplan import load_graph
+from etat_major.floorplan_runner import floorplan_parser, run_floorplan_cli
 from etat_major.gradle_cli import run_gradle
 from etat_major.refs import RefError, parse_ref
 from etat_major.render import render_trace
@@ -96,6 +97,7 @@ def _parser() -> argparse.ArgumentParser:
     _research_parser(sub.add_parser("research", help="prepare and import manual research"))
     _gradle_parser(sub.add_parser("gradle", help="inspect recorded Gradle dependencies"))
     components_parser(sub.add_parser("components", help="inspect and seed component models"))
+    floorplan_parser(sub.add_parser("floorplan", help="run a pinned deterministic Floorplan step"))
     progress = sub.add_parser("progress", help="derive progress from local Git and recorded PRs")
     for flag in ("workspace", "repo", "prs", "releases"):
         progress.add_argument(f"--{flag}", type=Path, required=True)
@@ -337,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
         "workspace": _workspace_validate,
         "gradle": run_gradle,
         "components": run_components,
+        "floorplan": run_floorplan_cli,
         "serve": run_serve,
     }
     try:
