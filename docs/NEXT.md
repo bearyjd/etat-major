@@ -1,35 +1,39 @@
-# Handoff: current state and next tasks
+# Handoff for current work
 
-Updated 2026-11-22. Keep this file under 60 lines; replace it, do not append. Rules are in `AGENTS.md` and `CLAUDE.md`.
+Updated 2026-11-23. Keep this file under 60 lines. Working rules are in `AGENTS.md` and `CLAUDE.md`.
 
 ## State
-État-major has a CLI over local and recorded inputs for trace, index, decisions,
-research, progress, workspace validation, and Gradle analysis. The reviewed
-component model provides validation, mapping, coverage, seed proposals, and
-trace links. The optional [Planning pilot](PLANNING.md) shows a read-only
-project snapshot in a local browser or sandboxed Codeman Web Tab. It uses
-recorded data and local Git evidence. Progress and Planning can also read an
-offline [Meute snapshot](contracts/meute-recording.md). Reports attach to a
-task only when the recording identifies an existing task in the project.
-The read-only Fleet Web Tab shows the same recorded Meute snapshot and links
-its matched reports to Planning tasks. See [Fleet setup](PLANNING.md#add-the-fleet-tab).
 
-## What the real-data proof-out established (details in `docs/FLOORPLAN-PROOF.md`)
-- Floorplan's deterministic import links are useful; its model-written layer failed its accuracy target and blueprints are greenfield only. Use it as an optional provider of file-level import links, not as the source of truth for components.
-- Trail's Kotlin `imports` edges do not resolve; its `calls` edges are name-matched and weak across modules. Trail also detects Gradle modules from `build.gradle.kts` and its output directory varies (`graft/` or `.trail/cache/`), so locate the file, do not assume the path.
-- `gradle drift` on a real 33-module repo, after reading convention plugins and ranking by evidence: 102 declared-and-used, 37 implicit via plugins, 1 import-backed undeclared (hand-verified real), 4 unused candidates (hand-verified), the rest weak or test-only.
+- The CLI reads local and recorded data for trace, index, decisions, research, progress, workspace validation and Gradle analysis. The reviewed [component model](contracts/components.md) provides validation, ownership, coverage and seed proposals.
+- [Planning and Fleet](PLANNING.md) present read-only snapshots in a browser or sandboxed Codeman Web Tab. They include recorded Meute evidence, manual review evidence, copyable task handoffs and nonce-gated in-memory refresh. Planning preserves project diagnostics and shared diagnostic counts without exposing shared records.
+- The [Trail runner](contracts/trail-adapter.md#building-a-fresh-local-graph) builds in disposable checkouts and validates `meta.version`. Real-data checks covered both `graft/` and `.trail/cache/`.
+- The [Floorplan runner](FLOORPLAN-RUNNER.md) runs only deterministic `scan`, `build` and `refresh`. A real Android checkout copy retained all 80 authored component IDs across a rename and reported both paths.
+- An earlier local Alto pilot verified recorded evidence, snapshot refresh, Fleet and task handoff links. The current combined release has yet to be deployed or verified on Alto.
 
-## Next tasks, in order
-1. **Reviewed component model. Done.** The [component contract](contracts/components.md) defines Git-backed component YAML. The CLI validates models, maps paths, measures coverage from recorded Floorplan files and seeds review proposals from Gradle modules and Trail scopes. Seed output loads and is published exclusively. Trace resolves `component:PROJECT/ID` links against supplied models.
-**Subprocess exception for tasks 2 and 3 only:** each wrapper may exec exactly one external tool (`trail build`, or Floorplan's `scan`/`build`/`refresh` Node scripts) from one dedicated module, with a fixed argument list, no shell, a scrubbed environment (telemetry off, no credentials), a timeout, an output size cap, and only inside a throwaway copy or worktree supplied by the caller. Tests must use a fake executable; the real tool is run only by the maintainer or in the real-data smoke step. Anything else still follows the `AGENTS.md` ban.
+## Alto follow-ons
 
-2. **Trail runner wrapper. Done.** The [local runner API](contracts/trail-adapter.md#building-a-fresh-local-graph) runs a bounded structural build in a disposable checkout and validates `meta.version`. Verified on real copies using `.trail/cache/` and `graft/`.
-3. **Floorplan runner wrapper. Done.** The [local runner contract](FLOORPLAN-RUNNER.md) documents the deterministic operations. A real Android copy retained all 80 authored component IDs across a rename and reported the old and new paths.
-4. **Understand view.** Use the reviewed component declarations and recorded index for repository navigation. Begin after the component model and both runner wrappers are merged.
-5. Real-data smoke script that runs every command on a real repository and compares counts with recorded expectations.
+The [Alto delivery workflow](ALTO-MVP-DELIVERY.md) defines three separate PRs, with explicit rollout scope, acceptance and rollback for each.
 
-## Open questions
-Quality and cost of a model-written component draft after the two misleading summaries are corrected; whether LikeC4 or Aalekh beat our own Git-backed model; Floorplan's `graph.json` has no stability promise (an open third-party issue has no reply); Codeman credential isolation before a second user.
+1. Stage and verify the exact merged read-only release, then deploy it to Alto within the authorized scope.
+2. Add native **Open session** in Codeman. The opaque Planning iframe can nominate an existing session. Selection requires a click in the opted-in Codeman parent's native UI and its access checks. Require an exact owner match in multi-user mode and return to the exact Planning task.
+3. Gate explicit Fleet actions in Meute. Start with a private authenticated top-level link and verify the actual sandboxed browser against Meute's Host, Fetch Metadata, write Origin and token checks before enabling iframe writes.
 
-## Local workflow (not in the repo)
-The maintainer keeps a local runner that has Codex implement each unit in its own worktree, verifies with pytest and ruff, requires a separate reviewer's approval, and only then fast-forwards a local branch. It never pushes. Ask the maintainer for it; the specs for each unit live in its `units.sh`.
+An optional Codeman theme is post-MVP.
+
+## Understand and indexing
+
+- Implement the [Understand MVP](UNDERSTAND-MVP.md) over the reviewed component model and recorded artifacts. The view uses a read-only inspector and can be built independently of the Alto rollout.
+- Add a real-data smoke script to compare command results with recorded expectations on a real repository.
+
+**Subprocess exception for the runner wrappers only.** Each dedicated wrapper
+may invoke its specified tool with fixed arguments, no shell, a scrubbed
+environment with telemetry off and no credentials, a timeout and an output cap.
+Run only inside a throwaway copy or worktree supplied by the caller. Tests use
+fake executables. Real execution is limited to maintainers and real-data smoke
+checks. The general execution ban in `AGENTS.md` still applies.
+
+## Evidence limits and open questions
+
+Floorplan's deterministic imports are useful as optional file evidence. Its model-written layer missed the accuracy target and its graph contract has no stability promise. Trail's Kotlin imports remain unresolved and cross-module calls are weak. Gradle drift on the real 33-module sample found 102 declared-and-used dependencies, 37 implicit through plugins, one hand-verified undeclared dependency and four hand-verified unused candidates. See [real-data proof](FLOORPLAN-PROOF.md).
+
+Codeman credential isolation and account eligibility remain gates before adding a second user.
