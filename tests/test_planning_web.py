@@ -338,11 +338,19 @@ def test_other_project_errors_do_not_displace_local_diagnostics(planning_workspa
     other.mkdir()
     for index in range(205):
         (other / f"{index}.md").write_text("---\nid: [\n---\n")
+    research = planning_workspace / "research"
+    for index in range(205):
+        (research / f"{index:04d}-private-draft.md").write_text("---\nid: [\n---\n")
     (features / PROJECT / "broken.md").write_text("---\nid: [\n---\n")
     with client_for(planning_workspace) as client:
         issues = client.get("/project.json").json()["issues"]
         assert any(issue["path"] == "features/netlens/broken.md" for issue in issues)
         assert all("aaa" not in issue["path"] for issue in issues)
+        assert any(
+            issue["path"] == "research" and issue["message"] == "205 diagnostics in shared research"
+            for issue in issues
+        )
+        assert all("private-draft" not in issue["path"] for issue in issues)
 
 
 def test_planning_preserves_valid_component_path_punctuation(planning_workspace, client_for):

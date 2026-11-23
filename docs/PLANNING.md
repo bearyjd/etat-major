@@ -28,9 +28,12 @@ startup. Restart it after changing a record or replacing an artifact.
 | `--releases` | Recorded release JSON. |
 | `--repo` | Local repository for read-only Git history and release containment. |
 
-Missing or invalid optional inputs are listed under Sources. A valid component
-file can establish that a linked declaration is present or stale. A missing
-or invalid file leaves the link unverified. Seed rows marked
+Missing or invalid optional inputs are listed under Sources. Planning shows
+details for diagnostics attributed to the selected project and counts for
+shared decision and research diagnostics. The shared counts are reported
+separately from the project diagnostic limit and omit shared record names
+and details. A valid component file can establish that a linked declaration
+is present or stale. A missing or invalid file leaves the link unverified. Seed rows marked
 `inferred_from_gradle` appear as proposed. Ownership paths show declarations.
 The root build's `**` catch-all can own files outside named modules, so full
 ownership coverage would not imply module-level precision.

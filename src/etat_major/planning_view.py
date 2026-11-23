@@ -1,7 +1,8 @@
 """Build a sanitized, project-scoped snapshot from local intent and recorded evidence."""
 
 import re
-from collections.abc import Callable
+from collections import Counter
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Literal
@@ -191,7 +192,7 @@ def _scoped_intent(ws: Workspace, project: str) -> Workspace:
     return replace(ws, features=tuple(features.values()))
 
 
-def _project_issue_filter(project: str) -> Callable[[Issue], bool]:
+def _project_issue_filter(project: str, shared: Counter[str]) -> Callable[[Issue], bool]:
     sections = ("features", "tasks", "milestones")
     folders = tuple(f"{section}/{project}" for section in sections)
     exact_paths = frozenset((*sections, *folders))
@@ -199,7 +200,21 @@ def _project_issue_filter(project: str) -> Callable[[Issue], bool]:
         *(f"{kind}:{project}/" for kind in ("feature", "task", "milestone")),
         *(folder + "/" for folder in folders),
     )
-    return lambda issue: issue.path in exact_paths or issue.path.startswith(prefixes)
+
+    def accept(issue: Issue) -> bool:
+        for section, ref_prefix in (("decisions", "decision:"), ("research", "research:")):
+            if issue.path == section or issue.path.startswith((section + "/", ref_prefix)):
+                shared[section] += 1
+                return False
+        return issue.path in exact_paths or issue.path.startswith(prefixes)
+
+    return accept
+
+
+def _shared_issue_rows(shared: Counter[str]) -> Iterator[Issue]:
+    for section, count in sorted(shared.items()):
+        noun = "diagnostic" if count == 1 else "diagnostics"
+        yield Issue(section, "records", f"{count} {noun} in shared {section}")
 
 
 def _feature_row(
@@ -277,11 +292,13 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
     project = inputs.project
     if len(project) > MAX_PROJECT_ID_LENGTH or not re.fullmatch(PROJECT_ID, project):
         raise TaskFileError(Path("serve"), "project", "expected a project identifier")
+    shared: Counter[str] = Counter()
     ws = _scoped_intent(
-        load_workspace(inputs.workspace, issue_filter=_project_issue_filter(project)), project
+        load_workspace(inputs.workspace, issue_filter=_project_issue_filter(project, shared)),
+        project,
     )
     sources: list[SourceRow] = []
-    issues = list(ws.issues)
+    issues = [*ws.issues, *_shared_issue_rows(shared)]
     if ws.omitted_issues:
         issues.append(Issue("workspace", "records", f"{ws.omitted_issues} more project issues"))
     model = _load_component_model(inputs, sources, issues)
