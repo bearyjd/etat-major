@@ -82,9 +82,12 @@ etat-major components seed --root repo-dir --project example --proposal-for work
 ```
 
 Seed reads Gradle settings and build scripts as text and optionally uses
-recorded Trail `module_scopes`. It groups nested modules by their first
-directory segment and marks proposed entries with `inferred_from_gradle` and
-a review comment. Both output modes require a new destination. The
+recorded Trail `module_scopes`. Nested modules use the nearest existing or
+proposed directory owner as their parent, with a first-directory grouping as
+a fallback. Seed marks proposed entries with `inferred_from_gradle` and a
+review comment. Both output modes require a new destination. A full seed
+written directly to a `components/` directory uses `PROJECT.yaml`.
+Standalone drafts can use an arbitrary filename. The
 `--proposal-for` option writes `EXISTING_FILE.proposed` with only missing
 components, for manual review and merge. A reviewed directory declaration or
 a path scoped to a module suppresses that module's proposal. A generic root

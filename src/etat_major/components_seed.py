@@ -3,6 +3,7 @@
 import os
 import re
 from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -200,6 +201,12 @@ def _missing_paths(modules: list[Module], authored_paths: tuple[str, ...], path:
     return missing
 
 
+def _ancestor_directories(path: str) -> Iterator[str]:
+    while parent := path.rpartition("/")[0]:
+        yield parent
+        path = parent
+
+
 def _authored_parents(existing: ComponentModel | None, missing: list[str]) -> dict[str, str]:
     if existing is None:
         return {}
@@ -207,10 +214,12 @@ def _authored_parents(existing: ComponentModel | None, missing: list[str]) -> di
     for row in existing.components:
         if _ROOT_GLOB in row.paths:
             parents.setdefault(_ROOT_GLOB, row.id)
-    for head in {path.partition("/")[0] for path in missing if "/" in path}:
-        owner = existing.owner_of(head).component
-        if owner and any(literal_prefix(path) and matches(path, head) for path in owner.paths):
-            parents[head] = owner.id
+    for directory in {ancestor for path in missing for ancestor in _ancestor_directories(path)}:
+        owner = existing.owner_of(directory).component
+        if owner and any(
+            literal_prefix(pattern) and matches(pattern, directory) for pattern in owner.paths
+        ):
+            parents[directory] = owner.id
     return parents
 
 
@@ -229,11 +238,19 @@ def _propose(
         parent = parents.get(_ROOT_GLOB)
         head, sep, _ = path.partition("/")
         if sep:
-            if head not in parents:
-                group_id = _allocate(_path_id(head), occupied)
-                proposals.append(_Proposal(group_id, head, (), parent))
-                parents[head] = group_id
-            parent = parents[head]
+            ancestor = next(
+                (
+                    parents[directory]
+                    for directory in _ancestor_directories(path)
+                    if directory in parents
+                ),
+                None,
+            )
+            if ancestor is None:
+                ancestor = _allocate(_path_id(head), occupied)
+                proposals.append(_Proposal(ancestor, head, (), parent))
+                parents[head] = ancestor
+            parent = ancestor
         component_id = _allocate(base, occupied)
         proposals.append(_Proposal(component_id, "Root" if is_root else path, (path,), parent))
         parents[path] = component_id
@@ -320,4 +337,6 @@ def seed_components(
             raise TaskFileError(proposal_for, "proposal_for", "expected a component model filename")
         destination = proposal_for.with_name(f"{proposal_for.name}.proposed")
         return _publish_proposal(destination, "proposal_for", root, project, trail, proposal_for)
+    if out.parent.name == "components" and out.name != f"{project}.yaml":
+        raise TaskFileError(out, "out", f"expected {project}.yaml in the components directory")
     return _publish_proposal(out, "out", root, project, trail, None)

@@ -342,3 +342,54 @@ def test_delta_uses_pattern_owner_of_module_head(tmp_path):
     proposed = rows(original.with_suffix(".yaml.proposed"))
     assert set(proposed) == {"features.ping"}
     assert proposed["features.ping"]["parent"] == "authored"
+
+
+def test_seed_parents_nested_modules_to_nearest_proposed_ancestor(tmp_path):
+    (tmp_path / "settings.gradle.kts").write_text(
+        'include(":core:data", ":core:data:local", '
+        '":core:data:local:cache", ":feature:home:detail")'
+    )
+    out = tmp_path / "netlens.yaml"
+    seed(tmp_path, "netlens", out=out)
+    model, issues = load_components(out)
+    assert model is not None
+    assert not issues
+    assert [row.id for row in model.ancestors_of("core.data.local.cache")] == [
+        "core.data.local",
+        "core.data",
+        "core",
+    ]
+    assert [row.id for row in model.ancestors_of("feature.home.detail")] == ["feature"]
+
+
+def test_delta_uses_nearest_existing_directory_owner(tmp_path):
+    (tmp_path / "settings.gradle.kts").write_text('include(":core:datax:local")')
+    original = tmp_path / "netlens.yaml"
+    original.write_text(
+        "version: 1\nproject: netlens\ncomponents:\n"
+        "- {id: authored, label: Existing, kind: grouping, paths: ['core/data?']}\n"
+    )
+    seed(tmp_path, "netlens", proposal_for=original)
+    proposed = rows(original.with_suffix(".yaml.proposed"))
+    assert set(proposed) == {"core.datax.local"}
+    assert proposed["core.datax.local"]["parent"] == "authored"
+
+
+@pytest.mark.parametrize("name", ["other.yaml", "netlens.yml", "netlens.txt"])
+def test_seed_rejects_invalid_workspace_output_filename(tmp_path, name):
+    (tmp_path / "settings.gradle.kts").write_text('include(":app")')
+    directory = tmp_path / "workspace" / "components"
+    directory.mkdir(parents=True)
+    out = directory / name
+    with pytest.raises(TaskFileError, match=r"field 'out'.*netlens.yaml"):
+        seed(tmp_path, "netlens", out=out)
+    assert not out.exists()
+
+
+def test_seed_keeps_arbitrary_standalone_filename(tmp_path):
+    (tmp_path / "settings.gradle.kts").write_text('include(":app")')
+    out = tmp_path / "review-draft.yml"
+    seed(tmp_path, "netlens", out=out)
+    model, issues = load_components(out)
+    assert model is not None and not issues
+    assert model.project == "netlens"
