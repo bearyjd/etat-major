@@ -393,3 +393,27 @@ def test_seed_keeps_arbitrary_standalone_filename(tmp_path):
     model, issues = load_components(out)
     assert model is not None and not issues
     assert model.project == "netlens"
+
+
+def test_seed_keeps_discovered_modules_when_build_script_is_malformed(gradle_root, tmp_path):
+    script = gradle_root / "feature/portscan/build.gradle.kts"
+    script.write_text("dependencies {", encoding="utf-8")
+    out = tmp_path / "netlens.yaml"
+    result = seed(gradle_root, "netlens", out=out)
+    assert {"feature.portscan", "core.network"}.issubset(rows(out))
+    assert any(
+        issue.path == "feature/portscan/build.gradle.kts"
+        and issue.severity == "warning"
+        and not issue.blocking
+        for issue in result.issues
+    )
+
+
+def test_seed_preserves_blocking_module_discovery_diagnostics(gradle_root, tmp_path):
+    settings = gradle_root / "settings.gradle.kts"
+    with settings.open("a", encoding="utf-8") as stream:
+        stream.write('\nproject(":core:network").projectDir = file("../outside")\n')
+    out = tmp_path / "netlens.yaml"
+    with pytest.raises(TaskFileError, match=r"settings.gradle.kts.*projectDir"):
+        seed(gradle_root, "netlens", out=out)
+    assert not out.exists()

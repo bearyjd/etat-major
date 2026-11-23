@@ -57,7 +57,9 @@ differences in `data`.
 Component validation reports errors with exit 1. Map and coverage can return
 data with diagnostics for other workspace component files. An unavailable
 selected model, invalid graph, or unavailable seed destination returns exit 2.
-Ownership ties are warnings and count as unowned paths. Coverage uses distinct
+Trace returns exit 2 for an invalid `--components` input, including an invalid
+model in a supplied component directory. A single file scopes this validation
+to that model. Ownership ties are warnings and count as unowned paths. Coverage uses distinct
 recorded paths and is 0 percent when the Floorplan file list is empty.
 
 ## Stability and input handling

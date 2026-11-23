@@ -327,3 +327,34 @@ def test_unclosed_bracket_in_directory_is_literal(tmp_path):
     )
     assert not issues
     assert model.owner_of("feature/ping[/Probe.kt").component.id == "feature.ping"
+
+
+def test_component_schema_date_annotation_and_runtime_path_restrictions(tmp_path):
+    from json import loads
+
+    from jsonschema import Draft202012Validator, FormatChecker
+
+    schema = loads(Path("docs/contracts/schemas/components.schema.json").read_text())
+    portable = Draft202012Validator(schema)
+    with_formats = Draft202012Validator(schema, format_checker=FormatChecker())
+    summary = {
+        "text": "Reviewed architecture",
+        "provenance": "human",
+        "reviewed_by": "maintainer",
+        "reviewed_on": "2026-11-22",
+    }
+    valid = write_model(tmp_path, [component(summary=summary)])
+    with_formats.validate(yaml.safe_load(valid.read_text()))
+    assert components.load_components(valid)[0] is not None
+
+    bad_date = write_model(tmp_path, [component(summary=summary | {"reviewed_on": "2026-02-31"})])
+    decoded = yaml.safe_load(bad_date.read_text())
+    portable.validate(decoded)
+    assert list(with_formats.iter_errors(decoded))
+    model, issues = components.load_components(bad_date)
+    assert model is None and any(issue.field.endswith(".reviewed_on") for issue in issues)
+
+    deceptive_path = write_model(tmp_path, [component(paths=["module\u202ename"])])
+    with_formats.validate(yaml.safe_load(deceptive_path.read_text()))
+    model, issues = components.load_components(deceptive_path)
+    assert model is None and any(".paths" in issue.field for issue in issues)

@@ -63,13 +63,16 @@ unowned lists. It divides owned files by the input count and multiplies by
 component grammar count as unowned and produce a warning. Coverage preserves
 ordinary path punctuation and uses distinct labels for location-shaped paths
 or other unsafe path text. A coverage tie warning identifies the one-based
-entry in the sorted unowned list. Control characters invalidate the report. Empty input reports zero percent. Parents appear nearest first.
+entry in the sorted unowned list. Control characters invalidate the report.
+Empty input reports zero percent. Parents appear nearest first.
 
 ## Validation and proposals
 
-The [JSON Schema](schemas/components.schema.json) describes the decoded
-YAML. The loader checks cross-component constraints and enforces limits of
-1 MiB, 32 YAML nesting levels, 20,000 YAML events, 500 components and 1,000
+The [JSON Schema](schemas/components.schema.json) describes the portable shape
+of decoded YAML. Enable JSON Schema format checking to validate calendar dates.
+The runtime always checks calendar dates and rejects Unicode format characters
+in paths. The loader also checks cross-component constraints and enforces
+limits of 1 MiB, 32 YAML nesting levels, 20,000 YAML events, 500 components and 1,000
 total path declarations. It rejects duplicate YAML keys, aliases, symlinks
 and models that exceed the sibling-glob overlap work limit.
 
@@ -82,8 +85,10 @@ etat-major components seed --root repo-dir --project example --proposal-for work
 ```
 
 Seed reads Gradle settings and build scripts as text and optionally uses
-recorded Trail `module_scopes`. Nested modules use the nearest existing or
-proposed directory owner as their parent, with a first-directory grouping as
+recorded Trail `module_scopes`. Diagnostics that block Gradle module discovery
+also block seed. Build-script and plugin diagnostics appear as warnings when
+the settings still establish the module directories. Nested modules use the
+nearest existing or proposed directory owner as their parent, with a first-directory grouping as
 a fallback. Seed marks proposed entries with `inferred_from_gradle` and a
 review comment. Both output modes require a new destination. A full seed
 written directly to a `components/` directory uses `PROJECT.yaml`.
@@ -99,4 +104,7 @@ existing rows that a delta extends.
 
 Use `component:PROJECT/ID` in a Feature ArchitectureLink. Pass
 `etat-major trace --components DIR_OR_FILE` to resolve a link against these
-declarations. See the [CLI JSON contract](cli-json.md) for output formats.
+declarations. When a directory is supplied, Trace validates every contained
+component model before producing a report. Pass a single component file to
+scope validation to that model. See the [CLI JSON contract](cli-json.md) for
+output formats.

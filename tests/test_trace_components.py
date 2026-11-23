@@ -147,3 +147,15 @@ def test_trace_escapes_component_issue_path(trace_inputs, capsys):
     (issue,) = result["issues"]
     assert issue["path"] == r"invalid\u001b.yaml"
     assert issue["field"] == "components"
+
+
+def test_trace_requires_all_supplied_component_directory_models_to_be_valid(trace_inputs, capsys):
+    args, valid = trace_inputs
+    unrelated = valid.with_name("unrelated.yaml")
+    unrelated.write_text("components: [")
+    assert main([*args, "--components", str(valid.parent), "--format", "json"]) == 2
+    _, result = read_envelope(capsys, "trace", 2)
+    assert result["data"] is None
+    assert [(issue["path"], issue["field"]) for issue in result["issues"]] == [
+        ("unrelated.yaml", "components")
+    ]

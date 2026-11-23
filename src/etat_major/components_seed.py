@@ -77,8 +77,11 @@ def _trail_scope(supplied: str, trail: Path, index: int) -> None:
 def _module_evidence(root: Path, trail: Path | None) -> tuple[list[Module], list[Issue]]:
     gradle = load_dependencies(root)
     modules = list(gradle.modules)
+    discovery = frozenset(gradle.discovery_issues)
     issues = [
-        replace(issue, blocking=False) if issue.field == "dependencies" else issue
+        replace(issue, severity="warning", blocking=False)
+        if issue.blocking and issue not in discovery
+        else issue
         for issue in gradle.issues
     ]
     _require_usable(issues)
