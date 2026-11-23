@@ -100,6 +100,8 @@ after replacing the snapshot. Meute's native UI is where you operate jobs.
 
 ## Local verification
 
+For release staging and live Alto checks, see the [read-only runbook](ALTO-READ-ONLY-RUNBOOK.md).
+
 During pilot verification, Chromium rendered the installed wheel from a separate working directory inside
 an iframe at a simulated `/webview/recorded/` prefix. The frame had an opaque
 origin. At 1440 × 1000 and 375 × 812, the page fit the viewport and the

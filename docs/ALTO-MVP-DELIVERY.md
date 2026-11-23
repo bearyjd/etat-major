@@ -15,8 +15,8 @@ destination.
 
 ## PR 1 — Read-only Planning and Fleet deployment
 
-**Scope.** Add the release and operator verification procedure for the merged
-Planning stack. Establish the service and Web Tab baseline before changing it.
+**Scope.** Use the [Alto read-only runbook](ALTO-READ-ONLY-RUNBOOK.md) for
+release staging and operator verification of the merged Planning stack. Establish the service and Web Tab baseline before changing it.
 Record the exact merged candidate and the prior verified Alto revision, active
 services, saved tab destinations and rollback target in the operator's private
 run record. The earlier local pilot is rehearsal evidence. Verify the new
