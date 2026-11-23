@@ -14,6 +14,7 @@ from etat_major.localfiles import open_directory, open_relative_directory
 from etat_major.taskfile import TaskFileError
 from etat_major.trail import SymbolIndex, load_wiring
 
+# Trail 0.30.5 makes --deep and --lsp opt-in in dist/cli.js; neither is supplied.
 _BUILD_ARGS = (
     "build",
     "--no-reuse",
@@ -25,6 +26,7 @@ _BUILD_ARGS = (
 _LAYOUTS = (Path("graft"), Path(".trail/cache"))
 _WIRING = Path(".graph/wiring.json")
 _TIMEOUT_SECONDS = 120
+_CLEANUP_TIMEOUT_SECONDS = 1
 _OUTPUT_LIMIT_BYTES = 2 * 1024 * 1024
 _TREE_ENTRY_LIMIT = 100_000
 _TREE_DEPTH_LIMIT = 64
@@ -248,7 +250,7 @@ def _environment(home: str, runtime_path: str, root: Path) -> dict[str, str]:
 
 def _run(executable: Path, root: Path, environment: dict[str, str]) -> None:
     deadline = monotonic() + _TIMEOUT_SECONDS
-    with subprocess.Popen(  # noqa: S603 - trusted caller executable and fixed arguments
+    process = subprocess.Popen(  # noqa: S603 - trusted caller executable and fixed arguments
         (str(executable), *_BUILD_ARGS),
         cwd=root,
         env=environment,
@@ -256,15 +258,18 @@ def _run(executable: Path, root: Path, environment: dict[str, str]) -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=True,
-    ) as process:
+    )
+    try:
         try:
             _drain_output(process, deadline, root)
             _observe_exit(process.pid, root, deadline)
-        finally:
-            _kill_reserved_group(process.pid)
-        status = process.wait()
-    if status != 0:
-        raise TrailRunError(root, "trail build", f"exited with status {status}")
+        except BaseException as failure:
+            _finish_process(process, root, failure)
+            raise
+        _finish_process(process, root)
+    finally:
+        if process.stdout is not None:
+            process.stdout.close()
 
 
 def _observe_exit(pid: int, root: Path, deadline: float) -> None:
@@ -275,14 +280,55 @@ def _observe_exit(pid: int, root: Path, deadline: float) -> None:
         sleep(min(0.01, remaining))
 
 
-def _kill_reserved_group(pid: int) -> None:
-    # Confirm the leader is still our unreaped child, even if an error
-    # interrupted the build. Reaping first could let another group reuse pid.
+def _finish_process(
+    process: subprocess.Popen, root: Path, failure: BaseException | None = None
+) -> None:
+    notes = _signal_process_group(process.pid)
     try:
-        os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        status = process.wait(timeout=_CLEANUP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        status = None
+        notes.append("could not reap Trail within the cleanup timeout")
+    except OSError:
+        status = None
+        notes.append("could not reap Trail")
+    if failure is None:
+        if status not in (None, 0):
+            failure = TrailRunError(root, "trail build", f"exited with status {status}")
+        elif notes:
+            raise TrailRunError(root, "trail build", ". ".join(notes))
+        else:
+            return
+        for note in notes:
+            failure.add_note(note)
+        raise failure
+    for note in notes:
+        failure.add_note(note)
+
+
+def _signal_process_group(pid: int) -> list[str]:
+    # Reaping first could let another group reuse pid, including after timeout.
+    try:
+        exited = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    except ChildProcessError:
+        return []
+    except OSError:
+        return ["could not verify Trail's process group"]
+    try:
         os.killpg(pid, signal.SIGKILL)
-    except (ChildProcessError, ProcessLookupError):
-        pass
+    except ProcessLookupError:
+        return []
+    except OSError:
+        notes = ["could not signal Trail's process group"]
+        if exited is None:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                return notes
+            except OSError:
+                notes.append("could not signal Trail directly")
+        return notes
+    return []
 
 
 def _drain_output(process: subprocess.Popen, deadline: float, root: Path) -> None:

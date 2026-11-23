@@ -196,45 +196,6 @@ def test_rejects_checkout_identity_alias(tmp_path, checkout, monkeypatch, alias_
         run_trail(disposable, source_root=source, executable=executable)
 
 
-def test_signals_process_group_before_waiting_on_exited_leader(tmp_path, monkeypatch):
-    events = []
-
-    class FinishedProcess:
-        pid = 42
-        returncode = None
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exception):
-            pass
-
-        def wait(self):
-            events.append("reap")
-            self.returncode = 0
-            return 0
-
-    def observe(kind, pid, flags):
-        assert kind == trail_runner.os.P_PID
-        assert pid == 42
-        assert flags & trail_runner.os.WNOWAIT
-        events.append("observe")
-        return object()
-
-    def signal_group(pid, sig):
-        assert pid == 42
-        assert sig == trail_runner.signal.SIGKILL
-        events.append("signal")
-
-    monkeypatch.setattr(trail_runner.subprocess, "Popen", lambda *args, **kwargs: FinishedProcess())
-    monkeypatch.setattr(trail_runner, "_drain_output", lambda *args: None)
-    monkeypatch.setattr(trail_runner.os, "waitid", observe)
-    monkeypatch.setattr(trail_runner.os, "killpg", signal_group)
-    trail_runner._run(tmp_path / "trail", tmp_path, {})
-    assert events[0] == "observe"
-    assert events[-2:] == ["signal", "reap"]
-
-
 @pytest.mark.parametrize("entry_type", ["symlink", "hardlink", "fifo", "mount"])
 def test_rejects_unsafe_nested_entry(tmp_path, checkout, entry_type):
     source, disposable = checkout

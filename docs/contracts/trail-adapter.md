@@ -95,11 +95,27 @@ untracked files, so tracked files that match ignore rules can be missing from
 the graph. The runner disables worktree cache seeding and traversal of
 submodules and nested repositories.
 
+The installed 0.30.5 package defines `--deep` and `--lsp` as opt-in
+switches without defaults (`dist/cli.js:451`, `dist/cli.js:462`). The build
+handler derives model processing from `opts.deep` and passes `opts.lsp`
+directly to the graph engine (`dist/cli.js:570`, `dist/cli.js:632–638`).
+The engine constructs a model summarizer only when `opts.llm` is truthy
+(`dist/engine.js:60–68`), and the graph starts language-server enrichment
+only when `opts.lsp` is truthy (`dist/graph/build.js:309`). The checkout's
+persisted build configuration is consulted for traversal choices
+(`dist/graph/build.js:136–140`). It does not supply either switch.
+The runner omits both switches. Recheck these defaults when upgrading the
+pinned executable.
+
 The runner rejects workspace builds, symlinks and special files in the
 disposable tree. It caps build time at 120 seconds and combined subprocess
 output at 2 MiB. It signals the invocation's process group before reaping
-the leader. This covers subprocesses that stay in the group. Build
-diagnostics contain the failure category and omit subprocess output.
+the leader. This covers subprocesses that stay in the group. If group
+signaling fails while the leader still runs, the runner attempts to signal it
+directly. The runner waits up to one additional second to reap the process.
+A timeout or output failure remains the primary error if cleanup also
+fails. A cleanup failure after an otherwise successful build is reported
+as a cleanup error. Build diagnostics omit subprocess output.
 
 `result.artifact` is the checkout-relative path of the fresh artifact, either
 `graft/.graph/wiring.json` or `.trail/cache/.graph/wiring.json`. `result.index`
