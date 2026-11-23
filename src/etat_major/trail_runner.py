@@ -5,6 +5,8 @@ import selectors
 import signal
 import stat
 import subprocess  # noqa: S404 - the single Trail runner permitted by docs/NEXT.md
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -65,19 +67,47 @@ def run_trail(
     tool, path_env = _trusted_tools(root, source, executable, runtime_path)
     _check_tree(root)
     before = _artifacts(root)
-    try:
-        with TemporaryDirectory(prefix=".etat-major-trail-", dir=root.parent) as home:
-            scratch = Path(home)
-            if _overlapping_checkouts(scratch, root) or _overlapping_checkouts(scratch, source):
-                raise TrailRunError(root, "trail build", "temporary home overlaps a checkout")
+    with _temporary_home(root) as home:
+        scratch = Path(home)
+        if _overlapping_checkouts(scratch, root) or _overlapping_checkouts(scratch, source):
+            raise TrailRunError(root, "trail build", "temporary home overlaps a checkout")
+        try:
             _prepare_git_metadata(scratch / "git")
             _run(tool, root, _environment(home, path_env, root))
-    except OSError:
-        raise TrailRunError(root, "trail build", "could not start or finish Trail") from None
+        except OSError:
+            raise TrailRunError(root, "trail build", "could not start or finish Trail") from None
     fresh = [path for path, stamp in _artifacts(root).items() if before.get(path) != stamp]
     if len(fresh) != 1:
         raise TrailRunError(root, "wiring.json", "expected exactly one fresh Trail graph")
     return TrailRun(fresh[0], load_wiring(root / fresh[0]))
+
+
+@contextmanager
+def _temporary_home(root: Path) -> Iterator[str]:
+    try:
+        directory = TemporaryDirectory(prefix=".etat-major-trail-", dir=root.parent)
+    except OSError:
+        raise TrailRunError(
+            root, "trail build", "could not create Trail's temporary home"
+        ) from None
+    try:
+        yield directory.name
+    except BaseException as failure:
+        _remove_home(directory, root, failure)
+        raise
+    _remove_home(directory, root)
+
+
+def _remove_home(
+    directory: TemporaryDirectory, root: Path, failure: BaseException | None = None
+) -> None:
+    try:
+        directory.cleanup()
+    except OSError:
+        message = "could not remove Trail's temporary home"
+        if failure is None:
+            raise TrailRunError(root, "trail build", message) from None
+        failure.add_note(message)
 
 
 def _checkout(path: Path) -> Path:

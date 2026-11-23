@@ -332,3 +332,40 @@ Path({str(marker)!r}).write_text(str(home), encoding="utf-8")
     result = run_trail(disposable, source_root=source, executable=executable)
     assert all("runtime.py" not in symbol.path for symbol in result.index.symbols)
     assert not Path(marker.read_text(encoding="utf-8")).exists()
+
+
+@pytest.mark.parametrize("build_failure", [None, "timeout", "output", "interrupt"])
+def test_temporary_home_cleanup_reports_failure_without_masking_build(
+    tmp_path, checkout, monkeypatch, build_failure
+):
+    source, disposable = checkout
+    executable = fake_trail(tmp_path, "pass")
+    cleanup = trail_runner.TemporaryDirectory.cleanup
+    failures = {
+        "timeout": TrailRunError(disposable, "trail build", "timed out"),
+        "output": TrailRunError(disposable, "trail build", "exceeded the output limit"),
+        "interrupt": KeyboardInterrupt(),
+    }
+    primary = failures.get(build_failure)
+
+    def fail_cleanup(home):
+        cleanup(home)
+        raise PermissionError("private temporary home path")
+
+    def build(*args):
+        if primary is not None:
+            raise primary
+
+    monkeypatch.setattr(trail_runner.TemporaryDirectory, "cleanup", fail_cleanup)
+    monkeypatch.setattr(trail_runner, "_run", build)
+
+    expected_error = type(primary) if primary is not None else TrailRunError
+    with pytest.raises(expected_error) as error:
+        run_trail(disposable, source_root=source, executable=executable)
+    note = "could not remove Trail's temporary home"
+    if primary is None:
+        assert note in str(error.value)
+    else:
+        assert error.value is primary
+        assert error.value.__notes__ == [note]
+    assert "private temporary home path" not in str(error.value)
