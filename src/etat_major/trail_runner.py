@@ -8,7 +8,7 @@ import subprocess  # noqa: S404 - the single Trail runner permitted by docs/NEXT
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from time import monotonic
+from time import monotonic, sleep
 
 from etat_major.localfiles import open_directory, open_relative_directory
 from etat_major.taskfile import TaskFileError
@@ -54,7 +54,7 @@ def run_trail(
     """
     root = _checkout(disposable_root)
     source = _checkout(source_root)
-    if root == source or root.is_relative_to(source) or source.is_relative_to(root):
+    if _overlapping_checkouts(root, source):
         raise TrailRunError(root, "disposable_root", "expected a checkout separate from the source")
     if os.pathsep in str(root.parent):
         raise TrailRunError(
@@ -65,6 +65,7 @@ def run_trail(
     before = _artifacts(root)
     try:
         with TemporaryDirectory(prefix=".etat-major-trail-", dir=root) as home:
+            _prepare_git_metadata(Path(home) / "git")
             _run(tool, root, _environment(home, path_env, root))
     except OSError:
         raise TrailRunError(root, "trail build", "could not start or finish Trail") from None
@@ -83,6 +84,27 @@ def _checkout(path: Path) -> Path:
     except (OSError, ValueError):
         pass
     raise TrailRunError(path, "checkout", "expected a real directory without symlinks or '..'")
+
+
+def _directory_identity(path: Path) -> tuple[int, int]:
+    with open_directory(path) as fd:
+        info = os.fstat(fd)
+    return info.st_dev, info.st_ino
+
+
+def _overlapping_checkouts(root: Path, source: Path) -> bool:
+    try:
+        root_id = _directory_identity(root)
+        source_id = _directory_identity(source)
+        return (
+            root_id == source_id
+            or any(_directory_identity(parent) == source_id for parent in root.parents)
+            or any(_directory_identity(parent) == root_id for parent in source.parents)
+        )
+    except OSError:
+        raise TrailRunError(
+            root, "disposable_root", "could not verify checkout identities"
+        ) from None
 
 
 def _trusted_tools(
@@ -182,6 +204,14 @@ def _artifacts(root: Path) -> dict[Path, tuple[int, int, int, int]]:
     return found
 
 
+def _prepare_git_metadata(git_dir: Path) -> None:
+    # Give Trail a Git work tree for ignore processing without loading its local
+    # Git config, index, or linked worktree metadata.
+    (git_dir / "objects").mkdir(parents=True)
+    (git_dir / "refs").mkdir()
+    (git_dir / "HEAD").write_text("ref: refs/heads/trail-scan\n", encoding="ascii")
+
+
 def _environment(home: str, runtime_path: str, root: Path) -> dict[str, str]:
     return {
         "PATH": runtime_path,
@@ -194,6 +224,10 @@ def _environment(home: str, runtime_path: str, root: Path) -> dict[str, str]:
         "TMPDIR": home,
         "DO_NOT_TRACK": "1",
         "CI": "1",
+        "GIT_DIR": str(Path(home) / "git"),
+        "GIT_COMMON_DIR": str(Path(home) / "git"),
+        "GIT_WORK_TREE": str(root),
+        "GIT_ATTR_NOSYSTEM": "1",
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CEILING_DIRECTORIES": str(root.parent),
         "GIT_CONFIG_GLOBAL": os.devnull,
@@ -222,17 +256,30 @@ def _run(executable: Path, root: Path, environment: dict[str, str]) -> None:
     ) as process:
         try:
             _drain_output(process, deadline, root)
-            status = process.wait(timeout=max(0, deadline - monotonic()))
-        except subprocess.TimeoutExpired:
-            raise TrailRunError(root, "trail build", "timed out") from None
+            _observe_exit(process.pid, root, deadline)
         finally:
-            if process.returncode is None:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+            _kill_reserved_group(process.pid)
+        status = process.wait()
     if status != 0:
         raise TrailRunError(root, "trail build", f"exited with status {status}")
+
+
+def _observe_exit(pid: int, root: Path, deadline: float) -> None:
+    while not os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT):
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise TrailRunError(root, "trail build", "timed out")
+        sleep(min(0.01, remaining))
+
+
+def _kill_reserved_group(pid: int) -> None:
+    # Confirm the leader is still our unreaped child, even if an error
+    # interrupted the build. Reaping first could let another group reuse pid.
+    try:
+        os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        os.killpg(pid, signal.SIGKILL)
+    except (ChildProcessError, ProcessLookupError):
+        pass
 
 
 def _drain_output(process: subprocess.Popen, deadline: float, root: Path) -> None:
