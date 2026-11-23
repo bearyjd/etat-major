@@ -1,3 +1,4 @@
+import os
 from urllib.parse import urljoin, urlsplit
 
 import pytest
@@ -145,6 +146,63 @@ def test_refresh_keeps_startup_paths_after_directory_change(
         _retitle(planning_workspace, "Startup path remembered")
         refresh = _refresh_href(client.get("/").text, "planning")[1:]
         assert "Startup path remembered" in client.get(refresh).text
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "O_PATH") or os.geteuid() == 0,
+    reason="requires Linux and a non-root user",
+)
+def test_refresh_under_search_only_ancestor(planning_workspace, client_for, monkeypatch, tmp_path):
+    ancestor = tmp_path / "search-only"
+    ancestor.mkdir()
+    startup = ancestor / "startup"
+    startup.mkdir()
+    workspace = planning_workspace.rename(startup / "workspace")
+    meute = _snapshot(startup / "reports.yaml")
+    ancestor.chmod(0o111)
+    try:
+        monkeypatch.chdir(startup)
+        with client_for("workspace", "--meute", meute.name) as client:
+            initial = client.get("/")
+            assert LINKED in initial.text
+            refresh = _refresh_href(initial.text, "planning")[1:]
+            monkeypatch.chdir(tmp_path)
+            _retitle(workspace, "Updated below search-only ancestor")
+            assert "Updated below search-only ancestor" in client.get(refresh).text
+    finally:
+        ancestor.chmod(0o700)
+
+
+def test_refresh_accepts_existing_invalid_sources_and_diagnostics(
+    planning_workspace, client_for, tmp_path
+):
+    recording = tmp_path / "reports.yaml"
+    recording.write_text("reports: [")
+    shared = planning_workspace / "decisions" / "0099-private-decision.md"
+    shared.write_text("---\nid: [\n---\n")
+    with client_for(planning_workspace, "--meute", recording) as client:
+        refresh = _refresh_href(client.get("/").text, "planning")[1:]
+        _retitle(planning_workspace, "Updated despite known diagnostics")
+        updated = client.get(refresh)
+        assert "Snapshot updated" in updated.text
+        assert "Updated despite known diagnostics" in updated.text
+        payload = client.get("/project.json").json()
+        assert "_refresh_diagnostics" not in payload
+        assert any(source["status"] == "invalid" for source in payload["sources"])
+        assert any(issue["path"] == "decisions" for issue in payload["issues"])
+
+        shared.rename(shared.with_name("0100-other-private-decision.md"))
+        refused = client.get(refresh)
+        assert "Showing the previous snapshot. New record errors were found." in refused.text
+        assert "private-decision" not in refused.text
+        assert "private-decision" not in client.get("/project.json").text
+        assert client.get("/project.json").json() == payload
+
+        shared.with_name("0100-other-private-decision.md").unlink()
+        _snapshot(recording)
+        repaired = client.get(refresh)
+        assert "Snapshot updated" in repaired.text and LINKED in repaired.text
+        assert "private-decision" not in repaired.text
 
 
 def test_refresh_keeps_diagnostics_project_scoped(planning_workspace, client_for):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import asdict, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,7 +51,8 @@ def serve_parser(parser: ArgumentParser) -> None:
 def _json_snapshot(view: PlanningView) -> JSONResponse:
     from fastapi.responses import JSONResponse
 
-    payload = asdict(view)
+    payload = asdict(replace(view, _refresh_diagnostics=None))
+    payload.pop("_refresh_diagnostics")
     for field in ("meute", "manual_review", "execution_links"):
         if payload[field] is None:
             payload.pop(field)
@@ -76,6 +78,26 @@ def _render_snapshot(
         HTMLResponse(render_fleet(view, status=status), headers=headers),
         _json_snapshot(view),
     )
+
+
+def _refresh_failure(previous: PlanningView, candidate: PlanningView | None) -> str | None:
+    if candidate is None:
+        return "The configured project could not be loaded."
+    old_invalid = {source.label for source in previous.sources if source.status == "invalid"}
+    if any(
+        source.status == "invalid" and source.label not in old_invalid
+        for source in candidate.sources
+    ):
+        return "A configured source became invalid."
+    before, after = previous._refresh_diagnostics, candidate._refresh_diagnostics
+    if before is not None and after is not None:
+        has_errors = after.adds_errors(before)
+    else:
+        has_errors = bool(
+            Counter(issue for issue in candidate.issues if issue.severity == "error")
+            - Counter(issue for issue in previous.issues if issue.severity == "error")
+        )
+    return "New record errors were found." if has_errors else None
 
 
 def _now() -> str:
@@ -115,13 +137,11 @@ class _Snapshots:
                 candidate = reload()
             except TaskFileError:
                 candidate = None
-            if (
-                candidate is None
-                or any(issue.severity == "error" for issue in candidate.issues)
-                or any(source.status == "invalid" for source in candidate.sources)
-            ):
-                self.responses = self._render("Update unavailable. Showing the previous snapshot.")
-            else:
+            if (reason := _refresh_failure(self.view, candidate)) is not None:
+                self.responses = self._render(
+                    f"Update unavailable. Showing the previous snapshot. {reason}"
+                )
+            elif candidate is not None:
                 timestamp = _now()
                 responses = _render_snapshot(
                     candidate,

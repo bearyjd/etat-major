@@ -3,7 +3,7 @@
 import re
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, fields, replace
+from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
 from typing import Literal
@@ -30,6 +30,8 @@ from etat_major.localfiles import entry_mode, open_directory
 from etat_major.manual_review import MANUAL_REVIEW_LABEL, ManualReview, load_manual_review
 from etat_major.meute import MeuteEvidence, MeuteSnapshot, load_meute
 from etat_major.planning_issues import (
+    RefreshDiagnostics,
+    RefreshIssueLog,
     issue_summary,
     planning_path,
     planning_text,
@@ -123,6 +125,7 @@ class PlanningView:
     meute: MeuteEvidence | None = None
     manual_review: ManualReview | None = None
     execution_links: ExecutionLinks | None = None
+    _refresh_diagnostics: RefreshDiagnostics | None = field(default=None, repr=False, compare=False)
 
 
 def _architecture_ref(ref: Ref) -> str:
@@ -329,12 +332,12 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
     if len(project) > MAX_PROJECT_ID_LENGTH or not re.fullmatch(PROJECT_ID, project):
         raise TaskFileError(Path("serve"), "project", "expected a project identifier")
     shared: Counter[str] = Counter()
-    ws = _scoped_intent(
-        load_workspace(inputs.workspace, issue_filter=project_issue_filter(project, shared)),
-        project,
-    )
+    refresh = RefreshIssueLog()
+    issue_filter = project_issue_filter(project, shared, refresh)
+    ws = _scoped_intent(load_workspace(inputs.workspace, issue_filter=issue_filter), project)
     sources: list[SourceRow] = []
-    issues = [*ws.issues, *issue_summary(shared, ws.omitted_issues)]
+    workspace_issues = (*ws.issues, *issue_summary(shared, ws.omitted_issues))
+    issues: list[Issue] = []
     model = _load_component_model(inputs, sources, issues)
     titles = {
         f"{t.project}/{t.id}": planning_text(t.title) for t in ws.tasks if t.project == project
@@ -362,14 +365,17 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
         for feature, row in zip(ws.features, report.features, strict=True)
     )
     execution = _load_execution_links(inputs, task_keys, sources, issues)
+    for issue in issues:
+        refresh.record(issue)
     return PlanningView(
         project,
         features,
         _component_rows(model),
         _task_rows(report, titles),
         tuple(sources),
-        tuple(map(public_issue, issues)),
+        tuple(map(public_issue, (*workspace_issues, *issues))),
         meute=_public_meute(report.meute),
         manual_review=manual,
         execution_links=execution,
+        _refresh_diagnostics=refresh.snapshot(),
     )

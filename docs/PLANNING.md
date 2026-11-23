@@ -19,10 +19,13 @@ Open `http://127.0.0.1:8765/` on the machine running the service. Use
 `--port` to select another loopback port. The server snapshots the inputs at
 startup. After changing a record or replacing an artifact, select **Update Planning**
 or **Update Fleet** to reload the same configured local inputs. Both views
-share the new snapshot and show its load time. A failed update leaves the
-previous snapshot in place and displays a message. Restart the service to change
-its configured paths, project, or port. Open the page again if its Update link
-was loaded before a service restart.
+share the new snapshot and show its load time. Existing record errors and
+invalid sources can remain while other data updates. An update that cannot load
+the project, introduces a record error, or makes another source invalid keeps
+the previous snapshot and displays a brief reason. If there are over 512 record
+errors, a change to the excess diagnostics can also cause an update to be refused.
+Restart the service to change its configured paths, project, or port. Open the
+page again if its Update link was loaded before a service restart.
 
 | Option | Input |
 | --- | --- |
