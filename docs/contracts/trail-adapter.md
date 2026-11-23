@@ -60,3 +60,37 @@ for `modifies` or `uses`. Missing symbols are `gap` for `new` and `stale`
 for `modifies` or `uses`. These states describe the supplied snapshot.
 `--graph` can also be supplied to resolve Floorplan links. An invalid or
 unreadable Trail graph gives CLI exit code 2.
+
+## Building a fresh local graph
+
+The Python API wraps the pinned Trail 0.30.5 executable. Supply a separate
+disposable copy or Git worktree and keep it exclusively available to the runner
+until the call finishes. Pass the path of the original checkout as
+`source_root` and the absolute path of the trusted installed Trail executable as
+`executable`. If Node or Git is outside the system search path, pass the required
+trusted directories in `runtime_path`, separated by the platform's PATH
+separator.
+
+```python
+from pathlib import Path
+
+from etat_major.trail_runner import run_trail
+
+result = run_trail(
+    Path("/tmp/project-index-copy"),
+    source_root=Path("/work/project"),
+    executable=Path("/opt/trail/bin/trail"),
+)
+```
+
+The runner invokes `trail build` in structural mode, disables telemetry
+and ignore-file updates, and gives Trail an empty temporary home. It disables
+worktree cache seeding and traversal of submodules and nested repositories.
+It rejects workspace builds, symlinks and special files in the disposable tree.
+It caps build time at 120 seconds and combined subprocess output at 2 MiB.
+Build diagnostics contain the failure category and omit subprocess output.
+
+`result.artifact` is the checkout-relative path of the fresh artifact, either
+`graft/.graph/wiring.json` or `.trail/cache/.graph/wiring.json`. `result.index`
+contains the loaded, version-checked symbol index. A failed or missing build
+raises `TrailRunError`. Invalid graph data raises `TrailError`.
