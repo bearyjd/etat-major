@@ -17,7 +17,15 @@ etat-major serve --workspace workspace --project netlens
 
 Open `http://127.0.0.1:8765/` on the machine running the service. Use
 `--port` to select another loopback port. The server snapshots the inputs at
-startup. Restart it after changing a record or replacing an artifact.
+startup. After changing a record or replacing an artifact, select **Update Planning**
+or **Update Fleet** to reload the same configured local inputs. Both views
+share the new snapshot and show its load time. Existing record errors and
+invalid sources can remain while other data updates. An update that cannot load
+the project, introduces a record error, or makes another source invalid keeps
+the previous snapshot and displays a brief reason. If there are over 512 record
+errors, a change to the excess diagnostics can also cause an update to be refused.
+Restart the service to change its configured paths, project, or port. Open the
+page again if its Update link was loaded before a service restart.
 
 | Option | Input |
 | --- | --- |
@@ -27,6 +35,10 @@ startup. Restart it after changing a record or replacing an artifact.
 | `--prs` | Recorded pull-request JSON. |
 | `--releases` | Recorded release JSON. |
 | `--repo` | Local repository for read-only Git history and release containment. |
+| `--meute` | [Recorded Meute snapshot](contracts/meute-recording.md) for the configured project. |
+| `--manual-review` | [Manual Anthropic API review descriptor](contracts/manual-review.md) for an existing task. |
+| `--execution-links` | [Recorded execution links](contracts/execution-links.md) for matching tasks. |
+| `--codeman-origin` | Optional trusted HTTPS origin used to display Codeman session URLs. |
 
 Missing or invalid optional inputs are listed under Sources. Planning shows
 details for diagnostics attributed to the selected project and counts for
@@ -40,7 +52,29 @@ ownership coverage would not imply module-level precision.
 
 The same view is available as JSON at `/project.json`. Both routes use the
 startup configuration. The browser page includes its styles inline and uses
-fragment links for navigation.
+fragment links for task navigation.
+
+To include Meute evidence, start Planning with `--meute path/to/snapshot.yaml`.
+Sources shows the capture time. A report with an explicit key matching an
+existing task in the project appears under that task's Generated evidence
+with its reference, timestamp, and outcome. Reports without a matching task
+appear in Sources. A valid snapshot appears as `meute` in `/project.json`.
+In Planning, an unlinked report whose key belongs to another project appears
+without that key. Meute evidence fills only the Generated rung.
+
+With `--manual-review path/to/review.yaml`, that task's Generated evidence
+includes the labeled manual review alongside recorded Meute reports. A valid
+descriptor appears under `manual_review` in `/project.json`.
+
+Configured execution links appear under **Recorded handoff context** on the
+matching task and in `execution_links` in `/project.json`. Copy a session URL
+or job reference to use it outside the sandboxed tab. Each handoff also shows a
+copyable return URL such as `http://127.0.0.1:8765/planning#task-netlens-0042`.
+Use it from a Codeman terminal link to return to the task. Codeman preserves the
+path and fragment but matches saved tabs by protocol and loopback port. If
+Planning and Fleet share a port, the task can open in the saved Fleet tab. Give
+the views distinct service ports when preserving their separate tab identities
+matters.
 
 ## Add the tab
 
@@ -53,6 +87,16 @@ Use Codeman’s **Test** to check loopback reachability from its server. Open th
 saved tab to verify that the sandboxed browser can render the page and follow
 its task and component links.
 [Codeman Web Tabs documentation](https://github.com/Ark0N/Codeman/blob/master/docs/web-tabs.md)
+
+## Add the Fleet tab
+
+Add a second **Web / URL** dashboard named **Fleet** with
+`http://127.0.0.1:8765/fleet` or the configured port. Keep **Open sandboxed**
+enabled. Fleet reads the same optional `--meute` snapshot as Planning. It
+shows the capture time, recorded reports and outcomes, and links to matched
+Planning tasks inside the same tab. Those links use the `/planning` alias so
+they work when Codeman serves Fleet at the Web Tab root. Use **Update Fleet**
+after replacing the snapshot. Meute's native UI is where you operate jobs.
 
 ## Local verification
 

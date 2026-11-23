@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from html import escape
 from typing import TYPE_CHECKING
 
+from etat_major.manual_review import MANUAL_REVIEW_LABEL
+from etat_major.planning_view import MEUTE_SOURCE_LABEL
+
 if TYPE_CHECKING:
+    from etat_major.execution_links import ExecutionLink
+    from etat_major.manual_review import ManualReview
+    from etat_major.meute import MeuteEvidence, MeuteReportEvidence
     from etat_major.planning_view import ArchRow, ComponentRow, FeatureRow, PlanningView, TaskRow
 
 _STYLE = """
@@ -66,6 +72,35 @@ code { font-family: ui-monospace, monospace; font-size: .86em; }
     }
 }
 """
+
+
+_UPDATE_STYLE = """
+.snapshot-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; }
+.snapshot-controls .meta { margin: 0; }
+.update { display: inline-block; background: #135754; color: #fffdf8; border-radius: .25rem;
+    padding: .3rem .7rem; text-decoration: none; }
+.update:focus-visible { outline: 2px solid #135754; outline-offset: 2px; }
+"""
+
+
+@dataclass(frozen=True)
+class SnapshotStatus:
+    timestamp: str
+    message: str
+    token: str
+
+
+def _update_control(status: SnapshotStatus | None, href: str, label: str) -> str:
+    if status is None:
+        return ""
+    message = escape(status.message)
+    timestamp = escape(status.timestamp)
+    target = f"{href}?token={escape(status.token)}"
+    return (
+        '<div class="snapshot-controls">'
+        f'<a class="update" href="{target}">{label}</a>'
+        f'<p class="meta" role="status">{message} <time>{timestamp}</time></p></div>'
+    )
 
 
 def _code(value: str) -> str:
@@ -152,16 +187,55 @@ def _component(row: ComponentRow, labels: dict[str, str], features: list[Feature
     return "".join(entries) + "</article>"
 
 
-def _task(row: TaskRow) -> str:
+def _meute_report(report: MeuteReportEvidence) -> str:
+    return (
+        f"{_code(report.ref)} · <time>{escape(report.recorded_at)}</time> · "
+        f"{escape(report.outcome)}"
+    )
+
+
+def _execution_link(row: ExecutionLink) -> str:
+    label = "Codeman session" if row.kind == "codeman-session" else "Meute job"
+    return (
+        f"{label} · {_code(row.task)} · {_code(row.url or row.ref)} · "
+        f"Recorded <time>{escape(row.seen_at)}</time>"
+    )
+
+
+def _task(
+    row: TaskRow,
+    reports: list[MeuteReportEvidence],
+    manual: ManualReview | None,
+    execution_links: list[ExecutionLink],
+    planning_origin: str | None,
+) -> str:
+    generated = [_meute_report(report) for report in reports]
+    if manual is not None and manual.task == row.id:
+        generated.append(
+            f"{MANUAL_REVIEW_LABEL} · {_code(manual.ref)} · "
+            f"<time>{escape(manual.recorded_at)}</time> · {escape(manual.outcome)}"
+        )
     evidence = []
     for rung in fields(row.evidence):
         refs = getattr(row.evidence, rung.name)
-        value = _state(refs) if isinstance(refs, str) else ", ".join(map(_code, refs))
+        if rung.name == "generated" and generated:
+            value = _list(generated)
+        else:
+            value = _state(refs) if isinstance(refs, str) else ", ".join(map(_code, refs))
         evidence.append(f"<dt>{escape(rung.name.capitalize())}</dt><dd>{value}</dd>")
+    handoff = (
+        "<h4>Recorded handoff context</h4>"
+        + _list([_execution_link(link) for link in execution_links])
+        if execution_links
+        else ""
+    )
+    if execution_links and planning_origin is not None:
+        url = f"{planning_origin}/planning#{_anchor('task', row.id)}"
+        handoff += f"<p>Return to Planning {_code(url)}</p>"
     return (
         f'<article id="{_anchor("task", row.id)}" tabindex="-1">'
         f'<p class="meta">{_code(row.id)}</p><h3>{escape(row.title)}</h3>'
-        f"<p>{_state(row.state)}</p><dl>{''.join(evidence)}</dl></article>"
+        f"<p>{_state(row.state)}</p><dl>{''.join(evidence)}</dl>{handoff}</article>"
     )
 
 
@@ -172,7 +246,18 @@ def _sources(view: PlanningView) -> str:
         for issue in view.issues
     ]
     details = "<h3>Input issues</h3>" + _list(issues) if issues else ""
-    return f'<section id="sources"><h2>Sources</h2>{statuses}{details}</section>'
+    meute = _meute_summary(view.meute) if view.meute is not None else ""
+    return f'<section id="sources"><h2>Sources</h2>{statuses}{meute}{details}</section>'
+
+
+def _meute_summary(snapshot: MeuteEvidence) -> str:
+    capture = (
+        f'<p class="meta">Meute snapshot captured <time>{escape(snapshot.exported_at)}</time></p>'
+    )
+    unmatched = [_meute_report(report) for report in snapshot.reports if not report.linked]
+    if unmatched:
+        capture += "<h3>Meute reports without a matching task</h3>" + _list(unmatched)
+    return capture
 
 
 def _issue_field(field: str | None) -> str:
@@ -184,7 +269,32 @@ def _section(key: str, title: str, rows: list[str]) -> str:
     return f'<section class="panel" id="{key}"><h2>{title}</h2>{contents}</section>'
 
 
-def render(view: PlanningView) -> str:
+def _task_section(view: PlanningView, planning_origin: str | None) -> str:
+    reports: dict[str, list[MeuteReportEvidence]] = defaultdict(list)
+    if view.meute is not None:
+        for report in view.meute.reports:
+            if report.linked and report.task is not None:
+                reports[report.task].append(report)
+    execution: dict[str, list[ExecutionLink]] = defaultdict(list)
+    if view.execution_links is not None:
+        for link in view.execution_links.links:
+            execution[link.task].append(link)
+    return _section(
+        "tasks",
+        "Tasks",
+        [
+            _task(row, reports[row.id], view.manual_review, execution[row.id], planning_origin)
+            for row in view.tasks
+        ],
+    )
+
+
+def render(
+    view: PlanningView,
+    *,
+    status: SnapshotStatus | None = None,
+    planning_origin: str | None = None,
+) -> str:
     project = escape(view.project)
     labels = {row.id: row.label for row in view.components}
     tasks = {row.id for row in view.tasks}
@@ -201,14 +311,49 @@ def render(view: PlanningView) -> str:
         "Components",
         [_component(row, labels, linked[row.id]) for row in view.components],
     )
-    progress = _section("tasks", "Tasks", [_task(row) for row in view.tasks])
+    progress = _task_section(view, planning_origin)
+    style = _STYLE + _UPDATE_STYLE if status is not None else _STYLE
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{project} planning</title><style>{_STYLE}</style></head>"
+        f"<title>{project} planning</title><style>{style}</style></head>"
         f'<body><header><h1>{project} planning</h1><nav aria-label="Planning sections">'
         '<a href="#features">Features</a><a href="#components">Components</a>'
-        '<a href="#tasks">Tasks</a><a href="#sources">Sources</a></nav></header>'
+        '<a href="#tasks">Tasks</a><a href="#sources">Sources</a></nav>'
+        f"{_update_control(status, './refresh', 'Update Planning')}</header>"
         f'<main><div class="columns">{features}{components}{progress}</div>'
         f"{_sources(view)}</main></body></html>"
+    )
+
+
+def _fleet_report(report: MeuteReportEvidence) -> str:
+    task = "No matching task"
+    if report.linked and report.task is not None:
+        task = f'<a href="./planning#{_anchor("task", report.task)}">{_code(report.task)}</a>'
+    return f"{_meute_report(report)} · {task}"
+
+
+def _fleet_reports(view: PlanningView) -> str:
+    snapshot = view.meute
+    if snapshot is None:
+        if any(row.label == MEUTE_SOURCE_LABEL and row.status == "invalid" for row in view.sources):
+            return "<p>The configured Meute snapshot is invalid.</p>"
+        return "<p>No Meute snapshot configured.</p>"
+    captured = f"<p>Snapshot captured <time>{escape(snapshot.exported_at)}</time></p>"
+    reports = [_fleet_report(report) for report in snapshot.reports]
+    return captured + (_list(reports) if reports else "<p>No reports in this snapshot.</p>")
+
+
+def render_fleet(view: PlanningView, *, status: SnapshotStatus | None = None) -> str:
+    project = escape(view.project)
+    style = _STYLE + _UPDATE_STYLE if status is not None else _STYLE
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{project} Fleet</title><style>{style}</style></head>"
+        f"<body><header><h1>{project} Fleet</h1>"
+        f"{_update_control(status, './fleet-refresh', 'Update Fleet')}</header>"
+        '<main><section class="panel" aria-labelledby="recorded-reports">'
+        '<h2 id="recorded-reports">Recorded Meute reports</h2>'
+        f"{_fleet_reports(view)}</section></main></body></html>"
     )

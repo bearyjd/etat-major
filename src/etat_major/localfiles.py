@@ -22,10 +22,12 @@ def open_directory(path: Path, parent_fd: int | None = None) -> Iterator[int]:
     else:
         start, parts = ".", path.parts
     flags = os.O_RDONLY | os.O_DIRECTORY | NOFOLLOW
-    fd = os.open(start, flags, dir_fd=parent_fd)
+    search_flags = getattr(os, "O_PATH", os.O_RDONLY) | os.O_DIRECTORY | NOFOLLOW
+    fd = os.open(start, search_flags if parts else flags, dir_fd=parent_fd)
     try:
-        for part in parts:
-            child_fd = os.open(part, flags, dir_fd=fd)
+        for index, part in enumerate(parts):
+            child_flags = flags if index == len(parts) - 1 else search_flags
+            child_fd = os.open(part, child_flags, dir_fd=fd)
             os.close(fd)
             fd = child_fd
         yield fd

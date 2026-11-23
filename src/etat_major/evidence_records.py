@@ -60,8 +60,26 @@ def _timestamp(value: object) -> object:
 
 
 Timestamp = Annotated[AwareDatetime, BeforeValidator(_timestamp)]
+_RFC3339 = (
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+)
+_TIMESTAMP_ADAPTER = TypeAdapter(Timestamp)
+
+
+def _rfc3339(value: str) -> str:
+    _TIMESTAMP_ADAPTER.validate_python(value)
+    return value
+
+
+RecordedTimestamp = Annotated[
+    StrictStr, Field(pattern=_RFC3339, max_length=64), AfterValidator(_rfc3339)
+]
 TagName = Annotated[StrictStr, Field(max_length=255), AfterValidator(_tag)]
 ArtifactRef = Annotated[StrictStr, Field(max_length=512), AfterValidator(_relative_identifier)]
+
+_REF_SEGMENT = r"[A-Za-z0-9][A-Za-z0-9_.-]*"
+RecordedRef = Annotated[ArtifactRef, Field(pattern=rf"^{_REF_SEGMENT}(?:/{_REF_SEGMENT})*$")]
 
 
 class _Recorded(BaseModel):
@@ -69,7 +87,7 @@ class _Recorded(BaseModel):
 
 
 class GeneratedArtifact(BaseModel):
-    """A caller-supplied Meute artifact descriptor, with a task key and relative reference."""
+    """A caller-supplied artifact descriptor with a task key and relative reference."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     task: TaskKey

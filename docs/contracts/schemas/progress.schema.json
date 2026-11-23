@@ -85,7 +85,43 @@
             "maxItems": 2
           }
         },
-        "omitted_issues": {"type": "integer", "minimum": 0}
+        "omitted_issues": {"type": "integer", "minimum": 0},
+        "meute": {"$ref": "#/$defs/meute"}
+      }
+    },
+    "meute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "project", "exported_at", "reports"],
+      "properties": {
+        "version": {"const": 1},
+        "project": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$", "maxLength": 128},
+        "exported_at": {"type": "string", "format": "date-time"},
+        "reports": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref", "recorded_at", "outcome", "task", "linked"],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(/[A-Za-z0-9][A-Za-z0-9_.-]*)*$",
+                "maxLength": 512
+              },
+              "recorded_at": {"type": "string", "format": "date-time"},
+              "outcome": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"},
+              "task": {
+                "anyOf": [
+                  {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*/[0-9]+$", "maxLength": 160},
+                  {"type": "null"}
+                ]
+              },
+              "linked": {"type": "boolean"}
+            }
+          }
+        }
       }
     },
     "rung": {
