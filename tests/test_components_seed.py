@@ -89,6 +89,24 @@ def test_seed_prefers_gradle_remap_and_keeps_a_scope_conflict_diagnostic(gradle_
     )
 
 
+def test_seed_assigns_one_owner_for_modules_with_a_shared_directory(gradle_root, tmp_path):
+    settings = gradle_root / "settings.gradle.kts"
+    with settings.open("a", encoding="utf-8") as stream:
+        stream.write(
+            '\nproject(":feature:lanscan").projectDir = file("modules/shared")\n'
+            'project(":feature:portscan").projectDir = file("modules/shared")\n'
+        )
+    (gradle_root / "modules/shared").mkdir(parents=True)
+    out = tmp_path / "netlens.yaml"
+    seed(gradle_root, "netlens", out=out)
+
+    owners = [row["id"] for row in rows(out).values() if row["paths"] == ["modules/shared"]]
+    assert owners == ["modules.shared"]
+    model, issues = load_components(out)
+    assert model is not None and not any(issue.blocking for issue in issues)
+    assert model.owner_of("modules/shared/src/main/Shared.kt").component.id == "modules.shared"
+
+
 @pytest.mark.parametrize("dependency", ["modulePath", '":missing"'])
 def test_seed_keeps_modules_when_dependency_expressions_are_unresolved(
     gradle_root, tmp_path, dependency

@@ -145,15 +145,15 @@ def _propose(
     prior = existing.components if existing else ()
     prior_by_id = {component.id: component for component in prior}
     occupied = set(prior_by_id)
-    previous_paths = {
+    path_owners = {
         path.removesuffix("/**"): component.id for component in prior for path in component.paths
     }
     parents = {component.id: component.id for component in prior if not component.paths}
-    parents.update(previous_paths)
+    parents.update(path_owners)
     proposals: list[_Proposal] = []
     for module in sorted(modules, key=lambda item: (item.directory, item.id)):
         path = module.directory or _ROOT_GLOB
-        if path in previous_paths:
+        if path in path_owners:
             continue
         if len(path) > MAX_COMPONENT_PATH_LENGTH:
             raise TaskFileError(
@@ -176,6 +176,7 @@ def _propose(
             parent = parents[head]
         component_id = _allocate(base, occupied)
         proposals.append(_Proposal(component_id, "Root" if is_root else path, (path,), parent))
+        path_owners[path] = component_id
         parents.setdefault(path, component_id)
         if len(occupied) > MAX_COMPONENTS:
             raise TaskFileError(destination, "components", f"limit is {MAX_COMPONENTS} components")
