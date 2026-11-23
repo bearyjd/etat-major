@@ -9,7 +9,13 @@ from pathlib import Path
 
 import yaml
 
-from etat_major.component_paths import component_path, literal_prefix, matches
+from etat_major.component_paths import (
+    OverlapLimit,
+    component_path,
+    literal_prefix,
+    matches,
+    overlap_checker,
+)
 from etat_major.components import (
     MAX_COMPONENT_ID_LENGTH,
     MAX_COMPONENT_PATH_LENGTH,
@@ -58,20 +64,27 @@ class _Proposal:
         return _COMMENT + yaml.safe_dump([self.record()], sort_keys=False)
 
 
-def _trail_scope(supplied: str, trail: Path, index: int) -> None:
+def _trail_scope_issue(supplied: str, trail: Path, index: int) -> Issue | None:
     if not supplied:
-        return
+        return None
     field = f"meta.scopes[{index}].prefix"
-    try:
-        component_path(supplied)
-    except ValueError:
-        raise TaskFileError(trail, field, "expected a safe repository-relative path") from None
     if len(supplied) > MAX_COMPONENT_PATH_LENGTH or any(char in supplied for char in "*?["):
         raise TaskFileError(
             trail,
             field,
             f"expected a literal module directory up to {MAX_COMPONENT_PATH_LENGTH} characters",
         )
+    try:
+        component_path(supplied)
+    except ValueError:
+        return Issue(
+            trail.name,
+            field,
+            "skipped Trail scope outside the component path grammar",
+            severity="warning",
+            blocking=False,
+        )
+    return None
 
 
 def _module_evidence(root: Path, trail: Path | None) -> tuple[list[Module], list[Issue]]:
@@ -90,7 +103,9 @@ def _module_evidence(root: Path, trail: Path | None) -> tuple[list[Module], list
     directories = {module.directory for module in modules}
     by_id = {module.id: module.directory for module in modules}
     for index, scope in enumerate(load_wiring(trail).module_scopes):
-        _trail_scope(scope, trail, index)
+        if (issue := _trail_scope_issue(scope, trail, index)) is not None:
+            issues.append(issue)
+            continue
         if scope in directories:
             continue
         module_id = ":" + scope.replace("/", ":")
@@ -183,8 +198,9 @@ def _missing_paths(modules: list[Module], authored_paths: tuple[str, ...], path:
         if any(char in module.directory for char in "*?["):
             raise TaskFileError(path, "paths", "expected a literal module directory")
         directories.add(module.directory or _ROOT_GLOB)
-    scoped = {pattern for pattern in authored_paths if literal_prefix(pattern)}
+    scoped = sorted({pattern for pattern in authored_paths if literal_prefix(pattern)})
     claimed = {_module_scope(pattern, directories) for pattern in scoped}
+    overlaps = overlap_checker()
     missing = []
     for directory in sorted(directories):
         try:
@@ -198,7 +214,15 @@ def _missing_paths(modules: list[Module], authored_paths: tuple[str, ...], path:
         if directory == _ROOT_GLOB:
             owned = directory in authored_paths
         else:
-            owned = directory in claimed or any(matches(pattern, directory) for pattern in scoped)
+            descendant = f"{directory}/**/*"
+            try:
+                owned = directory in claimed or any(
+                    matches(pattern, directory)
+                    and (literal_prefix(pattern) == pattern or overlaps(pattern, descendant))
+                    for pattern in scoped
+                )
+            except OverlapLimit as exc:
+                raise TaskFileError(path, "components", str(exc)) from None
         if not owned:
             missing.append(directory)
     return missing

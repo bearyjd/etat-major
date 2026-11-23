@@ -417,3 +417,41 @@ def test_seed_preserves_blocking_module_discovery_diagnostics(gradle_root, tmp_p
     with pytest.raises(TaskFileError, match=r"settings.gradle.kts.*projectDir"):
         seed(gradle_root, "netlens", out=out)
     assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    ("pattern", "proposed"),
+    [("feature/*", True), ("feature/p?ng", True), ("feature/*/**", False)],
+)
+def test_delta_distinguishes_directory_only_globs_from_descendant_ownership(
+    tmp_path, pattern, proposed
+):
+    (tmp_path / "settings.gradle.kts").write_text('include(":feature:ping")')
+    original = tmp_path / "netlens.yaml"
+    original.write_text(
+        "version: 1\nproject: netlens\ncomponents:\n"
+        f"- {{id: reviewed, label: Reviewed, kind: screen, paths: ['{pattern}']}}\n"
+    )
+    seed(tmp_path, "netlens", proposal_for=original)
+    delta = rows(original.with_suffix(".yaml.proposed"))
+    assert ("feature.ping" in delta) == proposed
+
+
+def test_seed_skips_trail_scope_with_spaces_and_preserves_gradle_proposals(gradle_root, tmp_path):
+    trail = tmp_path / "wiring.json"
+    data = json.loads((FIXTURES / "trail/wiring-kotlin.json").read_text(encoding="utf-8"))
+    data["meta"]["scopes"][0]["prefix"] = "feature/spaced scope"
+    trail.write_text(json.dumps(data), encoding="utf-8")
+    out = tmp_path / "netlens.yaml"
+    result = seed(gradle_root, "netlens", trail=trail, out=out)
+    proposed = rows(out)
+    assert "feature.ping" in proposed
+    assert not any("feature/spaced scope" in row["paths"] for row in proposed.values())
+    assert any(
+        issue.path == "wiring.json"
+        and issue.field == "meta.scopes[0].prefix"
+        and issue.severity == "warning"
+        and not issue.blocking
+        and "spaced scope" not in issue.message
+        for issue in result.issues
+    )

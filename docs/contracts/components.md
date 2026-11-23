@@ -85,7 +85,9 @@ etat-major components seed --root repo-dir --project example --proposal-for work
 ```
 
 Seed reads Gradle settings and build scripts as text and optionally uses
-recorded Trail `module_scopes`. Diagnostics that block Gradle module discovery
+recorded Trail `module_scopes`. A literal Trail scope with spaces is skipped
+with a warning because component paths have a narrower grammar. Diagnostics
+that block Gradle module discovery
 also block seed. Build-script and plugin diagnostics appear as warnings when
 the settings still establish the module directories. Nested modules use the
 nearest existing or proposed directory owner as their parent, with a first-directory grouping as
@@ -95,7 +97,8 @@ written directly to a `components/` directory uses `PROJECT.yaml`.
 Standalone drafts can use an arbitrary filename. The
 `--proposal-for` option writes `EXISTING_FILE.proposed` with only missing
 components, for manual review and merge. A reviewed directory declaration or
-a path scoped to a module suppresses that module's proposal. A generic root
+a path scoped to a module suppresses that module's proposal. A glob that
+matches only the directory name leaves its proposal eligible. A generic root
 fallback or a declaration scoped to a deeper module still allows parent
 module proposals. A delta can reference an existing parent, including a
 pathless group with children that establish the directory scope. Before
