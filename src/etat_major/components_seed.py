@@ -33,7 +33,7 @@ from etat_major.taskfile import TaskFileError
 from etat_major.trail import load_wiring
 from etat_major.workspace import Issue
 
-_KIND = "inferred_from_gradle"
+PROPOSAL_KIND = "inferred_from_gradle"
 _ROOT_GLOB = "**"
 _COMMENT = "# Proposal for human review.\n"
 _ID_SEPARATOR = re.compile(r"[^a-z0-9_-]+")
@@ -55,7 +55,12 @@ class _Proposal:
     parent: str | None
 
     def record(self) -> dict:
-        data = {"id": self.id, "label": self.label, "kind": _KIND, "paths": list(self.paths)}
+        data = {
+            "id": self.id,
+            "label": self.label,
+            "kind": PROPOSAL_KIND,
+            "paths": list(self.paths),
+        }
         if self.parent is not None:
             data["parent"] = self.parent
         return data

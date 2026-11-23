@@ -33,6 +33,10 @@ class GitEvidence:
     releases: Mapping[str, tuple[str, ...]]
 
 
+_EMPTY_MAP = MappingProxyType({})
+EMPTY_GIT_EVIDENCE = GitEvidence(_EMPTY_MAP, _EMPTY_MAP, _EMPTY_MAP, frozenset(), None, _EMPTY_MAP)
+
+
 def _read(
     fd: int, args: tuple[str, ...], *, limit: int = _OUTPUT_LIMIT, missing_ok: bool = False
 ) -> str:

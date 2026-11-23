@@ -104,3 +104,11 @@ def test_cli_decision_question_escapes_osc_and_bidi(capsys, workspace_dir):
     assert r"Question\u001b]0;title\u0007\u202e" in out
     assert all(char not in out for char in "\x1b\x07\u202e")
     assert err == ""
+
+
+def test_public_text_preserves_long_plain_text_and_relative_endpoints():
+    from etat_major.text_safety import public_text
+
+    plain = "x" * 100_000
+    assert public_text(plain) == plain
+    assert public_text("f:src/App.kt:gen") == "f:src/App.kt:gen"

@@ -3,7 +3,12 @@
 Updated 2026-11-22. Keep this file under 60 lines; replace it, do not append. Rules are in `AGENTS.md` and `CLAUDE.md`.
 
 ## State
-`main` has the design docs and a CLI over local and recorded data: trace, index (Floorplan architecture layer plus Trail symbol layer, joined by path), decisions, research brief/import (manual ChatGPT handoff), progress evidence from Git and recorded PR JSON, workspace validation, JSON output with schemas, and `gradle deps|drift`. No web UI, no live GitHub, Floorplan or Trail execution, no Codeman or Meute links. CI is green; the suite has about 800 tests at about 95% coverage.
+État-major has a CLI over local and recorded inputs for trace, index, decisions,
+research, progress, workspace validation, and Gradle analysis. The reviewed
+component model provides validation, mapping, coverage, seed proposals, and
+trace links. The optional [Planning pilot](PLANNING.md) shows a read-only
+project snapshot in a local browser or sandboxed Codeman Web Tab. It uses
+recorded data and local Git evidence.
 
 ## What the real-data proof-out established (details in `docs/FLOORPLAN-PROOF.md`)
 - Floorplan's deterministic import links are useful; its model-written layer failed its accuracy target and blueprints are greenfield only. Use it as an optional provider of file-level import links, not as the source of truth for components.
@@ -16,7 +21,7 @@ Updated 2026-11-22. Keep this file under 60 lines; replace it, do not append. Ru
 
 2. **Trail runner wrapper.** Build Trail on a copy or worktree (telemetry off, never `trail init`), locate the output wherever it landed, check `meta.version`. Done when it works on a repo whose graph lands in `.trail/cache/` and on one that uses `graft/`.
 3. **Floorplan runner wrapper.** Run only `scan`, `build` and `refresh` on a copy, pinned commit, no model steps, no viewer. Done when a refresh after a rename keeps component ids and reports the rename mapping.
-4. **First read-only web screen** for the Understand view (needs a web dependency the maintainer must approve and install). Do not start before 1 to 3 are merged.
+4. **Understand view.** Use the reviewed component declarations and recorded index for repository navigation. Begin after the component model and both runner wrappers are merged.
 5. Real-data smoke script that runs every command on a real repository and compares counts with recorded expectations.
 
 ## Open questions

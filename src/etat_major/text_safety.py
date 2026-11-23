@@ -51,15 +51,28 @@ def bounded_repr(value: object) -> str:
 # own contracts and bypass this filter.
 _PRIVATE_LOCATION = re.compile(
     r"""(?ix)
-    (?:[a-z][a-z0-9+.-]*://|[\w.+-]+@[\w.-]+:)
+    (?<![\w.+-])(?:[a-z][a-z0-9+.-]*://|[\w.+-]+@[\w.-]+:)
     [^\s"'<>]+
     | (?<![\w/])(?:[a-z]:[\\/]|\\\\|~?/)[^\s"'<>]+
     """
 )
 
 
-def public_text(value: str) -> str:
-    return _PRIVATE_LOCATION.sub("[redacted location]", value)
+_SCP_REMOTE = re.compile(
+    r"""(?ix)
+    (?<![\w./+-])(?:[\w.+-]+@)?
+    (?:
+        (?:[\w-]+\.)+[\w-]+: | \[[0-9a-f:.]+\]:
+        | [\w-]+:(?=[^\s"'<>:]*/|[^\s"'<>:]*\.git(?:$|[\s"'<>),.;]))
+    )
+    [^\s"'<>:]+
+    """
+)
+
+
+def public_text(value: str, *, scp_remotes: bool = False) -> str:
+    value = _PRIVATE_LOCATION.sub("[redacted location]", value)
+    return _SCP_REMOTE.sub("[redacted location]", value) if scp_remotes else value
 
 
 def public_source_url(value: str | None) -> str | None:
