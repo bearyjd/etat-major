@@ -5,6 +5,7 @@ import re
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
 from types import MappingProxyType
 from typing import Literal
@@ -228,13 +229,13 @@ def _reject_constant(_: str) -> None:
     raise ValueError("non-JSON numeric constant")
 
 
-def _read_wiring(path: Path, *, limit_kib: int | None) -> _Wiring:
+def _read_wiring(path: Path, *, limit_kib: int | None) -> tuple[_Wiring, str]:
     try:
         with open_directory(path.parent) as fd:
             text = (
-                read_text(path, _LIMIT_MIB, dir_fd=fd)
+                read_text(path, _LIMIT_MIB, dir_fd=fd, normalize_newlines=False)
                 if limit_kib is None
-                else read_text_kib(path, limit_kib, dir_fd=fd)
+                else read_text_kib(path, limit_kib, dir_fd=fd, normalize_newlines=False)
             )
     except (OSError, UnicodeError):
         raise TrailError(path, "JSON", "cannot read file as UTF-8") from None
@@ -255,7 +256,7 @@ def _read_wiring(path: Path, *, limit_kib: int | None) -> _Wiring:
     check_recorded_array(path, "meta.languages", meta.get("languages"), error=TrailError)
     check_recorded_array(path, "meta.scopes", meta.get("scopes"), error=TrailError)
     try:
-        return _Wiring.model_validate(data)
+        return _Wiring.model_validate(data), sha256(text.encode()).hexdigest()
     except ValidationError as exc:
         error = first_error(path, exc)
         raise TrailError(path, error.field, error.message) from None
@@ -268,6 +269,12 @@ def load_wiring(
     limit_kib: int | None = None,
 ) -> SymbolIndex:
     """Read a bounded wiring.json graph. Revision is supplied by the caller."""
-    wiring = _read_wiring(path, limit_kib=limit_kib)
+    return load_wiring_recording(path, indexed_revision=indexed_revision, limit_kib=limit_kib)[0]
+
+
+def load_wiring_recording(
+    path: Path, *, indexed_revision: str | None = None, limit_kib: int | None = None
+) -> tuple[SymbolIndex, str]:
+    wiring, digest = _read_wiring(path, limit_kib=limit_kib)
     symbols = tuple(Symbol(node.id, node.kind, node.path, *node.span) for node in wiring.nodes)
-    return SymbolIndex(symbols, wiring.edges, _coverage(wiring), indexed_revision)
+    return SymbolIndex(symbols, wiring.edges, _coverage(wiring), indexed_revision), digest

@@ -114,6 +114,7 @@ class _Snapshots:
     def __init__(
         self, view: PlanningView, reload: Callable[[], PlanningView] | None, origin: str | None
     ) -> None:
+        self.startup_artifacts = view._understand.artifacts if view._understand else ()
         self.view = view
         self.origin = origin
         self.lock = Lock()
@@ -137,6 +138,7 @@ class _Snapshots:
         self, reload: Callable[[], PlanningView]
     ) -> tuple[HTMLResponse, HTMLResponse, JSONResponse]:
         from etat_major.taskfile import TaskFileError
+        from etat_major.understand import bind_startup_revisions
 
         with self.lock:
             try:
@@ -148,6 +150,7 @@ class _Snapshots:
                     f"Update unavailable. Showing the previous snapshot. {reason}"
                 )
             elif candidate is not None:
+                candidate = bind_startup_revisions(candidate, self.startup_artifacts)
                 timestamp = _now()
                 responses = _render_snapshot(
                     candidate,

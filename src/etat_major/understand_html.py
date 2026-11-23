@@ -264,5 +264,9 @@ def register(app, current, headers):
         try:
             nav = _selection(view, request.query_params)
         except ValueError:
-            return HTMLResponse("Invalid Understand selection.", status_code=400, headers=headers)
+            return HTMLResponse(
+                'Invalid Understand selection. <a href="./understand">Return to Understand</a>',
+                status_code=400,
+                headers=headers,
+            )
         return HTMLResponse(render(nav), headers=headers)

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Annotated, Any, Literal, overload
 
@@ -132,12 +133,18 @@ def load_graph(path: Path, *, architecture: bool = False) -> FloorplanIndex | Ar
     """Read a recorded graph, with structured nodes and links when requested."""
     if architecture:
         return load_architecture(path)
-    data = _graph_document(path)
-    return FloorplanIndex(_collect(path, data, "nodes", "id"), _collect(path, data, "files", "p"))
+    return load_graph_recording(path)[0]
 
 
-def _graph_document(path: Path, *, limit_kib: int | None = None) -> dict[str, Any]:
-    data = _read_json(path, limit_kib=limit_kib)
+def load_graph_recording(path: Path) -> tuple[FloorplanIndex, str]:
+    data, digest = _graph_document(path)
+    return FloorplanIndex(
+        _collect(path, data, "nodes", "id"), _collect(path, data, "files", "p")
+    ), digest
+
+
+def _graph_document(path: Path, *, limit_kib: int | None = None) -> tuple[dict[str, Any], str]:
+    data, digest = _read_json(path, limit_kib=limit_kib)
     if "schema" not in data:
         raise FloorplanError(
             path, "schema", f"missing schema; only {SUPPORTED_SCHEMA!r} is supported"
@@ -150,22 +157,22 @@ def _graph_document(path: Path, *, limit_kib: int | None = None) -> dict[str, An
         raise FloorplanError(
             path, "schema", f"unsupported schema{detail}; only {SUPPORTED_SCHEMA!r} is supported"
         )
-    for field in ("nodes", "files", "routes", "links"):
-        check_recorded_array(path, field, data.get(field), error=FloorplanError)
-    return data
+    for key in ("nodes", "files", "routes", "links"):
+        check_recorded_array(path, key, data.get(key), error=FloorplanError)
+    return data, digest
 
 
 def _reject_json_constant(_: str) -> None:
     raise ValueError("non-JSON numeric constant")
 
 
-def _read_json(path: Path, *, limit_kib: int | None = None) -> dict[str, Any]:
+def _read_json(path: Path, *, limit_kib: int | None = None) -> tuple[dict[str, Any], str]:
     try:
         with open_directory(path.parent) as fd:
             text = (
-                read_text(path, _LIMIT_MIB, dir_fd=fd)
+                read_text(path, _LIMIT_MIB, dir_fd=fd, normalize_newlines=False)
                 if limit_kib is None
-                else read_text_kib(path, limit_kib, dir_fd=fd)
+                else read_text_kib(path, limit_kib, dir_fd=fd, normalize_newlines=False)
             )
     except (OSError, UnicodeError):
         raise FloorplanError(path, "JSON", "cannot read file as UTF-8") from None
@@ -177,17 +184,17 @@ def _read_json(path: Path, *, limit_kib: int | None = None) -> dict[str, Any]:
         raise FloorplanError(path, "JSON", "invalid JSON") from None
     if not isinstance(data, dict):
         raise FloorplanError(path, "JSON", "expected an object")
-    return data
+    return data, sha256(text.encode()).hexdigest()
 
 
 def load_plan(path: Path) -> FloorplanPlan:
     """Validate a Floorplan blueprint and keep only its planned file paths."""
-    data = _read_json(path)
+    data, _ = _read_json(path)
     for key in ("$schema", "schema"):
         if key in data and data[key] != PLAN_SCHEMA:
             raise FloorplanError(path, key, f"expected {PLAN_SCHEMA}")
-    for field in ("files", "stack", "assumptions", "questions", "endpoints"):
-        check_recorded_array(path, field, data.get(field), error=FloorplanError)
+    for key in ("files", "stack", "assumptions", "questions", "endpoints"):
+        check_recorded_array(path, key, data.get(key), error=FloorplanError)
     try:
         plan = _PlanDocument.model_validate(data)
     except ValidationError as exc:
@@ -308,7 +315,7 @@ def _external_location(link: object) -> bool:
 
 def load_architecture(path: Path, *, limit_kib: int | None = None) -> ArchitectureDocument:
     """Read the structured fields used by RepoIndex from a bounded graph."""
-    data = _graph_document(path, limit_kib=limit_kib)
+    data, _ = _graph_document(path, limit_kib=limit_kib)
     # Older exports can point external links directly at remote URLs.
     links = data.get("links")
     if isinstance(links, list):

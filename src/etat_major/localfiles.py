@@ -80,8 +80,10 @@ def read_text(
     return _read_text(path, limit_mib * 1024 * 1024, f"{limit_mib} MiB", dir_fd, normalize_newlines)
 
 
-def read_text_kib(path: Path, limit_kib: int, *, dir_fd: int | None = None) -> str:
-    return _read_text(path, limit_kib * 1024, f"{limit_kib} KiB", dir_fd)
+def read_text_kib(
+    path: Path, limit_kib: int, *, dir_fd: int | None = None, normalize_newlines: bool = True
+) -> str:
+    return _read_text(path, limit_kib * 1024, f"{limit_kib} KiB", dir_fd, normalize_newlines)
 
 
 def _read_text(

@@ -273,3 +273,71 @@ def test_snapshot_compiles_component_patterns_once(planning_workspace, monkeypat
     monkeypatch.setattr(components, "_patterns", counted)
     view = load_planning_view(PlanningInputs(planning_workspace, "netlens", trail=TRAIL))
     assert len(view._understand.owner) > 25 and len(calls) == 1
+
+
+def test_refresh_binds_revisions_to_startup_recordings(client_for, planning_workspace, tmp_path):
+    import json
+
+    from etat_major.understand import token
+    from test_planning_refresh import _refresh_href
+    from test_planning_web import GRAPH
+
+    graph, trail = tmp_path / "graph", tmp_path / "trail"
+    graph.write_bytes(GRAPH.read_bytes())
+    trail.write_bytes(TRAIL.read_bytes())
+    rev = "a" * 40
+    client = client_for(
+        planning_workspace,
+        "--trail",
+        trail,
+        "--graph",
+        graph,
+        "--trail-revision",
+        rev,
+        "--floorplan-revision",
+        rev,
+        "--source-revision",
+        rev,
+        "--immutable-source",
+        tmp_path,
+    )
+    href = _refresh_href(client.get("/planning").text, "planning")
+    assert "Snapshot updated" in client.get(href).text
+    assert client.get("/understand").text.count("present · fresh") == 2
+    wiring = json.loads(trail.read_text())
+    wiring["nodes"][0]["span"] = "L1-L2"
+    trail.write_text(json.dumps(wiring))
+    client.get(href)
+    updated = client.get("/understand").text
+    assert "Trail: present · unknown · snapshot unknown" in updated
+    assert "Floorplan: present · fresh" in updated
+    node = wiring["nodes"][0]
+    selection = dict(
+        component=token("component", "root"),
+        file=token("file", node["path"]),
+        symbol=token("symbol", node["id"]),
+    )
+    assert "source.revision" in client.get("/understand", params=selection).text
+    graph.write_text(graph.read_text() + " ")
+    client.get(href)
+    assert client.get("/understand").text.count("present · unknown · snapshot unknown") == 2
+
+
+def test_missing_invalid_with_revisions_are_unknown(client_for, planning_workspace, tmp_path):
+    rev = "b" * 40
+    broken = tmp_path / "trail"
+    broken.write_text("{}")
+    client = client_for(
+        planning_workspace,
+        "--trail",
+        broken,
+        "--trail-revision",
+        rev,
+        "--floorplan-revision",
+        rev,
+        "--source-revision",
+        rev,
+    )
+    html = client.get("/understand").text
+    assert "Floorplan: missing · unknown" in html and "Trail: invalid · unknown" in html
+    assert "./understand" in Page(client.get("/understand?component=gone").text).hrefs

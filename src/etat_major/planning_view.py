@@ -25,7 +25,7 @@ from etat_major.execution_links import (
     codeman_origin,
     load_execution_links,
 )
-from etat_major.floorplan import load_graph
+from etat_major.floorplan import load_graph_recording
 from etat_major.localfiles import entry_mode, open_directory
 from etat_major.manual_review import MANUAL_REVIEW_LABEL, ManualReview, load_manual_review
 from etat_major.meute import MeuteEvidence, MeuteSnapshot, load_meute
@@ -43,7 +43,7 @@ from etat_major.refs import PROJECT_ID, Ref
 from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import safe
 from etat_major.trace import trace_feature
-from etat_major.trail import load_wiring
+from etat_major.trail import load_wiring_recording
 from etat_major.understand import Understand, build
 from etat_major.workspace import Issue, Workspace, feature_ref, load_workspace
 
@@ -320,12 +320,13 @@ def _load_execution_links(
 
 def _load_indexes(
     inputs: PlanningInputs, sources: list[SourceRow], issues: list[Issue]
-) -> ArchitectureIndexes:
-    read = partial(_recorded, sources=sources, issues=issues, fallback=None, report_missing=True)
-    return ArchitectureIndexes(
-        read("Floorplan graph", inputs.graph, load_graph),
-        read("Trail wiring", inputs.trail, load_wiring),
+) -> tuple[ArchitectureIndexes, tuple[str | None, str | None]]:
+    read = partial(
+        _recorded, sources=sources, issues=issues, fallback=(None, None), report_missing=True
     )
+    graph, graph_digest = read("Floorplan graph", inputs.graph, load_graph_recording)
+    trail, trail_digest = read("Trail wiring", inputs.trail, load_wiring_recording)
+    return ArchitectureIndexes(graph, trail), (graph_digest, trail_digest)
 
 
 def _task_rows(report: ProgressReport, titles: dict[str, str]) -> tuple[TaskRow, ...]:
@@ -353,7 +354,7 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
     }
     if not (model or ws.features or titles or any(p == project for p, _ in ws.milestones)):
         raise TaskFileError(Path("serve"), "project", "no records for the configured project")
-    indexes = _load_indexes(inputs, sources, issues)
+    indexes, digests = _load_indexes(inputs, sources, issues)
     prs = _recorded("Pull requests", inputs.prs, load_prs, sources, issues, fallback=())
     releases = _recorded("Releases", inputs.releases, load_releases, sources, issues, fallback=())
     known = frozenset(f"{t.project}/{t.id}" for t in ws.tasks)
@@ -383,7 +384,7 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
         _task_rows(report, titles),
         tuple(sources),
         tuple(map(public_issue, (*workspace_issues, *issues))),
-        _understand=build(inputs, model, indexes, sources),
+        _understand=build(inputs, model, indexes, sources, digests),
         meute=_public_meute(report.meute),
         manual_review=manual,
         execution_links=execution,

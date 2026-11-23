@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -35,6 +35,7 @@ class Artifact:
     status: str
     freshness: str
     revision: str | None
+    digest: str | None
 
 
 @dataclass(frozen=True)
@@ -54,11 +55,34 @@ class Understand:
     unmatchable: int
 
 
-def _artifact(label, status, revision, source):
+def _artifact(label, status, revision, source, digest):
+    if digest is None:
+        return Artifact(label, status, "unknown", None, None)
     freshness = "unknown"
     if revision and source:
         freshness = "fresh" if revision == source else "stale"
-    return Artifact(label, "present" if status == "recorded" else status, freshness, revision)
+    return Artifact(
+        label,
+        "present" if status == "recorded" else status,
+        freshness,
+        revision,
+        digest,
+    )
+
+
+def bind_startup_revisions(view, startup: tuple[Artifact, ...]):
+    """Only startup recording bytes carry the operator's configured revisions."""
+    inspect = view._understand
+    if inspect is None:
+        return view
+    trusted = {(a.label, a.digest, a.revision) for a in startup if a.digest}
+    artifacts = tuple(
+        a
+        if (a.label, a.digest, a.revision) in trusted
+        else replace(a, revision=None, freshness="unknown")
+        for a in inspect.artifacts
+    )
+    return replace(view, _understand=replace(inspect, artifacts=artifacts))
 
 
 def _groups(model, paths):
@@ -109,6 +133,7 @@ def build(
     model: ComponentModel | None,
     indexes: ArchitectureIndexes,
     sources: list[SourceRow],
+    digests: tuple[str | None, str | None],
 ) -> Understand:
     for name in ("source_revision", "trail_revision", "floorplan_revision"):
         rev = getattr(inputs, name)
@@ -137,8 +162,14 @@ def build(
         _lookup(groups, owners, symbols),
         indexes.trail,
         (
-            _artifact("Floorplan", statuses["Floorplan graph"], inputs.floorplan_revision, source),
-            _artifact("Trail", statuses["Trail wiring"], inputs.trail_revision, source),
+            _artifact(
+                "Floorplan",
+                statuses["Floorplan graph"],
+                inputs.floorplan_revision,
+                source,
+                digests[0],
+            ),
+            _artifact("Trail", statuses["Trail wiring"], inputs.trail_revision, source, digests[1]),
         ),
         inputs.immutable_source,
         unmatchable,
