@@ -1,0 +1,22 @@
+version: 1
+project: netlens
+components:
+# Proposal for human review.
+- id: root
+  label: Root
+  kind: inferred_from_gradle
+  paths:
+  - '**'
+# Proposal for human review.
+- id: core
+  label: core
+  kind: inferred_from_gradle
+  paths: []
+  parent: root
+# Proposal for human review.
+- id: core.network
+  label: core/network
+  kind: inferred_from_gradle
+  paths:
+  - core/network
+  parent: core

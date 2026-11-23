@@ -36,6 +36,7 @@ from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import public_text, safe
 from etat_major.trace import TraceError, trace_feature
 from etat_major.trail import load_wiring
+from etat_major.web import run_serve, serve_parser
 from etat_major.workspace import Issue, load_workspace
 
 OK, PROBLEMS, USAGE = 0, 1, 2
@@ -106,6 +107,7 @@ def _parser() -> argparse.ArgumentParser:
         "validate", help="report workspace validation issues", **help_options
     )
     validate.add_argument("--workspace", type=Path, required=True)
+    serve_parser(sub.add_parser("serve", help="serve one read-only Planning view on loopback"))
     for command in (trace, index, dlist, progress, validate):
         command.add_argument("--format", choices=("json", "text"), default="text")
     return parser
@@ -335,11 +337,12 @@ def main(argv: list[str] | None = None) -> int:
         "workspace": _workspace_validate,
         "gradle": run_gradle,
         "components": run_components,
+        "serve": run_serve,
     }
     try:
         return handlers[args.command](args)
     except TaskFileError as exc:
-        if args.format == "json":
+        if getattr(args, "format", None) == "json":
             return json_error(_result_command(argv), exc)
         _err(str(exc))
         return USAGE

@@ -320,7 +320,7 @@ def _architecture_problems(
     )
 
 
-def _derive(
+def derive_progress(
     ws: Workspace,
     git: GitEvidence,
     prs: tuple[PullRequest, ...],
@@ -328,6 +328,7 @@ def _derive(
     today: date | None,
     indexes: ArchitectureIndexes,
 ) -> ProgressReport:
+    """Resolve evidence against validated intent and optional recorded inputs."""
     known = frozenset(map(_key, ws.tasks))
     commits, linked_prs, disconnected_commits, disconnected_prs = _link_work(git, prs, known)
     branches = {key for name in git.heads if (key := branch_task(name, known))}
@@ -389,4 +390,4 @@ def load_progress(
     git = load_git(repo, pull_requests, load_releases(releases), frozenset(map(_key, intent.tasks)))
     if today is None and use_clock:
         today = datetime.now(UTC).date()
-    return _derive(intent, git, pull_requests, artifacts, today, indexes)
+    return derive_progress(intent, git, pull_requests, artifacts, today, indexes)

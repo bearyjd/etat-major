@@ -47,12 +47,17 @@ class Issue:
 
 
 class _IssueLog:
-    def __init__(self, limit: int | None = _ISSUE_LIMIT) -> None:
+    def __init__(
+        self, limit: int | None = _ISSUE_LIMIT, accept: Callable[[Issue], bool] | None = None
+    ) -> None:
         self.limit = limit
+        self.accept = accept
         self.issues: list[Issue] = []
         self.omitted = 0
 
     def append(self, issue: Issue) -> None:
+        if self.accept is not None and not self.accept(issue):
+            return
         if self.limit is None or len(self.issues) < self.limit:
             self.issues.append(issue)
         else:
@@ -352,8 +357,10 @@ def link_warnings(ws: Workspace, feature: Feature) -> tuple[Issue, ...]:
     return tuple(warnings)
 
 
-def load_workspace(root: Path, *, validate_all: bool = False) -> Workspace:
-    issues = _IssueLog(None) if validate_all else _IssueLog()
+def load_workspace(
+    root: Path, *, validate_all: bool = False, issue_filter: Callable[[Issue], bool] | None = None
+) -> Workspace:
+    issues = _IssueLog(None if validate_all else _ISSUE_LIMIT, issue_filter)
     try:
         with _directory(root) as fd:
             research = _load_dir(root, fd, "research", load_research, issues)
