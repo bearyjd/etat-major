@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from etat_major.manual_review import MANUAL_REVIEW_LABEL
 from etat_major.planning_view import MEUTE_SOURCE_LABEL
+from etat_major.understand_html import component_href
 
 if TYPE_CHECKING:
     from etat_major.execution_links import ExecutionLink
@@ -124,14 +125,17 @@ def _list(items: list[str]) -> str:
     return "<ul>" + "".join(f"<li>{item}</li>" for item in items) + "</ul>"
 
 
-def _architecture(row: ArchRow, labels: dict[str, str]) -> str:
+def _architecture(row: ArchRow, labels: dict[str, str], understand) -> str:
     target = _code(row.ref)
     if row.target is not None and row.target in labels:
         target = f"{_link('component', row.target, labels[row.target])} {target}"
+        if understand is not None:
+            href = component_href(understand, row.target.split("/", 1)[1])
+            target += f' · <a href="{href}">Inspect component</a>'
     return f"{target} · {escape(row.relation)} · {_state(row.state)} · {escape(row.provenance)}"
 
 
-def _feature(row: FeatureRow, labels: dict[str, str], tasks: set[str]) -> str:
+def _feature(row: FeatureRow, labels: dict[str, str], tasks: set[str], understand) -> str:
     stage = _state(row.state)
     if row.state != row.status:
         stage += f" · Intent {_state(row.status)}"
@@ -145,7 +149,9 @@ def _feature(row: FeatureRow, labels: dict[str, str], tasks: set[str]) -> str:
         entries.append(f"<p>{escape(row.outcome)}</p>")
     if row.architecture:
         entries.append("<p>Architecture</p>")
-        entries.append(_list([_architecture(item, labels) for item in row.architecture]))
+        entries.append(
+            _list([_architecture(item, labels, understand) for item in row.architecture])
+        )
     if row.tasks:
         entries.append("<p>Tasks</p>")
         entries.append(
@@ -299,7 +305,9 @@ def render(
     labels = {row.id: row.label for row in view.components}
     tasks = {row.id for row in view.tasks}
     features = _section(
-        "features", "Features", [_feature(row, labels, tasks) for row in view.features]
+        "features",
+        "Features",
+        [_feature(row, labels, tasks, view._understand) for row in view.features],
     )
     linked: dict[str, list[FeatureRow]] = defaultdict(list)
     for feature in view.features:
@@ -312,6 +320,7 @@ def render(
         [_component(row, labels, linked[row.id]) for row in view.components],
     )
     progress = _task_section(view, planning_origin)
+    inspect = '<a href="./understand">Understand</a>' if view._understand is not None else ""
     style = _STYLE + _UPDATE_STYLE if status is not None else _STYLE
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -319,7 +328,8 @@ def render(
         f"<title>{project} planning</title><style>{style}</style></head>"
         f'<body><header><h1>{project} planning</h1><nav aria-label="Planning sections">'
         '<a href="#features">Features</a><a href="#components">Components</a>'
-        '<a href="#tasks">Tasks</a><a href="#sources">Sources</a></nav>'
+        '<a href="#tasks">Tasks</a><a href="#sources">Sources</a>'
+        f"{inspect}</nav>"
         f"{_update_control(status, './refresh', 'Update Planning')}</header>"
         f'<main><div class="columns">{features}{components}{progress}</div>'
         f"{_sources(view)}</main></body></html>"

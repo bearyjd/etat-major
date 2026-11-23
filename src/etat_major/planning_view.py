@@ -44,6 +44,7 @@ from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import safe
 from etat_major.trace import trace_feature
 from etat_major.trail import load_wiring
+from etat_major.understand import Understand, build
 from etat_major.workspace import Issue, Workspace, feature_ref, load_workspace
 
 MEUTE_SOURCE_LABEL = "Meute reports"
@@ -63,6 +64,10 @@ class PlanningInputs:
     manual_review: Path | None = None
     execution_links: Path | None = None
     codeman_origin: str | None = None
+    immutable_source: Path | None = None
+    source_revision: str | None = None
+    floorplan_revision: str | None = None
+    trail_revision: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +130,7 @@ class PlanningView:
     meute: MeuteEvidence | None = None
     manual_review: ManualReview | None = None
     execution_links: ExecutionLinks | None = None
+    _understand: Understand | None = field(default=None, repr=False, compare=False)
     _refresh_diagnostics: RefreshDiagnostics | None = field(default=None, repr=False, compare=False)
 
 
@@ -168,6 +174,7 @@ def _recorded[T](
     issues: list[Issue],
     *,
     fallback: T,
+    report_missing: bool = False,
 ) -> T:
     if path is None:
         sources.append(SourceRow(label, "missing"))
@@ -175,7 +182,8 @@ def _recorded[T](
     try:
         value = load(path)
     except TaskFileError as exc:
-        sources.append(SourceRow(label, "invalid"))
+        missing = report_missing and isinstance(exc.__context__, FileNotFoundError)
+        sources.append(SourceRow(label, "missing" if missing else "invalid"))
         issues.append(Issue(exc.filename, exc.field_name, exc.message))
         return fallback
     sources.append(SourceRow(label, "recorded"))
@@ -313,9 +321,10 @@ def _load_execution_links(
 def _load_indexes(
     inputs: PlanningInputs, sources: list[SourceRow], issues: list[Issue]
 ) -> ArchitectureIndexes:
+    read = partial(_recorded, sources=sources, issues=issues, fallback=None, report_missing=True)
     return ArchitectureIndexes(
-        _recorded("Floorplan graph", inputs.graph, load_graph, sources, issues, fallback=None),
-        _recorded("Trail wiring", inputs.trail, load_wiring, sources, issues, fallback=None),
+        read("Floorplan graph", inputs.graph, load_graph),
+        read("Trail wiring", inputs.trail, load_wiring),
     )
 
 
@@ -374,6 +383,7 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
         _task_rows(report, titles),
         tuple(sources),
         tuple(map(public_issue, (*workspace_issues, *issues))),
+        _understand=build(inputs, model, indexes, sources),
         meute=_public_meute(report.meute),
         manual_review=manual,
         execution_links=execution,
