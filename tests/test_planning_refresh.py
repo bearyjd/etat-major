@@ -64,6 +64,13 @@ def _break_source(failure, workspace, meute, tmp_path):
     return lambda: moved.rename(workspace)
 
 
+FAILURE_REASONS = {
+    "recording": "A configured source became invalid.",
+    "workspace-record": "New record errors were found.",
+    "workspace-missing": "The configured project could not be loaded.",
+}
+
+
 def _status_timestamp(html):
     """Read the refresh timestamp from the role=status element only."""
     status = html.split('role="status"', 1)[1].split("</p>", 1)[0]
@@ -82,14 +89,17 @@ def test_refresh_failure_preserves_last_good_snapshot(
         refresh = _refresh_href(client.get("/").text, "planning")[1:]
         updated = client.get(refresh)
         assert "Latest latency graph" in updated.text
-        timestamp = updated.text.split("<time>", 1)[1].split("</time>", 1)[0]
+        earlier = _status_timestamp(updated.text)
         payload = client.get("/project.json").json()
         _break_source(failure, planning_workspace, meute, tmp_path)
         failed = client.get(refresh)
         assert failed.status_code == 200
-        assert "Update unavailable. Showing the previous snapshot." in failed.text
+        assert (
+            f"Update unavailable. Showing the previous snapshot. {FAILURE_REASONS[failure]}"
+            in failed.text
+        )
         assert "Latest latency graph" in failed.text and LINKED in failed.text
-        assert timestamp in failed.text
+        assert _status_timestamp(failed.text) == earlier
         assert "/private/location" not in failed.text and str(tmp_path) not in failed.text
         assert client.get("/project.json").json() == payload
         assert LINKED in client.get("/fleet").text
@@ -108,8 +118,12 @@ def test_refresh_recovers_after_failed_export(planning_workspace, client_for, tm
 
         restore = _break_source(failure, planning_workspace, meute, tmp_path)
         failed = client.get(refresh)
-        assert "Update unavailable. Showing the previous snapshot." in failed.text
+        assert (
+            f"Update unavailable. Showing the previous snapshot. {FAILURE_REASONS[failure]}"
+            in failed.text
+        )
         assert LINKED in failed.text and _status_timestamp(failed.text) == earlier
+        assert "/private/location" not in failed.text and str(tmp_path) not in failed.text
         assert client.get("/project.json").json() == payload
 
         restore()
@@ -132,8 +146,12 @@ def test_refresh_recovers_after_failed_export(planning_workspace, client_for, tm
         recovered_at = _status_timestamp(recovered.text)
         _break_source(failure, planning_workspace, meute, tmp_path)
         again = client.get(refresh)
-        assert "Update unavailable. Showing the previous snapshot." in again.text
+        assert (
+            f"Update unavailable. Showing the previous snapshot. {FAILURE_REASONS[failure]}"
+            in again.text
+        )
         assert new_ref in again.text and LINKED not in again.text
+        assert "/private/location" not in again.text and str(tmp_path) not in again.text
         assert _status_timestamp(again.text) == recovered_at
         assert client.get("/project.json").json() == replaced.json()
 
