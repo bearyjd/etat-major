@@ -91,9 +91,16 @@ The first thing to build, before any web UI. It proves the model.
 - **Depends on:** Phases 2 to 5.
 - **Meute:** display recorded reports as `generated` evidence when the recording identifies an existing project task. Meute owns Inbox, Run, write authentication and execution. Any future live Fleet control must be an allowlisted, explicit operator action authorized by Meute.
 - **Codeman:** show recorded session links and let the opted-in native parent UI select an existing session after an explicit click and its access checks. Session launch is post-MVP. État-major never sets `envOverrides`.
+- **Planning appearance in Codeman (after the MVP):** add an optional theme setting that follows Codeman's colors, typography, and spacing in light and dark modes. Render it through État-major's own styles so it works inside the sandboxed Web Tab. Check contrast and phone-width layouts.
 - **Cross-repository portfolio and mobile refinement.**
 - **Hardening:** large-repository limits, incremental reindex, freshness alerts, and the credential-isolation check for a second user (separate OS users with separate Codeman instances, or verified per-user config directories, plus account-eligibility confirmation with Anthropic).
 - **Done when:** with all services stopped nothing else changes; with them running a task shows its ExecutionLink; no second queue or terminal exists; a large-repository run is documented; the isolation check result (pass, or fail with the reason) is recorded and the second user is added only on a pass.
+
+## Proposed delivery milestones
+
+The [delivery roadmap](DELIVERY-ROADMAP.md) maps these phases to proposed PRs,
+dependencies, acceptance evidence and maintainer approvals. It covers the Alto
+rollout, the Understand MVP and the order of the remaining integration work.
 
 ## Dependency order
 
