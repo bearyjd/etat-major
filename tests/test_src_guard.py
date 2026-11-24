@@ -19,7 +19,7 @@ BANNED_MODULES = (
     "pty",
     "asyncio.subprocess",
 )
-BANNED_CALLS = ("os.system", "os.popen", "__import__", "importlib.import_module")
+BANNED_CALLS = ("os.system", "os.popen", "posix.system", "__import__", "importlib.import_module")
 BANNED_CALL_PREFIXES = ("os.exec", "os.spawn", "os.posix_spawn", "asyncio.create_subprocess")
 
 
@@ -76,17 +76,22 @@ def _os_aliases(tree: ast.AST) -> frozenset[str]:
     return frozenset(found)
 
 
-def _call_violations(node: ast.Call, module: str, aliases: frozenset[str]) -> list[str]:
-    name = _dotted(node.func)
+def _normalized(name: str, aliases: frozenset[str]) -> str:
     root, _, rest = name.partition(".")
-    if rest and root in aliases:
-        name = f"os.{rest}"
+    return f"os.{rest}" if rest and root in aliases else name
+
+
+def _call_violations(node: ast.Call, module: str, aliases: frozenset[str]) -> list[str]:
+    name = _normalized(_dotted(node.func), aliases)
     return [f"{module}: call to {name}"] if _is_banned_call(name) else []
 
 
-def _attribute_violations(node: ast.Attribute, module: str) -> list[str]:
+def _attribute_violations(node: ast.Attribute, module: str, aliases: frozenset[str]) -> list[str]:
     name = _dotted(node)
-    return [f"{module}: use of urllib.request"] if _under(name, "urllib.request") else []
+    if _under(name, "urllib.request"):
+        return [f"{module}: use of urllib.request"]
+    name = _normalized(name, aliases)
+    return [f"{module}: reference to {name}"] if _is_banned_call(name) else []
 
 
 def _constant_violations(node: ast.Constant, module: str) -> list[str]:
@@ -117,10 +122,10 @@ def check_source(source: str, module: str) -> list[str]:
         elif isinstance(node, ast.Call):
             found.extend(_call_violations(node, module, aliases))
         elif isinstance(node, ast.Attribute):
-            found.extend(_attribute_violations(node, module))
+            found.extend(_attribute_violations(node, module, aliases))
         elif isinstance(node, ast.Constant):
             found.extend(_constant_violations(node, module))
-    return found
+    return list(dict.fromkeys(found))
 
 
 @pytest.mark.parametrize("path", sorted(SRC.rglob("*.py")), ids=lambda p: p.name)
@@ -235,3 +240,22 @@ def test_os_helpers_that_run_nothing_are_allowed():
 def test_allow_list_is_keyed_on_the_relative_path():
     assert check_source("import subprocess", "renames.py") == []
     assert check_source("import subprocess", "sub/renames.py")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import os\nrun = os.system\nrun('x')",
+        "import os as o\nrun = o.popen",
+        "import os\nrunner = os.execv",
+        "import posix\nposix.system('x')",
+    ],
+    ids=lambda s: s.replace("\n", "; "),
+)
+def test_reference_to_a_process_function_is_reported(source):
+    assert check_source(source, "evidence_records.py")
+
+
+def test_each_violation_is_reported_once():
+    messages = check_source("import urllib\nurllib.request.urlopen('x')", "x.py")
+    assert len(messages) == len(set(messages)) == 1
