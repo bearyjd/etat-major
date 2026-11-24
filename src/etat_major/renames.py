@@ -35,7 +35,7 @@ def _metadata_entry(fd: int, name: str, *, directory: bool = False) -> None:
     if not (stat.S_ISDIR if directory else stat.S_ISREG)(info.st_mode):
         raise ValueError("unexpected metadata file type")
     if not directory and info.st_size > _MAX_FILE:
-        raise ValueError("metadata file exceeds the 64 MiB limit")
+        raise ValueError(f"{safe(name, limit=100)}: metadata file exceeds the 64 MiB limit")
 
 
 def _reject_indirect(fd: int, *names: str) -> None:

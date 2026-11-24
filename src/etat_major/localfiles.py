@@ -9,6 +9,8 @@ from itertools import islice
 from pathlib import Path
 from secrets import token_hex
 
+from etat_major.text_safety import safe
+
 NOFOLLOW = os.O_NOFOLLOW | os.O_NONBLOCK
 
 
@@ -90,7 +92,7 @@ def _read_text(
     path: Path, limit: int, label: str, dir_fd: int | None, normalize_newlines: bool = True
 ) -> str:
     target = path if dir_fd is None else path.name
-    size_error = f"{path.name}: file exceeds the {label} limit"
+    size_error = f"{safe(path.name, limit=256)}: file exceeds the {label} limit"
     _check_file(os.stat(target, dir_fd=dir_fd, follow_symlinks=False), limit, size_error)
     fd = os.open(target, os.O_RDONLY | NOFOLLOW, dir_fd=dir_fd)
     with os.fdopen(fd, "rb") as stream:
@@ -106,7 +108,7 @@ def write_new_text(path: Path, text: str, *, dir_fd: int | None = None) -> None:
     """Publish a bounded UTF-8 file exclusively, after writing it in full."""
     data = text.encode("utf-8")
     if len(data) > 1024 * 1024:
-        raise ValueError("file exceeds the 1 MiB limit")
+        raise ValueError(f"{safe(path.name, limit=256)}: file exceeds the 1 MiB limit")
     if dir_fd is None:
         with open_directory(path.parent) as fd:
             _publish(path.name, data, fd)
