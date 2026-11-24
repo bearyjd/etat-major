@@ -19,6 +19,17 @@ def _kind(path: Path) -> str:
     return "floorplan" if "schema" in data else "trail"
 
 
+def _reject_duplicate_kinds(paths: list[Path], kinds: list[str]) -> None:
+    seen: dict[str, str] = {}
+    for path, kind in zip(paths, kinds, strict=True):
+        if kind in seen:
+            raise ValueError(
+                f"{path.name}: a second {kind} recording; pass at most one per kind "
+                f"(already have {seen[kind]})"
+            )
+        seen[kind] = path.name
+
+
 def _timed(function, runs: int) -> tuple[object, dict[str, float | int]]:
     seconds = []
     result = None
@@ -45,6 +56,7 @@ def measure(paths, runs: int = DEFAULT_RUNS) -> dict[str, object]:
     """Return a report for each recording; an index build when a pair is given."""
     paths = [Path(p) for p in paths]
     kinds = [_kind(path) for path in paths]
+    _reject_duplicate_kinds(paths, kinds)
     recordings = [_recording(path, kind, runs) for path, kind in zip(paths, kinds, strict=True)]
     graph = next((p for p, k in zip(paths, kinds, strict=True) if k == "floorplan"), None)
     trail = next((p for p, k in zip(paths, kinds, strict=True) if k == "trail"), None)

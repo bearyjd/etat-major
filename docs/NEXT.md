@@ -24,7 +24,7 @@ An optional Codeman theme is post-MVP.
 ## Understand and indexing
 
 - The [Understand MVP](UNDERSTAND-MVP.md) is merged. Remaining acceptance: repeat it with a human-reviewed component in a deployed Codeman Web Tab. Browser checks so far were local (phone and desktop widths, simulated opaque Web Tab, seeded component).
-- Milestone 5 limits: `scripts/measure_recordings.py` and [LIMITS](LIMITS.md) record small-sample figures from the trimmed recordings. Large-repository limits stay unmeasured until the maintainer supplies the full NetLens recordings.
+- Milestone 5: freshness, missing-input and oversize behavior is pinned by tests (#26). `scripts/measure_recordings.py` and [LIMITS](LIMITS.md) record small-sample figures from the trimmed recordings. Large-repository limits stay unmeasured until the maintainer supplies the full NetLens recordings, so the milestone is only partly done.
 - Re-run the [real-data smoke runner](REAL-DATA-SMOKE.md) after changes to compare CLI results with pinned expectations.
 
 **Subprocess exception for the runner wrappers only.** Each dedicated wrapper

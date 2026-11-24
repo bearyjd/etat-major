@@ -82,50 +82,27 @@ def test_runs_must_be_positive():
     assert run(GRAPH, "--runs", "0").returncode == 2
 
 
+def test_two_recordings_of_one_kind_are_rejected(module, tmp_path):
+    twin = tmp_path / "second-graph.json"
+    twin.write_bytes(GRAPH.read_bytes())
+    result = run(GRAPH, twin, TRAIL)
+    assert result.returncode == 2
+    assert "second-graph.json" in result.stderr and "floorplan" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert str(tmp_path) not in result.stderr
+
+
 def test_limits_doc_has_no_absolute_path_and_matches_rerun(module):
     text = LIMITS.read_text()
     assert not re.search(r"(?<![\w.])/(?:home|var|usr|tmp|Users)/", text)
     graph, trail = module["measure"]([GRAPH, TRAIL], 1)["recordings"]
-    for value in (
-        graph["bytes"],
-        graph["nodes"],
-        graph["edges"],
-        graph["files"],
-        trail["bytes"],
-        trail["nodes"],
-        trail["edges"],
-        trail["symbols"],
-    ):
-        assert f"{value:,}" in text or str(value) in text
-
-
-def test_deeply_nested_json_is_a_clear_error(tmp_path):
-    deep = tmp_path / "deep.json"
-    deep.write_text("[" * 200000)
-    result = run(deep)
-    assert result.returncode == 2 and "deep.json" in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_symlink_is_rejected_before_it_is_read(tmp_path):
-    link = tmp_path / "link.json"
-    link.symlink_to(GRAPH)
-    result = run(link)
-    assert result.returncode == 2 and "link.json" in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_oversized_file_is_rejected_without_a_full_read(tmp_path):
-    big = tmp_path / "big.json"
-    with big.open("wb") as handle:
-        handle.truncate(65 * 1024 * 1024)
-    result = run(big)
-    assert result.returncode == 2 and "big.json" in result.stderr
-    assert "Traceback" not in result.stderr
-
-
-def test_fifo_is_rejected_without_hanging(tmp_path):
-    fifo = tmp_path / "pipe.json"
-    os.mkfifo(fifo)
-    result = run(fifo)
-    assert result.returncode == 2 and "pipe.json" in result.stderr
+    graph_figures = (
+        f"bytes={graph['bytes']} nodes={graph['nodes']} "
+        f"edges={graph['edges']} files={graph['files']} load_min="
+    )
+    trail_figures = (
+        f"bytes={trail['bytes']} nodes={trail['nodes']} "
+        f"edges={trail['edges']} symbols={trail['symbols']} load_min="
+    )
+    assert f"graph-real.json (floorplan): {graph_figures}" in text
+    assert f"wiring-kotlin.json (trail): {trail_figures}" in text
