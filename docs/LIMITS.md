@@ -1,6 +1,6 @@
 # Recorded-input limits and measurements
 
-Status: small-sample only. **Large-repository limits are UNMEASURED.** Every figure below comes from the two checked-in trimmed recordings (about 100 KB each). Nothing near the 64 MiB cap has been measured. The full NetLens Floorplan and Trail recordings at the pinned revision are not in the repository; the maintainer must supply them (or authorize regenerating them) before any large-repository claim is made. Do not extrapolate the timings below to larger inputs.
+Status: two measured sizes, both far below the caps. **Behavior near the 64 MiB cap is UNMEASURED.** The first set of figures comes from the two checked-in trimmed recordings (about 100 KB each). The second comes from full NetLens recordings (about 8.8 MB combined) that are not in the repository. Do not extrapolate the timings to larger inputs.
 
 ## Enforced caps
 
@@ -40,9 +40,24 @@ index build: min=0.016922s median=0.017230s (runs=5)
 
 Counts: for Floorplan, `nodes` are components, `edges` are links and `files` are file entries. For Trail, `nodes` are all graph nodes, `symbols` are the nodes whose kind is not `file`, and `edges` are relations. Pass `--runs N` to change the repeat count and `--json` for machine-readable output. Output names files by base name only.
 
+## Observed figures (full NetLens recordings)
+
+The recordings were generated from a disposable export of NetLens revision `5188ca6725007bd663ce0eaa5ad2de9e460d26a0`, the revision pinned by the [full NetLens baseline](examples/netlens-real-data-smoke.json). Trail 0.30.5 produced the wiring through the Trail runner. Floorplan `floorplan--v0.11.0` produced the graph through the Floorplan runner (`scan`, then `build`) with the one-component `architecture.json` from [REAL-DATA-SMOKE](REAL-DATA-SMOKE.md). The recordings are private repository data and are not committed. File, node and edge counts equal the baseline's `index` expectations (716 files, 5,498 nodes, 14,386 edges).
+
+Measured with Python 3.14.10 on Linux with 22 logical CPUs, one machine, one session, 5 repeated runs (min and median of `perf_counter`).
+
+```
+runs: 5
+graph.json (floorplan): bytes=690916 nodes=2 edges=2200 files=716 load_min=0.051615s load_median=0.052512s
+wiring.json (trail): bytes=8071092 nodes=5498 edges=14386 symbols=4783 load_min=0.189582s load_median=0.193425s
+index build: min=0.674171s median=0.723427s (runs=5)
+```
+
+Against the trimmed recordings, the Trail file is about 80 times larger and loads about 36 times slower (median 0.193 s against 5.3 ms). The index build is about 42 times slower (median 0.72 s against 17 ms). These figures are one sample on one machine. The graph has two components because the supplied architecture input defines one; the model-written layer was not run.
+
 ## Still unmeasured
 
-- Any recording larger than about 125 KB, including behavior near the 64 MiB cap.
+- Any recording larger than about 8 MB, including behavior near the 64 MiB cap.
 - Memory use.
 - Page rendering time and truncation frequency on a large index.
 - Other machines and other Python versions.
