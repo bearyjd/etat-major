@@ -3,7 +3,7 @@
 import re
 import stat
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
 from itertools import combinations
 from pathlib import Path
@@ -144,15 +144,22 @@ class ComponentModel(_Record):
         return tuple(chain)
 
     def owner_of(self, path: str) -> Ownership:
-        component_file_path(path)
-        return _owner(path, _patterns(self.components))
+        return self.ownership_lookup()(path)
+
+    def ownership_lookup(self) -> Callable[[str], Ownership]:
+        """Prepare the path patterns once for an inventory from one component model."""
+        patterns = _patterns(self.components)
+
+        def lookup(path: str) -> Ownership:
+            return _owner(component_file_path(path), patterns)
+
+        return lookup
 
     def coverage(self, file_paths: Iterable[str]) -> Coverage:
-        patterns = _patterns(self.components)
+        lookup = self.ownership_lookup()
         owned, unowned, ties = [], [], []
         for path in sorted(set(file_paths)):
-            component_file_path(path)
-            result = _owner(path, patterns)
+            result = lookup(path)
             (owned if result.component else unowned).append(path)
             if result.ties:
                 ties.append((path, result.ties))

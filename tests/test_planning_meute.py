@@ -52,7 +52,8 @@ def test_planning_shows_meute_evidence_in_sandbox(planning_workspace, client_for
     assert 'name="viewport"' in response.text
     assert 'grid-template-areas: "features" "components" "tasks"' in response.text
     assert all(
-        href.startswith("./refresh?token=") or href.startswith("#")
+        href == "./understand"
+        or href.startswith(("#", "./understand?component=", "./refresh?token="))
         for href in Page(response.text).hrefs
     )
     assert {"label": "Meute reports", "status": "recorded"} in data["sources"]

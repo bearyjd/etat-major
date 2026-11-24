@@ -25,7 +25,7 @@ from etat_major.execution_links import (
     codeman_origin,
     load_execution_links,
 )
-from etat_major.floorplan import load_graph
+from etat_major.floorplan import load_graph_recording
 from etat_major.localfiles import entry_mode, open_directory
 from etat_major.manual_review import MANUAL_REVIEW_LABEL, ManualReview, load_manual_review
 from etat_major.meute import MeuteEvidence, MeuteSnapshot, load_meute
@@ -43,7 +43,8 @@ from etat_major.refs import PROJECT_ID, Ref
 from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import safe
 from etat_major.trace import trace_feature
-from etat_major.trail import load_wiring
+from etat_major.trail import load_wiring_recording
+from etat_major.understand import Understand, build
 from etat_major.workspace import Issue, Workspace, feature_ref, load_workspace
 
 MEUTE_SOURCE_LABEL = "Meute reports"
@@ -63,6 +64,10 @@ class PlanningInputs:
     manual_review: Path | None = None
     execution_links: Path | None = None
     codeman_origin: str | None = None
+    immutable_source: Path | None = None
+    source_revision: str | None = None
+    floorplan_revision: str | None = None
+    trail_revision: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +130,7 @@ class PlanningView:
     meute: MeuteEvidence | None = None
     manual_review: ManualReview | None = None
     execution_links: ExecutionLinks | None = None
+    _understand: Understand | None = field(default=None, repr=False, compare=False)
     _refresh_diagnostics: RefreshDiagnostics | None = field(default=None, repr=False, compare=False)
 
 
@@ -168,6 +174,7 @@ def _recorded[T](
     issues: list[Issue],
     *,
     fallback: T,
+    report_missing: bool = False,
 ) -> T:
     if path is None:
         sources.append(SourceRow(label, "missing"))
@@ -175,7 +182,8 @@ def _recorded[T](
     try:
         value = load(path)
     except TaskFileError as exc:
-        sources.append(SourceRow(label, "invalid"))
+        missing = report_missing and isinstance(exc.__context__, FileNotFoundError)
+        sources.append(SourceRow(label, "missing" if missing else "invalid"))
         issues.append(Issue(exc.filename, exc.field_name, exc.message))
         return fallback
     sources.append(SourceRow(label, "recorded"))
@@ -312,11 +320,13 @@ def _load_execution_links(
 
 def _load_indexes(
     inputs: PlanningInputs, sources: list[SourceRow], issues: list[Issue]
-) -> ArchitectureIndexes:
-    return ArchitectureIndexes(
-        _recorded("Floorplan graph", inputs.graph, load_graph, sources, issues, fallback=None),
-        _recorded("Trail wiring", inputs.trail, load_wiring, sources, issues, fallback=None),
+) -> tuple[ArchitectureIndexes, tuple[str | None, str | None]]:
+    read = partial(
+        _recorded, sources=sources, issues=issues, fallback=(None, None), report_missing=True
     )
+    graph, graph_digest = read("Floorplan graph", inputs.graph, load_graph_recording)
+    trail, trail_digest = read("Trail wiring", inputs.trail, load_wiring_recording)
+    return ArchitectureIndexes(graph, trail), (graph_digest, trail_digest)
 
 
 def _task_rows(report: ProgressReport, titles: dict[str, str]) -> tuple[TaskRow, ...]:
@@ -344,7 +354,7 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
     }
     if not (model or ws.features or titles or any(p == project for p, _ in ws.milestones)):
         raise TaskFileError(Path("serve"), "project", "no records for the configured project")
-    indexes = _load_indexes(inputs, sources, issues)
+    indexes, digests = _load_indexes(inputs, sources, issues)
     prs = _recorded("Pull requests", inputs.prs, load_prs, sources, issues, fallback=())
     releases = _recorded("Releases", inputs.releases, load_releases, sources, issues, fallback=())
     known = frozenset(f"{t.project}/{t.id}" for t in ws.tasks)
@@ -374,6 +384,7 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
         _task_rows(report, titles),
         tuple(sources),
         tuple(map(public_issue, (*workspace_issues, *issues))),
+        _understand=build(inputs, model, indexes, sources, digests),
         meute=_public_meute(report.meute),
         manual_review=manual,
         execution_links=execution,

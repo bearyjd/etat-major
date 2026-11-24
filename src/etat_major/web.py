@@ -34,7 +34,12 @@ def serve_parser(parser: ArgumentParser) -> None:
     parser.add_argument("--project", required=True, help="project identifier in the workspace")
     parser.add_argument("--codeman-origin", help="trusted HTTPS origin for session context")
     parser.add_argument("--port", type=int, default=8765, help="loopback port (default: 8765)")
+    for artifact in ("source", "floorplan", "trail"):
+        parser.add_argument(
+            f"--{artifact}-revision", help=f"trusted {artifact} snapshot commit SHA"
+        )
     for flag, description in (
+        ("immutable-source", "immutable source snapshot directory for excerpts"),
         ("components", "component YAML (defaults to workspace/components/PROJECT.yaml)"),
         ("graph", "recorded Floorplan graph"),
         ("trail", "recorded Trail wiring"),
@@ -51,8 +56,9 @@ def serve_parser(parser: ArgumentParser) -> None:
 def _json_snapshot(view: PlanningView) -> JSONResponse:
     from fastapi.responses import JSONResponse
 
-    payload = asdict(replace(view, _refresh_diagnostics=None))
+    payload = asdict(replace(view, _refresh_diagnostics=None, _understand=None))
     payload.pop("_refresh_diagnostics")
+    payload.pop("_understand")
     for field in ("meute", "manual_review", "execution_links"):
         if payload[field] is None:
             payload.pop(field)
@@ -108,6 +114,7 @@ class _Snapshots:
     def __init__(
         self, view: PlanningView, reload: Callable[[], PlanningView] | None, origin: str | None
     ) -> None:
+        self.startup_artifacts = view._understand.artifacts if view._understand else ()
         self.view = view
         self.origin = origin
         self.lock = Lock()
@@ -131,6 +138,7 @@ class _Snapshots:
         self, reload: Callable[[], PlanningView]
     ) -> tuple[HTMLResponse, HTMLResponse, JSONResponse]:
         from etat_major.taskfile import TaskFileError
+        from etat_major.understand import bind_startup_revisions
 
         with self.lock:
             try:
@@ -142,6 +150,7 @@ class _Snapshots:
                     f"Update unavailable. Showing the previous snapshot. {reason}"
                 )
             elif candidate is not None:
+                candidate = bind_startup_revisions(candidate, self.startup_artifacts)
                 timestamp = _now()
                 responses = _render_snapshot(
                     candidate,
@@ -177,6 +186,10 @@ def create_app(
     @app.get("/fleet")
     def fleet():
         return snapshots.responses[1]
+
+    from etat_major.understand_html import register
+
+    register(app, lambda: snapshots.view._understand, _HEADERS)
 
     @app.get("/project.json")
     def project():
@@ -228,6 +241,10 @@ def run_serve(args: Namespace) -> int:
             args.releases,
             args.meute,
             args.manual_review,
+            immutable_source=args.immutable_source,
+            source_revision=args.source_revision,
+            floorplan_revision=args.floorplan_revision,
+            trail_revision=args.trail_revision,
             execution_links=args.execution_links,
             codeman_origin=args.codeman_origin,
         )

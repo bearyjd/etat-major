@@ -32,6 +32,9 @@ page again if its Update link was loaded before a service restart.
 | `--components` | Component YAML for the configured project. Defaults to `workspace/components/PROJECT.yaml`. A complete seed file can be viewed as a proposal. A proposal delta that relies on existing parents needs to be resolved in the workspace first. |
 | `--graph` | Recorded Floorplan graph JSON. |
 | `--trail` | Recorded Trail wiring JSON. |
+| `--source-revision` | Trusted full Git commit SHA of the selected source snapshot. |
+| `--floorplan-revision`, `--trail-revision` | Trusted full Git commit SHA for each respective recording. |
+| `--immutable-source` | Directory of an immutable export of the selected revision, maintained by the operator. |
 | `--prs` | Recorded pull-request JSON. |
 | `--releases` | Recorded release JSON. |
 | `--repo` | Local repository for read-only Git history and release containment. |
@@ -39,6 +42,8 @@ page again if its Update link was loaded before a service restart.
 | `--manual-review` | [Manual Anthropic API review descriptor](contracts/manual-review.md) for an existing task. |
 | `--execution-links` | [Recorded execution links](contracts/execution-links.md) for matching tasks. |
 | `--codeman-origin` | Optional trusted HTTPS origin used to display Codeman session URLs. |
+
+**Understand** opens the component inspector at `./understand`. Follow a component to an owned file and select a symbol to inspect its recorded callers and callees. The inspector uses the same refreshed snapshot as Planning and Fleet. Excerpts require an immutable source export and matching source and Trail revisions. Leave `--immutable-source` unset for a working tree. Revisions apply to the recording bytes loaded at startup. After a refresh replaces a recording, its revision is unknown and changed Trail recordings have no excerpts. Restart with the matching revisions to establish a new baseline.
 
 Missing or invalid optional inputs are listed under Sources. Planning shows
 details for diagnostics attributed to the selected project and counts for

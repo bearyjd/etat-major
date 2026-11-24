@@ -39,7 +39,9 @@ def test_planning_shows_recorded_handoff_as_text(planning_workspace, client_for,
     assert "<code>nightly/build-42</code>" in card
     assert card.count("Codeman session") == 1
     assert all(
-        href.startswith("./refresh?token=") or href.startswith("#") for href in Page(page).hrefs
+        href == "./understand"
+        or href.startswith(("#", "./understand?component=", "./refresh?token="))
+        for href in Page(page).hrefs
     )
     assert {"script", "form"}.isdisjoint(Page(page).tags)
     assert SOURCE in data["sources"]

@@ -120,3 +120,18 @@ absolute path or remote.
   in tests. Record the viewport, artifact revisions, tested symbol, and
   observed results in the implementation verification.
 [Real-data proof-out](FLOORPLAN-PROOF.md)
+
+## Local verification
+
+NetLens commit `5188ca6725007bd663ce0eaa5ad2de9e460d26a0` supplied the source,
+Floorplan and Trail inputs. Floorplan recorded 716 files and Trail recorded
+5,498 symbols. In the seeded `app` component, the browser followed
+`MetricTiles.kt#LatencyTile` to one recorded caller and two recorded callees.
+The directions, confidence and provenance labels matched the recording. The
+excerpt matched lines 95–128 of the source export.
+
+Chromium checks passed at 375 × 812 and 1440 × 1000 in an ordinary tab and a
+local simulation of Codeman's opaque Web Tab proxy. The stale Trail check
+retained the recorded calls and withheld the source excerpt. The component
+declarations used for this run are seed proposals. A human-reviewed component
+and verification in the deployed Codeman Web Tab remain acceptance items.
