@@ -2,7 +2,7 @@
 
 A self-hosted visual product-development workspace. It connects **why** you are building something (research and decisions), **what exists** (how the code works), **what should exist** (features, roadmap, planned architecture) and **how you are getting there** (evidence), so you can move along **Research → Decision → Feature → Design → Code → Evidence** in either direction. It is useful with no agent running.
 
-**Status** — Design docs and a working CLI over local and recorded data. Commands include `trace`, `decisions list`, `index`, `progress`, `workspace validate`, `research brief` and `research import`. Trace, decisions, index, progress and validation support JSON output. The UI, live GitHub access, and Floorplan or Trail execution are pending.
+**Status** — Design docs, a CLI over local and recorded data (`trace`, `decisions`, `index`, `research`, `gradle`, `components`, `floorplan`, `progress`, `workspace`, `serve`), and a read-only Planning and Understand web view served on loopback. Pinned, deterministic Floorplan steps run through the `floorplan` command, and a Trail runner wrapper builds in a disposable copy. Live GitHub access and the Codeman and Meute integrations are pending.
 
 Direction: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.md). Plan: [docs/VISUALIZATION-ROADMAP.md](docs/VISUALIZATION-ROADMAP.md). Traceability model: [docs/TRACEABILITY.md](docs/TRACEABILITY.md). Tool choices: [docs/TOOL-EVALUATION.md](docs/TOOL-EVALUATION.md). [docs/SPEC.md](docs/SPEC.md) is the earlier agent-command-center design, partly superseded. Research notes: [docs/RESEARCH.md](docs/RESEARCH.md).
 
