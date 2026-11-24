@@ -75,6 +75,38 @@ def test_refresh_failure_preserves_last_good_snapshot(
         assert LINKED in client.get("/fleet").text
 
 
+def test_refresh_recovers_after_failed_export(planning_workspace, client_for, tmp_path):
+    new_ref = "reports/example/scan-2026-11-22.md"
+    meute = _snapshot(tmp_path / "reports.yaml")
+    with client_for(planning_workspace, "--meute", meute) as client:
+        refresh = _refresh_href(client.get("/").text, "planning")[1:]
+        loaded = client.get(refresh)
+        timestamp = loaded.text.split("<time>", 1)[1].split("</time>", 1)[0]
+        payload = client.get("/project.json").json()
+        assert LINKED in loaded.text
+
+        meute.write_text("reports: [/private/location")
+        failed = client.get(refresh)
+        assert "Update unavailable. Showing the previous snapshot." in failed.text
+        assert LINKED in failed.text and f"<time>{timestamp}</time>" in failed.text
+        assert client.get("/project.json").json() == payload
+
+        _snapshot(meute, ref=new_ref)
+        recovered = client.get(refresh)
+        assert "Snapshot updated" in recovered.text
+        assert "Update unavailable" not in recovered.text
+        assert new_ref in recovered.text and LINKED not in recovered.text
+        assert recovered.text.count(new_ref) == 1
+        advanced = recovered.text.split("<time>", 1)[1].split("</time>", 1)[0]
+        assert advanced > timestamp
+        replaced = client.get("/project.json")
+        assert new_ref in replaced.text and LINKED not in replaced.text
+        assert replaced.json() != payload
+
+        assert "Snapshot updated" in client.get(refresh).text
+        assert client.get("/project.json").json() == replaced.json()
+
+
 @pytest.mark.parametrize("section", ["planning", "fleet"])
 def test_web_tab_root_resolves_relative_update_and_return_link(
     planning_workspace, client_for, tmp_path, section
