@@ -80,7 +80,7 @@ The first thing to build, before any web UI. It proves the model.
 **Status** — Progress derives evidence from local Git and recorded GitHub data and reports lifecycle stages, gaps and stale links. The read-only Planning pilot displays recorded Meute and manual review evidence with provenance. Live GitHub access and further progress UI work remain planned.
 
 - **Depends on:** Phases 3 and 4.
-- **Build:** ProgressEvidence from Git and GitHub (link key `Task: <project>/<id>` in a commit trailer, branch or PR body; PRs, reviews, checks and releases through the user's own `gh` login); the evidence ladder; derived In Progress, Review, Implementing, Verified and Released; gap, stale and disconnected-work reports; comparison of the delivered result with the Feature's `outcome`.
+- **Build:** ProgressEvidence from Git and GitHub (link key `Task: <project>/<id>` in a commit trailer, branch or PR body; PRs, reviews, checks and releases recorded from the user's own `gh` login by a person, under the capture-script exception in `AGENTS.md`); the evidence ladder; derived In Progress, Review, Implementing, Verified and Released; gap, stale and disconnected-work reports; comparison of the delivered result with the Feature's `outcome`.
 - **Tests:** a fixture repository with scripted history and recorded `gh` JSON.
 - **Done when:** each task and feature shows exactly the rungs its records prove and nothing more; a merged PR without `accepted_by` and `accepted_on` is shown in Review and not `done`; unimplemented, unverified and blocked requirements are listed; every completion claim links to a commit, PR, check, release or human acceptance, or reads `unverified`.
 

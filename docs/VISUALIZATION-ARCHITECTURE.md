@@ -49,7 +49,7 @@ The first SPEC.md described a control plane that supervised agents. That directi
 | **Floorplan** | Recorded file inventory, import links, endpoints and routes | Optional architecture evidence in `RepoIndex`, read through a versioned adapter. Model-written components and blueprints are advisory. |
 | **Trail** | Parsing code into a function-level symbol graph | Symbol layer of `RepoIndex`, through a versioned adapter. Replaceable. |
 | **ChatGPT** | External research and brainstorming, especially Reddit | Manual handoff only: État-major writes a brief, the human pastes it and brings back the answer for review. |
-| **Git and GitHub** | Durable intent (Markdown, YAML, Mermaid), history, PRs, checks, releases | Source of truth. Read through `git` and `gh`. |
+| **Git and GitHub** | Durable intent (Markdown, YAML, Mermaid), history, PRs, checks, releases | Source of truth. Read through `git` and recorded `gh` output (see the capture-script exception in `AGENTS.md`). |
 | **Codeman** | Interactive Claude Code and Codex sessions, tmux, mobile terminal, voice, notifications, logins | Separate. Link out; optionally launch a session for an approved task. |
 | **Meute** | Unattended scheduling and execution, run reports | Separate. Read its artifacts; submit approved work only through its own CLI. |
 | **Backlog.md** | A task-file format | Reference only. The spike decided to define our own contract (see `docs/spikes/phase1-spike.md`). |
@@ -187,7 +187,7 @@ The views share one model and link in both directions: click a module to see the
 
 - **Codeman:** read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Codeman's own service password, if set, is read at call time from an environment variable named in configuration and never stored. These are not Claude or Codex credentials. Launching is an optional later hand-off, always behind explicit human approval, and État-major never sets `envOverrides` at all: any per-person credential directory is configured in Codeman, outside État-major. Each launch is one explicit human click; nothing is queued or retried.
 - **Meute:** read `state/log` and `reports/**` directly; submit only through `meute promote` or `meute plan --enqueue`, after human approval. No competing queue.
-- **Git and CI:** `git log` and `gh` for PRs, reviews, checks and releases. Read-only, using the user's existing `gh` login; État-major stores no token.
+- **Git and CI:** `git log` for history, and recorded `gh` output for PRs, reviews, checks and releases, captured by a person with their own `gh` login under the narrow exception in `AGENTS.md`. État-major's core makes no `gh` call and stores no credential.
 - **Floorplan:** read its `graph.json`, `architecture.json` and `plan.json` through a versioned adapter that accepts only known schema strings. Run only its deterministic scripts, on a copy or worktree. It stays independently upgradeable; État-major does not fork it.
 - **Trail:** through the RepoIndex adapter, behind an interface so another indexer can replace it.
 - **ChatGPT:** no integration. A manual brief and import flow only, described in [TRACEABILITY.md](TRACEABILITY.md).
