@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from time import monotonic
 
 import pytest
@@ -54,3 +55,13 @@ def test_oversize_recording_names_file_and_field(tmp_path):
     path.write_text(" " * (64 * 1024 * 1024 + 1))
     with pytest.raises(TaskFileError, match=r"huge-graph\.json.*64 MiB"):
         load_graph(path)
+
+
+def test_smoke_doc_labels_size_and_latency_measurements_not_run() -> None:
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "REAL-DATA-SMOKE.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Data-size and latency observations" in doc
+    section = doc.split("## Data-size and latency observations", 1)[1]
+    assert "Not run" in section
+    assert "deferred" in section.lower()
