@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -70,6 +72,56 @@ def test_planning_shows_meute_evidence_in_sandbox(planning_workspace, client_for
     assert response.text.count(LINKED) == response.text.count(UNMATCHED) == 1
     sources = response.text.split('id="sources"', 1)[1]
     assert CAPTURED in sources and UNMATCHED in sources
+
+
+def test_planning_reimports_meute_runner_export(client_for, tmp_path):
+    # The Meute runner recorded one successful and one failed disposable run.
+    fixture = Path(__file__).parent / "fixtures" / "meute" / "runner-produced.json"
+    snapshot = json.loads(fixture.read_text())
+    assert set(snapshot) == {"version", "project", "exported_at", "reports"}
+    assert [row["outcome"] for row in snapshot["reports"]] == ["ok", "error"]
+    for row in snapshot["reports"]:
+        assert set(row) == {"ref", "recorded_at", "outcome", "task"}
+        assert row["task"] == "fixture/0042"
+
+    workspace = tmp_path / "workspace"
+    tasks = workspace / "tasks" / "fixture"
+    tasks.mkdir(parents=True)
+    for task in ("0041", "0042"):
+        (tasks / f"{task}-test.md").write_text(
+            f"---\nid: {task}\nproject: fixture\ntitle: Task {task}\n"
+            "initiative: test\nowner: maintainer\nstatus: ready\n---\n"
+        )
+
+    imports = []
+    for _ in range(2):
+        with client_for(workspace, "--meute", fixture, project="fixture") as client:
+            response = client.get("/project.json")
+            assert response.status_code == 200
+            imports.append(response.json())
+
+    first, second = imports
+    assert first == second
+    assert {"label": "Meute reports", "status": "recorded"} in first["sources"]
+    observed = first["meute"]
+    assert observed["project"] == "fixture"
+    assert observed["version"] == 1
+    assert datetime.fromisoformat(observed["exported_at"]) == datetime.fromisoformat(
+        snapshot["exported_at"]
+    )
+    for actual, published in zip(observed["reports"], snapshot["reports"], strict=True):
+        assert actual.keys() == published.keys() | {"linked"}
+        assert actual["linked"] is True
+        assert datetime.fromisoformat(actual["recorded_at"]) == datetime.fromisoformat(
+            published["recorded_at"]
+        )
+        assert {key: actual[key] for key in ("ref", "outcome", "task")} == {
+            key: published[key] for key in ("ref", "outcome", "task")
+        }
+    assert {task["id"]: task["evidence"]["generated"] for task in first["tasks"]} == {
+        "fixture/0041": "unverified",
+        "fixture/0042": sorted(f"artifact:{row['ref']}" for row in snapshot["reports"]),
+    }
 
 
 @pytest.mark.parametrize(
