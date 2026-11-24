@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from time import monotonic
 
 import pytest
@@ -38,3 +39,48 @@ def test_branch_task_bounds_lengths_and_repetitive_input():
     assert branch_task(branch, known) is None
     assert monotonic() - start < 1
     assert branch_task("task/a-1-a-1-end", known) == "a/1"
+
+
+def test_oversize_error_names_file_and_limit(tmp_path):
+    from etat_major.localfiles import read_text_kib
+
+    path = tmp_path / "wiring.json"
+    path.write_text("x" * 2048)
+    with pytest.raises(ValueError, match=r"wiring\.json.*file exceeds the 1 KiB limit"):
+        read_text_kib(path, 1)
+
+
+def test_oversize_recording_names_file_and_field(tmp_path, monkeypatch):
+    monkeypatch.setattr("etat_major.floorplan._LIMIT_MIB", 1)
+    path = tmp_path / "huge-graph.json"
+    path.write_text(" " * (1024 * 1024 + 1))
+    with pytest.raises(TaskFileError, match=r"huge-graph\.json.*1 MiB"):
+        load_graph(path)
+
+
+def test_oversize_error_escapes_control_characters_in_the_file_name(tmp_path):
+    from etat_major.localfiles import read_text_kib
+
+    path = tmp_path / "bad\x1b[31mname.json"
+    path.write_text("x" * 2048)
+    with pytest.raises(ValueError) as caught:
+        read_text_kib(path, 1)
+    assert "\x1b" not in str(caught.value)
+    assert "\\u001b" in str(caught.value)
+
+
+def test_write_new_text_oversize_names_the_file(tmp_path):
+    from etat_major.localfiles import write_new_text
+
+    with pytest.raises(ValueError, match=r"out\.md.*file exceeds the 1 MiB limit"):
+        write_new_text(tmp_path / "out.md", "x" * (1024 * 1024 + 1))
+
+
+def test_smoke_doc_labels_size_and_latency_measurements_not_run() -> None:
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "REAL-DATA-SMOKE.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Data-size and latency observations" in doc
+    section = doc.split("## Data-size and latency observations", 1)[1]
+    assert "Not run" in section
+    assert "deferred" in section.lower()

@@ -56,6 +56,7 @@ class Understand:
 
 
 def _artifact(label, status, revision, source, digest):
+    status = "present" if status == "recorded" else status
     if digest is None:
         return Artifact(label, status, "unknown", None, None)
     freshness = "unknown"
@@ -63,7 +64,7 @@ def _artifact(label, status, revision, source, digest):
         freshness = "fresh" if revision == source else "stale"
     return Artifact(
         label,
-        "present" if status == "recorded" else status,
+        status,
         freshness,
         revision,
         digest,
