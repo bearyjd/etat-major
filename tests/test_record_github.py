@@ -25,7 +25,8 @@ FAKE = """\
 #!{python}
 import json, os, sys, time
 behavior = json.load(open({behavior!r}))
-record = {{"argv": sys.argv[1:], "env": dict(os.environ), "cwd": os.getcwd(), "stdin": sys.stdin.read()}}
+record = {{"argv": sys.argv[1:], "env": dict(os.environ), "cwd": os.getcwd()}}
+record["stdin"] = sys.stdin.read()
 with open({log!r}, "a") as log:
     log.write(json.dumps(record) + "\\n")
 time.sleep(behavior.get("sleep", 0))
@@ -311,7 +312,12 @@ def test_the_script_refuses_to_start_without_a_terminal(setup):
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
-        env={**s.environ, "PYTHONPATH": str(ROOT / "src")},
+        env={
+            **os.environ,
+            **s.environ,
+            "HOME": os.environ["HOME"],
+            "PYTHONPATH": str(ROOT / "src"),
+        },
         timeout=60,
     )
     assert result.returncode == 2
