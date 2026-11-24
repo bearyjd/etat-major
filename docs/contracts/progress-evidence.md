@@ -9,12 +9,23 @@ etat-major progress --workspace workspace --repo checkout --prs prs.json --relea
 
 ## Recorded inputs
 
-A future live adapter can capture the inputs with these GitHub CLI commands in the target repository. The report command reads the two local files offline. Supply `[]` for an empty recording.
+Capture the inputs by hand with these GitHub CLI commands in the target repository, or with the proposed capture script described below. The report command reads the two local files offline. Supply `[]` for an empty recording.
 
 ```sh
 gh pr list --state all --limit 1000 --json number,title,body,state,isDraft,mergedAt,headRefName,reviewDecision,statusCheckRollup,mergeCommit > prs.json
 gh release list --limit 1000 --json tagName,publishedAt > releases.json
 ```
+
+### Capture script (approved design, not yet implemented)
+
+`scripts/record_github.py` would run the two commands above for the maintainer and write `prs.json` and `releases.json`. It is not part of `src/` and the report command never calls it. The permitted behavior is bounded by the capture-script exception in `AGENTS.md`.
+
+- **Arguments.** The two `gh` argument lists above, unchanged, with no `--repo`, no shell and no extra fields. The script refuses to run if `GH_HOST` or `GH_REPO` is set.
+- **Environment.** Only `PATH`, `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `GH_CONFIG_DIR`, `LANG` and `LC_ALL` reach `gh`. `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` are never passed. Authentication comes from `gh`'s own login; token-only environments are unsupported and fail with a clear message.
+- **Truncation.** `--limit 1000` is a hard bound. A result with exactly 1000 entries prints a truncation warning, because older pull requests or releases may be missing.
+- **Enrichment deferred.** The script does not add `headRefOid` or `commitOid`. The recorded standard rollup stays scoped to the PR head, so the `tested` rung remains conservative by design.
+- **Output.** Output is capped at 4 MiB per file, must parse as a JSON array without duplicate keys or `NaN`, and is written atomically into a directory the human names without following symlinks. On any failure no file is created. Errors name the file and field and print no traceback, remote, absolute path or token.
+- **Testing.** Tests use a fake `gh`. The maintainer runs the real command once on a real repository before the script is considered verified.
 
 Each JSON file is capped at 4 MiB. The Git reader uses a local checkout with a regular `.git` directory. It rejects indirect Git metadata such as linked Git directories, metadata symlinks and Git config includes. Only local commits and tags available at report time can supply Git proof. A missing tag or merge object leaves the corresponding release unverified.
 
