@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "project": "fixture",
+  "exported_at": "2026-11-23T22:44:16.503488+00:00",
+  "reports": [
+    {
+      "ref": "reports/target/audit-intent-2026-11-23.f13781ef7ffe40418718ad699f818fa7.md",
+      "recorded_at": "2026-11-23T17:44:14-05:00",
+      "outcome": "ok",
+      "task": "fixture/0042"
+    },
+    {
+      "ref": "reports/target/audit-intent-2026-11-23.9e957c8428224d5180f262621e99fa72.md",
+      "recorded_at": "2026-11-23T17:44:15-05:00",
+      "outcome": "error",
+      "task": "fixture/0042"
+    }
+  ]
+}
