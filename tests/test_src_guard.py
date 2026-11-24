@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "etat_major"
-SUBPROCESS_ALLOWED = frozenset({"evidence_git", "floorplan_runner", "renames", "trail_runner"})
+SUBPROCESS_ALLOWED = frozenset(
+    {"evidence_git.py", "floorplan_runner.py", "renames.py", "trail_runner.py"}
+)
 BANNED_MODULES = (
     "socket",
     "urllib.request",
@@ -51,10 +53,40 @@ def _import_violations(node: ast.Import | ast.ImportFrom, module: str) -> list[s
     return sorted(set(found))
 
 
-def _call_violations(node: ast.Call, module: str) -> list[str]:
+def _is_banned_call(name: str) -> bool:
+    return name in BANNED_CALLS or name.startswith(BANNED_CALL_PREFIXES)
+
+
+def _from_import_violations(node: ast.ImportFrom, module: str) -> list[str]:
+    source = node.module or ""
+    return [
+        f"{module}: import of {source}.{alias.name}"
+        for alias in node.names
+        if _is_banned_call(f"{source}.{alias.name}")
+    ]
+
+
+def _os_aliases(tree: ast.AST) -> frozenset[str]:
+    found = {"os"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.update(
+                alias.asname for alias in node.names if alias.name == "os" and alias.asname
+            )
+    return frozenset(found)
+
+
+def _call_violations(node: ast.Call, module: str, aliases: frozenset[str]) -> list[str]:
     name = _dotted(node.func)
-    banned = name in BANNED_CALLS or name.startswith(BANNED_CALL_PREFIXES)
-    return [f"{module}: call to {name}"] if banned else []
+    root, _, rest = name.partition(".")
+    if rest and root in aliases:
+        name = f"os.{rest}"
+    return [f"{module}: call to {name}"] if _is_banned_call(name) else []
+
+
+def _attribute_violations(node: ast.Attribute, module: str) -> list[str]:
+    name = _dotted(node)
+    return [f"{module}: use of urllib.request"] if _under(name, "urllib.request") else []
 
 
 def _constant_violations(node: ast.Constant, module: str) -> list[str]:
@@ -76,11 +108,16 @@ def check_source(source: str, module: str) -> list[str]:
     except SyntaxError:
         return [f"{module}: source does not parse"]
     found = []
+    aliases = _os_aliases(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import | ast.ImportFrom):
             found.extend(_import_violations(node, module))
+            if isinstance(node, ast.ImportFrom):
+                found.extend(_from_import_violations(node, module))
         elif isinstance(node, ast.Call):
-            found.extend(_call_violations(node, module))
+            found.extend(_call_violations(node, module, aliases))
+        elif isinstance(node, ast.Attribute):
+            found.extend(_attribute_violations(node, module))
         elif isinstance(node, ast.Constant):
             found.extend(_constant_violations(node, module))
     return found
@@ -88,7 +125,7 @@ def check_source(source: str, module: str) -> list[str]:
 
 @pytest.mark.parametrize("path", sorted(SRC.rglob("*.py")), ids=lambda p: p.name)
 def test_current_src_has_no_violations(path):
-    assert check_source(path.read_text(encoding="utf-8"), path.stem) == []
+    assert check_source(path.read_text(encoding="utf-8"), path.relative_to(SRC).as_posix()) == []
 
 
 def test_src_is_not_empty():
@@ -134,12 +171,12 @@ def test_allow_listed_module_may_import_subprocess(module):
 
 
 def test_allow_list_does_not_cover_other_banned_modules():
-    assert check_source("import socket", "renames")
-    assert check_source("import os\nos.system('x')", "trail_runner")
+    assert check_source("import socket", "renames.py")
+    assert check_source("import os\nos.system('x')", "trail_runner.py")
 
 
 def test_a_fifth_subprocess_importer_fails():
-    assert check_source("import subprocess", "planning_view")
+    assert check_source("import subprocess", "planning_view.py")
 
 
 @pytest.mark.parametrize(
@@ -163,5 +200,38 @@ def test_unparseable_source_is_reported():
 
 
 def test_subprocess_allow_list_names_real_modules():
-    existing = {path.stem for path in SRC.rglob("*.py")}
+    existing = {path.relative_to(SRC).as_posix() for path in SRC.rglob("*.py")}
     assert SUBPROCESS_ALLOWED <= existing
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import os as o\no.system('x')",
+        "import os as o\no.popen('x')",
+        "import os as o\no.execv('x', [])",
+        "import os as o\no.spawnl(0, 'x')",
+        "from os import system\nsystem('x')",
+        "from os import popen as p\np('x')",
+        "from os import execv",
+        "from os import spawnl, getcwd",
+        "from os import posix_spawn",
+        "from asyncio import create_subprocess_exec",
+    ],
+    ids=lambda s: s.replace("\n", "; "),
+)
+def test_aliased_process_calls_are_reported(source):
+    assert check_source(source, "evidence_records.py")
+
+
+def test_attribute_access_to_urllib_request_is_reported():
+    assert check_source("import urllib\nurllib.request.urlopen('x')", "evidence_records.py")
+
+
+def test_os_helpers_that_run_nothing_are_allowed():
+    assert check_source("from os import getcwd, path\nimport os as o\no.getcwd()", "x.py") == []
+
+
+def test_allow_list_is_keyed_on_the_relative_path():
+    assert check_source("import subprocess", "renames.py") == []
+    assert check_source("import subprocess", "sub/renames.py")
