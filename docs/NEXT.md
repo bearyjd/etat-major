@@ -23,7 +23,7 @@ An optional Codeman theme is post-MVP.
 ## Understand and indexing
 
 - Implement the [Understand MVP](UNDERSTAND-MVP.md) over the reviewed component model and recorded artifacts. The view uses a read-only inspector and can be built independently of the Alto rollout.
-- Add a real-data smoke script to compare command results with recorded expectations on a real repository.
+- Use the [real-data smoke runner](REAL-DATA-SMOKE.md) to compare CLI results with pinned expectations for a repository and its recorded artifacts.
 
 **Subprocess exception for the runner wrappers only.** Each dedicated wrapper
 may invoke its specified tool with fixed arguments, no shell, a scrubbed

@@ -1,0 +1,27 @@
+{
+  "trace": {"status": 1, "data.decisions.#": 2, "data.research.#": 1},
+  "index": {
+    "status": 0, "data.architecture.components.#": 2, "data.architecture.files.#": 716,
+    "data.symbols.nodes.#": 5498, "data.symbols.edges.#": 14386,
+    "data.indexers.0.schema": "floorplan/graph@1", "data.indexers.1.version": "0.30.5",
+    "data.architecture.files.0.provenance": "verified"
+  },
+  "decisions list": {"status": 0, "data.decisions.#": 2, "data.decisions.1.status": "rejected"},
+  "research brief": {"status": 0, "data.written": true},
+  "research import": {"status": 0, "data.status": "unreviewed", "data.provenance": "ai-generated"},
+  "gradle deps": {"status": 0, "data.modules.#": 37, "data.edges.#": 106, "data.implicit_edges.#": 48},
+  "gradle drift": {
+    "status": 1, "data.summary.declared_and_used": 100, "data.summary.declared_implicit": 37,
+    "data.summary.import_backed": 1, "data.summary.unused_candidate": 5
+  },
+  "components validate": {"status": 0, "issues.#": 0},
+  "components map": {"status": 0, "data.component": "core.network"},
+  "components coverage": {"status": 0, "data.owned.#": 716, "data.unowned.#": 0},
+  "components seed": {"status": 0, "data.components.#": 41},
+  "progress": {"status": 0, "revision": "5188ca6725007bd663ce0eaa5ad2de9e460d26a0", "data.tasks.#": 2, "data.features.#": 1},
+  "workspace validate": {"status": 0, "issues.#": 0},
+  "serve": {"status": 0, "data.project.project": "netlens", "data.planning": 200, "data.fleet": 200},
+  "floorplan scan": {"status": 0, "data.lines.0": "Recorded floorplan/.cache/scan.json"},
+  "floorplan build": {"status": 0, "data.lines.0": "Recorded floorplan/graph.json"},
+  "floorplan refresh": {"status": 0, "data.lines.1": "2 of 2 Floorplan node IDs retained"}
+}
