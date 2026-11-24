@@ -16,15 +16,15 @@ gh pr list --state all --limit 1000 --json number,title,body,state,isDraft,merge
 gh release list --limit 1000 --json tagName,publishedAt > releases.json
 ```
 
-### Capture script (approved design, not yet implemented)
+### Capture script (proposed design, not yet implemented)
 
 `scripts/record_github.py` would run the two commands above for the maintainer and write `prs.json` and `releases.json`. It is not part of `src/` and the report command never calls it. The permitted behavior is bounded by the capture-script exception in `AGENTS.md`.
 
 - **Arguments.** The two `gh` argument lists above, unchanged, with no `--repo`, no shell and no extra fields. The script refuses to run if `GH_HOST` or `GH_REPO` is set.
-- **Environment.** Only `PATH`, `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `GH_CONFIG_DIR`, `LANG` and `LC_ALL` reach `gh`. `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` are never passed. Authentication comes from `gh`'s own login; token-only environments are unsupported and fail with a clear message.
-- **Truncation.** `--limit 1000` is a hard bound. A result with exactly 1000 entries prints a truncation warning, because older pull requests or releases may be missing.
+- **Environment.** Only `PATH`, `HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `GH_CONFIG_DIR`, `LANG` and `LC_ALL` reach `gh`. `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` are never passed. Authentication comes from `gh`'s own login (config directory or keyring); the script never opens, copies or logs that credential. The script also sets `GH_PROMPT_DISABLED=1`, `GH_NO_UPDATE_NOTIFIER=1`, `NO_COLOR=1` and `GH_PAGER=cat`, closes stdin and takes stdout only, treating stderr as untrusted. Token-only environments, and users behind a proxy that `gh` needs from the environment, are unsupported and fail with a clear message.
+- **Truncation.** `--limit 1000` is a hard bound. A result with 1000 or more entries prints a truncation warning to stderr without failing the run, because older pull requests or releases may be missing.
 - **Enrichment deferred.** The script does not add `headRefOid` or `commitOid`. The recorded standard rollup stays scoped to the PR head, so the `tested` rung remains conservative by design.
-- **Output.** Output is capped at 4 MiB per file, must parse as a JSON array without duplicate keys or `NaN`, and is written atomically into a directory the human names without following symlinks. On any failure no file is created. Errors name the file and field and print no traceback, remote, absolute path or token.
+- **Output.** Output is capped at 4 MiB per file. If it exceeds the cap the script fails and records nothing; it never truncates JSON. It must parse as a JSON array without duplicate keys or `NaN` using the same strict parser the loaders use, so anything the script accepts the loaders accept. The bytes are validated, never interpreted or echoed, and are written atomically into a directory the human names without following symlinks. On any failure no file is created. Errors name the file and field and print no traceback, remote, absolute path or token.
 - **Testing.** Tests use a fake `gh`. The maintainer runs the real command once on a real repository before the script is considered verified.
 
 Each JSON file is capped at 4 MiB. The Git reader uses a local checkout with a regular `.git` directory. It rejects indirect Git metadata such as linked Git directories, metadata symlinks and Git config includes. Only local commits and tags available at report time can supply Git proof. A missing tag or merge object leaves the corresponding release unverified.
