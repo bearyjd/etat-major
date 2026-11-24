@@ -76,6 +76,25 @@ def test_write_new_text_oversize_names_the_file(tmp_path):
         write_new_text(tmp_path / "out.md", "x" * (1024 * 1024 + 1))
 
 
+def test_write_new_text_limit_bytes_raises_the_cap_and_names_nothing_else(tmp_path):
+    from etat_major.localfiles import write_new_text
+
+    big = "x" * (2 * 1024 * 1024)
+    write_new_text(tmp_path / "big.json", big, limit_bytes=4 * 1024 * 1024)
+    assert (tmp_path / "big.json").read_text() == big
+    with pytest.raises(ValueError, match=r"too\.json.*file exceeds the 1 MiB limit"):
+        write_new_text(tmp_path / "too.json", big)
+    assert not (tmp_path / "too.json").exists()
+
+
+def test_write_new_text_limit_bytes_rejects_over_the_given_cap(tmp_path):
+    from etat_major.localfiles import write_new_text
+
+    with pytest.raises(ValueError, match=r"cap\.json.*file exceeds the 2 MiB limit"):
+        write_new_text(tmp_path / "cap.json", "x" * (2 * 1024 * 1024 + 1), limit_bytes=2 << 20)
+    assert not (tmp_path / "cap.json").exists()
+
+
 def test_smoke_doc_labels_size_and_latency_measurements_not_run() -> None:
     doc = (Path(__file__).resolve().parents[1] / "docs" / "REAL-DATA-SMOKE.md").read_text(
         encoding="utf-8"
