@@ -1,8 +1,11 @@
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from etat_major import understand
+from etat_major.trail import Symbol
 from test_planning_web import Page
 from test_planning_web import client_for as client_for
 from test_planning_web import planning_workspace as planning_workspace
@@ -341,3 +344,69 @@ def test_missing_invalid_with_revisions_are_unknown(client_for, planning_workspa
     html = client.get("/understand").text
     assert "Floorplan: missing · unknown" in html and "Trail: invalid · unknown" in html
     assert "./understand" in Page(client.get("/understand?component=gone").text).hrefs
+
+
+MVP = Path(__file__).parents[1] / "docs/UNDERSTAND-MVP.md"
+
+
+def _symbol(path="a.kt"):
+    return Symbol("key", "method", path, 1, 2)
+
+
+def _doc_vocabulary():
+    text = " ".join(MVP.read_text(encoding="utf-8").split())
+    pattern = r"Report each artifact as ([a-z, ]+?) with freshness shown.*?as ([a-z, ]+?)\."
+    match = re.search(pattern, text)
+    words = [set(re.findall(r"[a-z]+", group)) - {"or"} for group in match.groups()]
+    return words[0], words[1]
+
+
+def test_doc_vocabulary_is_parsed():
+    assert _doc_vocabulary() == (
+        {"present", "missing", "invalid"},
+        {"fresh", "stale", "unknown"},
+    )
+
+
+@pytest.mark.parametrize("source", ["recorded", "missing", "invalid"])
+@pytest.mark.parametrize("digest", [None, "d"])
+def test_emitted_status_stays_in_documented_vocabulary(source, digest):
+    status, fresh = _doc_vocabulary()
+    artifact = understand._artifact("Trail", source, "a" * 40, "a" * 40, digest)
+    assert artifact.status in status and artifact.freshness in fresh
+
+
+@pytest.mark.parametrize(
+    ("recorded", "source", "expected"),
+    [
+        ("a" * 40, "a" * 40, "fresh"),
+        ("a" * 40, "b" * 40, "stale"),
+        ("a" * 40, None, "unknown"),
+        (None, "a" * 40, "unknown"),
+        (None, None, "unknown"),
+    ],
+)
+def test_freshness_matrix(recorded, source, expected):
+    assert understand._artifact("Trail", "recorded", recorded, source, "d").freshness == expected
+
+
+def test_missing_artifact_is_unknown_without_revision():
+    artifact = understand._artifact("Trail", "missing", "a" * 40, "a" * 40, None)
+    assert (artifact.status, artifact.freshness, artifact.revision) == ("missing", "unknown", None)
+
+
+@pytest.mark.parametrize("freshness", ["stale", "unknown"])
+def test_excerpt_withheld_unless_fresh(tmp_path, freshness):
+    text, reason = understand.excerpt(tmp_path, freshness, _symbol())
+    assert text == "" and reason.startswith("source.revision:")
+
+
+def test_excerpt_withheld_without_root():
+    text, reason = understand.excerpt(None, "fresh", _symbol())
+    assert text == "" and reason.startswith("source.root:")
+
+
+def test_excerpt_returned_when_fresh_and_configured(tmp_path):
+    (tmp_path / "a.kt").write_text("one\ntwo\n")
+    text, note = understand.excerpt(tmp_path, "fresh", _symbol(path="a.kt"))
+    assert text == "one\ntwo" and note.startswith("Lines 1")

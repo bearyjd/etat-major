@@ -38,3 +38,19 @@ def test_branch_task_bounds_lengths_and_repetitive_input():
     assert branch_task(branch, known) is None
     assert monotonic() - start < 1
     assert branch_task("task/a-1-a-1-end", known) == "a/1"
+
+
+def test_oversize_error_names_file_and_limit(tmp_path):
+    from etat_major.localfiles import read_text_kib
+
+    path = tmp_path / "wiring.json"
+    path.write_text("x" * 2048)
+    with pytest.raises(ValueError, match=r"wiring\.json.*file exceeds the 1 KiB limit"):
+        read_text_kib(path, 1)
+
+
+def test_oversize_recording_names_file_and_field(tmp_path):
+    path = tmp_path / "huge-graph.json"
+    path.write_text(" " * (64 * 1024 * 1024 + 1))
+    with pytest.raises(TaskFileError, match=r"huge-graph\.json.*64 MiB"):
+        load_graph(path)

@@ -90,7 +90,7 @@ def _read_text(
     path: Path, limit: int, label: str, dir_fd: int | None, normalize_newlines: bool = True
 ) -> str:
     target = path if dir_fd is None else path.name
-    size_error = f"file exceeds the {label} limit"
+    size_error = f"{path.name}: file exceeds the {label} limit"
     _check_file(os.stat(target, dir_fd=dir_fd, follow_symlinks=False), limit, size_error)
     fd = os.open(target, os.O_RDONLY | NOFOLLOW, dir_fd=dir_fd)
     with os.fdopen(fd, "rb") as stream:
