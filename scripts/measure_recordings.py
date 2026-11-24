@@ -7,7 +7,7 @@ from pathlib import Path
 from statistics import median
 from time import perf_counter
 
-from etat_major.floorplan import load_architecture
+from etat_major.floorplan import _read_json, load_architecture
 from etat_major.repo_index import load_repo_index
 from etat_major.trail import load_wiring
 
@@ -15,12 +15,7 @@ DEFAULT_RUNS = 5
 
 
 def _kind(path: Path) -> str:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        raise ValueError(f"{path.name}: cannot read file (missing or not valid JSON)") from None
-    if not isinstance(data, dict):
-        raise ValueError(f"{path.name}: JSON: expected an object")
+    data, _ = _read_json(path)
     return "floorplan" if "schema" in data else "trail"
 
 
@@ -87,7 +82,7 @@ def main(argv=None) -> int:
         parser.error("--runs must be at least 1")
     try:
         report = measure(args.recordings, args.runs)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError, MemoryError) as exc:
         message = str(exc)
         print(
             message if isinstance(exc, ValueError) else f"error: {exc.__class__.__name__}",
