@@ -24,6 +24,7 @@ from etat_major.floorplan_runner_files import (
 from etat_major.floorplan_runner_files import (
     relative_file as _relative,
 )
+from etat_major.git_hardening import config_environment
 from etat_major.localfiles import open_directory, read_text
 from etat_major.taskfile import TaskFileError
 from etat_major.text_safety import safe
@@ -213,6 +214,7 @@ def _environment(copy: Path, repository: Path) -> dict[str, str]:
         "GIT_NO_LAZY_FETCH": "1",
         "GIT_OPTIONAL_LOCKS": "0",
         "GIT_TERMINAL_PROMPT": "0",
+        **config_environment(),
     }
 
 
