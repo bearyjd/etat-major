@@ -13,8 +13,9 @@ import secrets
 import signal
 import subprocess
 import sys
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
+import threading
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from threading import Event, Timer
 from urllib.parse import urlsplit
@@ -27,7 +28,7 @@ from etat_major.text_safety import safe
 CAP = 4 * 1024 * 1024
 LIMIT = 1000
 TIMEOUT = 60.0
-REPO_NAME = re.compile(r"[\w.-]+/[\w.-]+")
+REPO_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", re.ASCII)
 ALLOWED = (
     "PATH", "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
     "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "GH_CONFIG_DIR", "LANG", "LC_ALL",
@@ -55,6 +56,11 @@ TARGETS = {"prs.json": (PR_ARGS, load_prs), "releases.json": (RELEASE_ARGS, load
 
 class RecordError(Exception):
     """A refusal or failure, worded without remotes, absolute paths or tokens."""
+
+
+def _valid_repo_name(name: str) -> bool:
+    parts = name.split("/")
+    return bool(REPO_NAME.fullmatch(name)) and all(part not in (".", "..") for part in parts)
 
 
 def kill_group(proc: subprocess.Popen) -> None:
@@ -118,7 +124,8 @@ def run_gh(
         status = proc.wait()
     finally:
         timer.cancel()
-        kill_group(proc)
+        if proc.returncode is None:
+            kill_group(proc)
         proc.wait()
         if proc.stdout:
             proc.stdout.close()
@@ -135,7 +142,7 @@ def describe_target(raw: bytes) -> tuple[str, str]:
     try:
         info = json.loads(raw)
         url, name = info["url"], info["nameWithOwner"]
-        if not (isinstance(url, str) and isinstance(name, str) and REPO_NAME.fullmatch(name)):
+        if not (isinstance(url, str) and isinstance(name, str) and _valid_repo_name(name)):
             raise ValueError("unexpected repository description")
         return urlsplit(url).hostname or "", name
     except (ValueError, KeyError, TypeError, RecursionError):
@@ -223,6 +230,24 @@ def check_arguments(
         raise RecordError(f"{clash[0]} already exists in the output directory")
 
 
+@contextmanager
+def interrupts_as_keyboard_interrupt() -> Iterator[None]:
+    """Turn SIGTERM and SIGHUP into KeyboardInterrupt so the cleanup paths run."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+
+    def raise_interrupt(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt
+
+    previous = {sig: signal.signal(sig, raise_interrupt) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    try:
+        yield
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -238,8 +263,9 @@ def main(
     environ = os.environ if environ is None else environ
     tty = sys.stdin.isatty() if interactive is None else interactive
     try:
-        check_arguments(args.checkout, args.out, environ, tty)
-        record(args.checkout.resolve(), args.out, environ, confirm, timeout)
+        with interrupts_as_keyboard_interrupt():
+            check_arguments(args.checkout, args.out, environ, tty)
+            record(args.checkout.resolve(), args.out, environ, confirm, timeout)
     except RecordError as exc:
         print(f"record_github: {exc}", file=sys.stderr)
         return 2

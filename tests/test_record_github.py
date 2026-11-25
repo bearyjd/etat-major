@@ -2,6 +2,7 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import textwrap
@@ -105,7 +106,7 @@ class Setup:
         def confirm(_prompt: str) -> str:
             if isinstance(answer, BaseException):
                 raise answer
-            return answer
+            return answer() if callable(answer) else answer
 
         code = script["main"](
             [str(self.checkout), str(self.out)],
@@ -463,3 +464,51 @@ def test_interrupt_between_the_two_files_removes_the_first(script, setup, capsys
     assert code == 2
     assert "interrupted; nothing was written" in err and "Traceback" not in err
     assert s.written() == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["../..", "./.", "a/..", "../b", "\u0663/\u0664", "\u00e9/b", "a/b\n", "a b/c", "/", "a/"],
+)
+def test_the_target_name_must_be_ascii_owner_slash_repo(script, name):
+    raw = json.dumps({"url": "https://github.com/x/y", "nameWithOwner": name}).encode()
+    with pytest.raises(script["RecordError"], match="unexpected output"):
+        script["describe_target"](raw)
+
+
+def test_ordinary_repository_names_are_accepted(script):
+    raw = json.dumps({"url": "https://github.com/o/r", "nameWithOwner": "octo-1/hello_w.0rld"})
+    assert script["describe_target"](raw.encode()) == ("github.com", "octo-1/hello_w.0rld")
+
+
+def test_a_reaped_gh_is_not_killed_again(script, setup, capsys, monkeypatch):
+    calls = []
+    real = script["kill_group"]
+    monkeypatch.setitem(
+        script["run_gh"].__globals__,
+        "kill_group",
+        lambda proc: (calls.append(proc.pid), real(proc)),
+    )
+    s = setup()
+    code, _, err = s.run(script, capsys)
+    assert code == 0, err
+    assert calls == []
+
+
+def test_termination_signals_become_an_interrupt_and_are_restored(script, setup, capsys):
+    before = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    seen = {}
+
+    def inspect_handlers():
+        for sig in before:
+            seen[sig] = signal.getsignal(sig)
+        return "no"
+
+    s = setup()
+    code, _, _ = s.run(script, capsys, answer=inspect_handlers)
+    assert code == 2
+    for sig, handler in seen.items():
+        assert callable(handler) and handler is not before[sig]
+        with pytest.raises(KeyboardInterrupt):
+            handler(sig, None)
+    assert {sig: signal.getsignal(sig) for sig in before} == before
