@@ -95,6 +95,9 @@ A bad recorded input, such as an unreadable `--graph`, can still exit 0: the
 problem is listed in the payload's `issues` instead. Check `issues` before
 trusting the data.
 
+`export understand --json` is specified, not yet implemented: see the
+[Understand export contract](understand-export.md).
+
 ## Stability and input handling
 
 Object keys are sorted. Arrays follow the command's stable order, including
