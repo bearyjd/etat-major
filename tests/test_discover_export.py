@@ -118,3 +118,28 @@ def test_export_requires_json_flag(workspace_dir, capsys):
     except SystemExit as exc:
         assert exc.code == 2
     assert "--json" in capsys.readouterr().err
+
+
+def test_export_sanitizes_text_and_source_urls(workspace_dir, capsys):
+    (workspace_dir / "decisions/0099-leaky.md").write_text(
+        "---\nid: 0099\nquestion: Is /home/x/secret ok?\nstatus: rejected\n"
+        "decided_on: 2026-11-21\ndecided_by: human\nchosen: Use git@host:repo instead.\n"
+        "rationale: See /home/x/secret and git@host:repo.\n---\n"
+    )
+    leaky = "https://user:pw@example.org/thread/9?token=abc"
+    (workspace_dir / "research/0098-leaky.md").write_text(
+        "---\nid: 0098\ntitle: Notes from /home/x/secret\nquestion: Where is git@host:repo?\n"
+        "status: reviewed\nprovenance: ai-generated\n"
+        f"sources:\n  - url: {leaky}\n    date: 2026-09-14\n    kind: reddit\n"
+        "    evidence: firsthand\n"
+        f"findings:\n  - id: f1\n    text: Found in /home/x/secret\n    source: {leaky}\n"
+        "    confidence: medium\n---\n"
+    )
+    out = _export(workspace_dir, capsys)
+    payload = json.loads(out)
+    assert "[redacted location]" in out
+    for raw in ("/home/x/secret", "git@host:repo", "token=abc", "user:pw"):
+        assert raw not in out
+    research = next(r for r in payload["research"] if r["id"] == "0098")
+    assert research["findings"][0]["source"] == "https://example.org/thread/9"
+    assert any(d["id"] == "0099" for d in payload["decisions"])

@@ -98,9 +98,18 @@ trusting the data.
 ## `export discover --json`
 
 `etat-major export discover --json --workspace DIR --project P` prints the
-Discover view (research and decisions) to stdout. It takes the same input
-flags as `export planning`, needs no web extra, and `--json` is required.
-Errors name `export discover`.
+Discover view (research and decisions) to stdout. It needs no web extra and
+`--json` is required. Errors name `export discover`.
+
+Only `--workspace` and `--project` affect the output. The parser accepts the
+other `export planning` input flags (`--graph`, `--trail`, `--repo`, `--prs`,
+`--releases`, `--meute` and so on), but they are loaded and ignored for
+Discover, and problems with them are not reported because the payload has no
+`issues` list. `issue_count` counts only research and decision records that
+failed to load; run `workspace validate` for the details. As in the `/discover`
+page of the web app, the project must have planning records (features, tasks,
+milestones or components); a project with only research and decisions exits 2
+with `no records for the configured project`.
 
 The document is a bare payload with the top-level marker
 `"schema": "etat-major/discover@1"` and `"version": 1`, described by the closed
