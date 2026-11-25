@@ -82,3 +82,12 @@ def test_export_runs_without_web_packages(workspace_dir):
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)  # noqa: S603
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["project"]
+
+
+def test_export_errors_name_export_not_serve(workspace_dir, capsys):
+    args = export_args(workspace_dir)
+    args[args.index(PROJECT)] = "nope"
+    assert main(args) == 2
+    error = capsys.readouterr().err
+    assert "export planning: field 'project'" in error
+    assert "serve" not in error

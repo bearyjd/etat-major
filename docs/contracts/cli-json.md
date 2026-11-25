@@ -67,7 +67,7 @@ recorded paths and is 0 percent when the Floorplan file list is empty.
 `etat-major export planning --json --workspace DIR --project P` prints the
 Planning payload to stdout. It accepts the same input flags as `serve`
 (except `--port`) and needs no web extra: it does not import fastapi,
-starlette or uvicorn. `--json` is required and is the only format.
+starlette or uvicorn. `--json` is required and is the only supported format.
 
 The document is the bare payload, not the `data`/`issues` envelope above, and
 carries no `schema` field. It is the same object that `serve` returns at
@@ -78,9 +78,12 @@ Top-level keys include `project`, `features`, `components`, `tasks`,
 sorted, output is indented two spaces and ends with one newline, so the same
 inputs produce identical bytes.
 
-An unreadable or invalid input prints a file-and-field message on stderr,
-leaves stdout empty and exits 2, with no traceback. A missing `--json` is an
-argument error and exits 2.
+A bad workspace or project prints a file-and-field message on stderr, leaves
+stdout empty and exits 2, with no traceback; the message names
+`export planning`. A missing `--json` is an argument error and also exits 2.
+A bad recorded input, such as an unreadable `--graph`, can still exit 0: the
+problem is listed in the payload's `issues` instead. Check `issues` before
+trusting the data.
 
 ## Stability and input handling
 
