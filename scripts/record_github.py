@@ -169,9 +169,11 @@ def publish(recordings: Mapping[str, bytes], directory: int) -> None:
         for name, data in recordings.items():
             write_new_text(Path(name), data.decode("utf-8"), dir_fd=directory, limit_bytes=CAP)
             done.append(name)
-    except OSError:
+    except (OSError, KeyboardInterrupt) as exc:
         for name in done:
             os.unlink(name, dir_fd=directory)
+        if isinstance(exc, KeyboardInterrupt):
+            raise
         raise RecordError("could not create the output files") from None
 
 

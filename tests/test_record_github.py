@@ -447,3 +447,19 @@ def test_an_unwritable_output_directory_reports_the_check_file(script, setup, ca
     assert code == 2 and "cannot create the check file" in err
     assert "Traceback" not in err and str(s.out.parent) not in err
     assert s.written() == []
+
+
+def test_interrupt_between_the_two_files_removes_the_first(script, setup, capsys, monkeypatch):
+    real = script["write_new_text"]
+
+    def interrupting(path, text, **kwargs):
+        if path.name == "releases.json":
+            raise KeyboardInterrupt
+        return real(path, text, **kwargs)
+
+    monkeypatch.setitem(script["publish"].__globals__, "write_new_text", interrupting)
+    s = setup()
+    code, _, err = s.run(script, capsys)
+    assert code == 2
+    assert "interrupted; nothing was written" in err and "Traceback" not in err
+    assert s.written() == []
