@@ -67,3 +67,12 @@ def test_schema_rejects_unknown_task_state_and_missing_marker(workspace_dir, cap
     bad_state = {**payload, "tasks": [{**payload["tasks"][0], "state": "wip"}]}
     assert _errors(bad_state)
     assert _errors({k: v for k, v in payload.items() if k != "schema"})
+
+
+@pytest.mark.parametrize("state", ["draft", "ready", "in-progress", "review", "done", "blocked"])
+def test_every_derived_board_column_validates(workspace_dir, capsys, state):
+    args = ["export", "planning", "--json", "--workspace", str(workspace_dir)]
+    assert main([*args, "--project", "netlens"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    sample = {**payload, "tasks": [{**payload["tasks"][0], "state": state}]}
+    assert _errors(sample) == []

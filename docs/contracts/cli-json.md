@@ -74,9 +74,14 @@ carries the top-level marker `"schema": "etat-major/planning@1"`, described by
 [`planning.schema.json`](schemas/planning.schema.json) (JSON Schema Draft
 2020-12). The marker is an additive change: `version` stays `1` and every
 existing key is unchanged, so clients that ignore unknown keys are unaffected.
-Task `state` is the derived board column (`draft`, `ready`, `in-progress`,
-`review`, `done`, `blocked`), not the stored status. It is the same object that `serve` returns at
-`/project.json`, produced by one shared function, so the two cannot drift.
+It is the same object that `serve` returns at `/project.json`, produced by one
+shared function, so the two cannot drift. Task `state` is the derived board
+column (`draft`, `ready`, `in-progress`, `review`, `done`, `blocked`), not the
+stored status.
+
+The schema is strict (`additionalProperties: false`), so any new key needs a
+schema update or an `@2` marker. A client must treat `schema` as the
+compatibility gate and reject values it does not know.
 Top-level keys include `schema`, `project`, `features`, `components`, `tasks`,
 `sources`, `issues` and `version`. The `meute`, `manual_review` and
 `execution_links` keys appear only when those inputs are supplied. Keys are
