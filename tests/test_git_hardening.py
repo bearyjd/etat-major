@@ -122,3 +122,98 @@ def test_tool_runners_pass_hardened_git_config(tmp_path):
         assert pairs["core.fsmonitor"] == "false"
         assert pairs["core.hooksPath"] == os.devnull
         assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def _git_out(repo: Path, *args: str, stdin: bytes | None = None) -> str:
+    result = subprocess.run(  # noqa: S603 - local test repository only
+        ["/usr/bin/git", "-c", "user.name=T", "-c", "user.email=t@example.invalid", *args],
+        cwd=repo,
+        env={**BASE_ENV, "GIT_CONFIG_GLOBAL": os.devnull},
+        input=stdin,
+        capture_output=True,
+        check=True,
+    )
+    return result.stdout.decode().strip()
+
+
+@pytest.fixture
+def bare_attack(tmp_path):
+    """A repository whose config runs a marker script through every bare-mode vector."""
+    repo = tmp_path / "attack"
+    repo.mkdir()
+    _git_out(repo, "init", "-q", "--template=")
+    (repo / "old.txt").write_text("".join(f"line {n}\n" for n in range(20)))
+    (repo / ".gitattributes").write_text("*.txt diff=evil filter=evil\n")
+    _git_out(repo, "add", "-A")
+    _git_out(repo, "commit", "-qm", "one")
+    (repo / "old.txt").rename(repo / "new.txt")
+    _git_out(repo, "add", "-A")
+    _git_out(repo, "commit", "-qm", "two")
+    second = _git_out(repo, "cat-file", "commit", "HEAD")
+    head, _, message = second.partition("\n\n")
+    signature = "gpgsig -----BEGIN PGP SIGNATURE-----\n \n x\n -----END PGP SIGNATURE-----"
+    signed = f"{head}\n{signature}\n\n{message}\n"
+    oid = _git_out(repo, "hash-object", "-t", "commit", "-w", "--stdin", stdin=signed.encode())
+    _git_out(repo, "update-ref", "refs/heads/master", oid)
+    _git_out(repo, "update-ref", "refs/heads/main", oid)
+    marker = tmp_path / "marker"
+    script = _script(tmp_path / "evil.sh", marker)
+    for key in ("log.showSignature",):
+        _git_out(repo, "config", key, "true")
+    for key in ("gpg.program", "gpg.ssh.program", "gpg.x509.program", "diff.external"):
+        _git_out(repo, "config", key, str(script))
+    _git_out(repo, "config", "diff.evil.textconv", str(script))
+    _git_out(repo, "config", "filter.evil.clean", str(script))
+    _git_out(repo, "config", "filter.evil.smudge", str(script))
+    return repo, marker
+
+
+def _bare_env(repo: Path) -> dict[str, str]:
+    return {**BASE_ENV, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_DIR": str(repo / ".git")}
+
+
+def test_bare_control_runs_hostile_config(bare_attack):
+    repo, marker = bare_attack
+    env = _bare_env(repo)
+    subprocess.run(
+        ["/usr/bin/git", "--bare", "log", "-1", "--format=%H"], cwd="/", env=env, check=False
+    )  # noqa: S603
+    assert marker.exists()
+    marker.unlink()
+    subprocess.run(
+        ["/usr/bin/git", "--bare", "diff", "HEAD~1", "HEAD"], cwd="/", env=env, check=False
+    )  # noqa: S603
+    assert marker.exists()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("log", "-1", "--format=%H"),
+        ("for-each-ref", "--format=%(signature)"),
+        ("verify-commit", "HEAD"),
+        ("diff", "HEAD~1", "HEAD"),
+    ],
+)
+def test_module_alone_neutralises_bare_mode_vectors(bare_attack, args):
+    repo, marker = bare_attack
+    env = git_environment()
+    env["GIT_DIR"] = str(repo / ".git")
+    subprocess.run(  # noqa: S603 - local test repository only
+        ["/usr/bin/git", *GIT_CONFIG_ARGS, "--bare", *args], cwd="/", env=env, check=False
+    )
+    assert not marker.exists()
+
+
+def test_load_renames_runs_no_repository_program(bare_attack):
+    repo, marker = bare_attack
+    renames.load_renames(repo, "HEAD~1", "HEAD")
+    assert not marker.exists()
+
+
+def test_load_git_runs_no_repository_program(bare_attack):
+    from etat_major import evidence_git
+
+    repo, marker = bare_attack
+    evidence_git.load_git(repo, (), (), frozenset())
+    assert not marker.exists()

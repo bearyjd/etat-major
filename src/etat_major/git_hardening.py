@@ -1,7 +1,8 @@
 """One definition of how Git is run safely against a repository we do not trust.
 
 A hostile repository config can name programs (`core.fsmonitor`, `core.hooksPath`, pagers, external
-diff drivers). Every Git call in `src/` takes its environment and per-call settings from here.
+diff drivers, signature verifiers). Every Git call in `src/` takes its environment and per-call
+settings from here, so no call site has to remember extra flags.
 """
 
 import os
@@ -11,6 +12,15 @@ HARDENED_CONFIG: tuple[tuple[str, str], ...] = (
     ("core.fsmonitor", "false"),
     ("core.hooksPath", os.devnull),
     ("core.attributesFile", os.devnull),
+    ("log.showSignature", "false"),
+    ("diff.external", ""),
+    ("gpg.program", "false"),
+    ("gpg.ssh.program", "false"),
+    ("gpg.x509.program", "false"),
+    ("protocol.allow", "never"),
+    ("core.sshCommand", "false"),
+    ("core.askPass", "false"),
+    ("core.alternateRefsCommand", ""),
 )
 
 GIT_CONFIG_ARGS: tuple[str, ...] = (
