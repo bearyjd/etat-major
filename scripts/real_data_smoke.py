@@ -32,6 +32,7 @@ OPERATIONS = {
     "workspace validate": "workspace",
     "serve": "workspace project graph trail repo prs releases ?meute",
     "export planning": "workspace project graph trail repo prs releases ?meute",
+    "export discover": "workspace project graph trail repo prs releases ?meute",
     "floorplan scan": "copy source",
     "floorplan build": "copy source",
     "floorplan refresh": "copy source",
@@ -110,7 +111,7 @@ def arguments(name, args, scratch):
         return [*argv, "--out", str(scratch / "brief.md")]
     if name == "components seed":
         argv.extend(["--out", str(scratch / "seed.yaml")])
-    if name == "export planning":
+    if name.startswith("export "):
         argv.append("--json")
     elif not name.startswith("floorplan ") and name != "serve":
         argv.extend(["--format", "json"])
