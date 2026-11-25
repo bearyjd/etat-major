@@ -1,6 +1,6 @@
 """Read-only Discover view model: research and decisions, labelled and bounded."""
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 
 from etat_major.planning_issues import planning_text
@@ -9,6 +9,7 @@ from etat_major.text_safety import public_source_url
 from etat_major.trace import cite
 from etat_major.workspace import Workspace
 
+DISCOVER_SCHEMA = "etat-major/discover@1"
 MAX_QUERY = 128
 MAX_RESEARCH = 200
 MAX_DECISIONS = 200
@@ -169,3 +170,18 @@ def filter_decisions(view: DiscoverView, query: str) -> DiscoverView:
     needle = query.strip().casefold()
     rows = tuple(d for d in view.decisions if needle in _searchable(d))
     return replace(view, decisions=rows, query=query)
+
+
+def _plain(value):
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value
+
+
+def discover_payload(view: DiscoverView) -> dict:
+    """The JSON-safe Discover document shared by the CLI export (and any web route)."""
+    return {"schema": DISCOVER_SCHEMA, "version": 1, **_plain(asdict(view))}
