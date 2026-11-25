@@ -50,6 +50,7 @@ from etat_major.understand import Understand, build
 from etat_major.workspace import Issue, Workspace, feature_ref, load_workspace
 
 MEUTE_SOURCE_LABEL = "Meute reports"
+PLANNING_SCHEMA = "etat-major/planning@1"
 
 
 @dataclass(frozen=True)
@@ -448,4 +449,4 @@ def planning_payload(view: PlanningView) -> dict:
     for field_name in ("meute", "manual_review", "execution_links"):
         if payload[field_name] is None:
             payload.pop(field_name)
-    return payload
+    return {"schema": PLANNING_SCHEMA, **payload}

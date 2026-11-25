@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Planning payload (export planning --json and /project.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "project", "features", "components", "tasks", "sources", "issues"],
+  "properties": {
+    "schema": {"const": "etat-major/planning@1"},
+    "version": {"const": 1},
+    "project": {"type": "string"},
+    "features": {"type": "array", "items": {"$ref": "#/$defs/feature"}},
+    "components": {"type": "array", "items": {"$ref": "#/$defs/component"}},
+    "tasks": {"type": "array", "items": {"$ref": "#/$defs/task"}},
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/source"}},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "meute": {"$ref": "#/$defs/meute"},
+    "manual_review": {"$ref": "#/$defs/manualReview"},
+    "execution_links": {"$ref": "#/$defs/executionLinks"}
+  },
+  "$defs": {
+    "nullableString": {"type": ["string", "null"]},
+    "archRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "relation", "state", "provenance", "target"],
+      "properties": {
+        "ref": {"type": "string"},
+        "relation": {"type": "string"},
+        "state": {"type": "string"},
+        "provenance": {"type": "string"},
+        "target": {"$ref": "#/$defs/nullableString"}
+      }
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status", "state", "outcome", "tasks", "architecture"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "status": {"enum": ["idea", "researching", "proposed", "planned"]},
+        "state": {"type": "string"},
+        "outcome": {"$ref": "#/$defs/nullableString"},
+        "tasks": {"type": "array", "items": {"type": "string"}},
+        "architecture": {"type": "array", "items": {"$ref": "#/$defs/archRow"}}
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "paths", "parent", "provenance", "owner", "summary", "summary_provenance", "reviewed"],
+      "properties": {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "kind": {"type": "string"},
+        "paths": {"type": "array", "items": {"type": "string"}},
+        "parent": {"$ref": "#/$defs/nullableString"},
+        "provenance": {"type": "string"},
+        "owner": {"$ref": "#/$defs/nullableString"},
+        "summary": {"$ref": "#/$defs/nullableString"},
+        "summary_provenance": {"$ref": "#/$defs/nullableString"},
+        "reviewed": {"type": "boolean"}
+      }
+    },
+    "rung": {
+      "description": "Evidence refs for one rung, or the string unverified when there is none.",
+      "oneOf": [
+        {"const": "unverified"},
+        {"type": "array", "items": {"type": "string"}}
+      ]
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "state", "evidence"],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "state": {
+          "description": "Derived board column. Stored statuses are only draft, ready, blocked and done.",
+          "enum": ["draft", "ready", "in-progress", "review", "done", "blocked"]
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["generated", "committed", "tested", "reviewed", "merged", "shipped", "accepted"],
+          "properties": {
+            "generated": {"$ref": "#/$defs/rung"},
+            "committed": {"$ref": "#/$defs/rung"},
+            "tested": {"$ref": "#/$defs/rung"},
+            "reviewed": {"$ref": "#/$defs/rung"},
+            "merged": {"$ref": "#/$defs/rung"},
+            "shipped": {"$ref": "#/$defs/rung"},
+            "accepted": {"$ref": "#/$defs/rung"}
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "status"],
+      "properties": {
+        "label": {"type": "string"},
+        "status": {"enum": ["recorded", "missing", "invalid"]}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "field", "message", "severity", "blocking"],
+      "properties": {
+        "path": {"type": "string"},
+        "field": {"$ref": "#/$defs/nullableString"},
+        "message": {"type": "string"},
+        "severity": {"type": "string"},
+        "blocking": {"type": "boolean"}
+      }
+    },
+    "meute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "project", "exported_at", "reports"],
+      "properties": {
+        "version": {"const": 1},
+        "project": {"type": "string"},
+        "exported_at": {"type": "string"},
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref", "recorded_at", "outcome", "task", "linked"],
+            "properties": {
+              "ref": {"type": "string"},
+              "recorded_at": {"type": "string"},
+              "outcome": {"type": "string"},
+              "task": {"$ref": "#/$defs/nullableString"},
+              "linked": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "manualReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "source", "task", "ref", "recorded_at", "outcome", "commit", "report_sha256"],
+      "properties": {
+        "version": {"type": "integer"},
+        "source": {"const": "manual-anthropic-api-review"},
+        "task": {"type": "string"},
+        "ref": {"type": "string"},
+        "recorded_at": {"type": "string"},
+        "outcome": {"type": "string"},
+        "commit": {"type": "string"},
+        "report_sha256": {"type": "string"}
+      }
+    },
+    "executionLinks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "project", "links"],
+      "properties": {
+        "version": {"const": 1},
+        "project": {"type": "string"},
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["task", "kind", "ref", "seen_at", "url"],
+            "properties": {
+              "task": {"type": "string"},
+              "kind": {"enum": ["codeman-session", "meute-job"]},
+              "ref": {"type": "string"},
+              "seen_at": {"type": "string"},
+              "url": {"$ref": "#/$defs/nullableString"}
+            }
+          }
+        }
+      }
+    }
+  }
+}
