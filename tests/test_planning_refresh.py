@@ -1,4 +1,6 @@
 import os
+import time
+from datetime import datetime
 from urllib.parse import urljoin, urlsplit
 
 import pytest
@@ -46,6 +48,37 @@ def test_planning_updates_only_on_request(planning_workspace, client_for):
         assert client.get("/refresh", headers={"Host": "outside.invalid"}).status_code == 400
 
 
+def _break_source(failure, workspace, meute, tmp_path):
+    """Break one refresh source; return a callable that restores it."""
+    if failure == "recording":
+        original = meute.read_text()
+        meute.write_text("reports: [/private/location")
+        return lambda: meute.write_text(original)
+    if failure == "workspace-record":
+        feature = next((workspace / "features" / "netlens").glob("*.md"))
+        original = feature.read_text()
+        feature.write_text("---\ntitle: [/private/location\n---")
+        return lambda: feature.write_text(original)
+    moved = tmp_path / "removed-workspace"
+    workspace.rename(moved)
+    return lambda: moved.rename(workspace)
+
+
+FAILURE_REASONS = {
+    "recording": "A configured source became invalid.",
+    "workspace-record": "New record errors were found.",
+    "workspace-missing": "The configured project could not be loaded.",
+}
+
+
+def _status_timestamp(html):
+    """Read the refresh timestamp from the role=status element only."""
+    status = html.split('role="status"', 1)[1].split("</p>", 1)[0]
+    return datetime.fromisoformat(
+        status.split("<time>", 1)[1].split("</time>", 1)[0].replace("Z", "+00:00")
+    )
+
+
 @pytest.mark.parametrize("failure", ["recording", "workspace-record", "workspace-missing"])
 def test_refresh_failure_preserves_last_good_snapshot(
     planning_workspace, client_for, tmp_path, failure
@@ -56,23 +89,71 @@ def test_refresh_failure_preserves_last_good_snapshot(
         refresh = _refresh_href(client.get("/").text, "planning")[1:]
         updated = client.get(refresh)
         assert "Latest latency graph" in updated.text
-        timestamp = updated.text.split("<time>", 1)[1].split("</time>", 1)[0]
+        earlier = _status_timestamp(updated.text)
         payload = client.get("/project.json").json()
-        if failure == "recording":
-            meute.write_text("reports: [/private/location")
-        elif failure == "workspace-record":
-            feature = _retitle(planning_workspace, "Unused")
-            feature.write_text("---\ntitle: [/private/location\n---")
-        else:
-            planning_workspace.rename(tmp_path / "removed-workspace")
+        _break_source(failure, planning_workspace, meute, tmp_path)
         failed = client.get(refresh)
         assert failed.status_code == 200
-        assert "Update unavailable. Showing the previous snapshot." in failed.text
+        assert (
+            f"Update unavailable. Showing the previous snapshot. {FAILURE_REASONS[failure]}"
+            in failed.text
+        )
         assert "Latest latency graph" in failed.text and LINKED in failed.text
-        assert timestamp in failed.text
+        assert _status_timestamp(failed.text) == earlier
         assert "/private/location" not in failed.text and str(tmp_path) not in failed.text
         assert client.get("/project.json").json() == payload
         assert LINKED in client.get("/fleet").text
+
+
+@pytest.mark.parametrize("failure", ["recording", "workspace-record", "workspace-missing"])
+def test_refresh_recovers_after_failed_export(planning_workspace, client_for, tmp_path, failure):
+    new_ref = "reports/example/scan-2026-11-22.md"
+    meute = _snapshot(tmp_path / "reports.yaml")
+    with client_for(planning_workspace, "--meute", meute) as client:
+        refresh = _refresh_href(client.get("/").text, "planning")[1:]
+        loaded = client.get(refresh)
+        earlier = _status_timestamp(loaded.text)
+        payload = client.get("/project.json").json()
+        assert LINKED in loaded.text
+
+        restore = _break_source(failure, planning_workspace, meute, tmp_path)
+        failed = client.get(refresh)
+        assert (
+            f"Update unavailable. Showing the previous snapshot. {FAILURE_REASONS[failure]}"
+            in failed.text
+        )
+        assert LINKED in failed.text and _status_timestamp(failed.text) == earlier
+        assert "/private/location" not in failed.text and str(tmp_path) not in failed.text
+        assert client.get("/project.json").json() == payload
+
+        restore()
+        _snapshot(meute, ref=new_ref)
+        # Sleep so the strict timestamp comparison cannot tie on a coarse clock.
+        time.sleep(0.01)
+        recovered = client.get(refresh)
+        assert "Snapshot updated" in recovered.text
+        assert "Update unavailable" not in recovered.text
+        assert new_ref in recovered.text and LINKED not in recovered.text
+        # Duplicate exported rows collapse to one entry (dedupe, not recovery).
+        assert recovered.text.count(new_ref) == 1
+        assert _status_timestamp(recovered.text) > earlier
+        replaced = client.get("/project.json")
+        assert new_ref in replaced.text and LINKED not in replaced.text
+        assert replaced.json() != payload
+
+        # Pins that recovery replaces the retained view: a second broken refresh
+        # must keep the recovered evidence, not fall back to the pre-recovery one.
+        recovered_at = _status_timestamp(recovered.text)
+        _break_source(failure, planning_workspace, meute, tmp_path)
+        again = client.get(refresh)
+        assert (
+            f"Update unavailable. Showing the previous snapshot. {FAILURE_REASONS[failure]}"
+            in again.text
+        )
+        assert new_ref in again.text and LINKED not in again.text
+        assert "/private/location" not in again.text and str(tmp_path) not in again.text
+        assert _status_timestamp(again.text) == recovered_at
+        assert client.get("/project.json").json() == replaced.json()
 
 
 @pytest.mark.parametrize("section", ["planning", "fleet"])
