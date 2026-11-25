@@ -49,9 +49,13 @@ def _research(row):
     )
 
 
+_CITE_LABELS = {"ok": "resolves"}
+
+
 def _cite(row):
     cited = _badges(row.status, row.provenance)
-    return f"<li>{_t(row.ref)} {_badges(row.state)}{cited}</li>"
+    state = _CITE_LABELS.get(row.state, row.state)
+    return f"<li>{_t(row.ref)} {_badges(state)}{cited}</li>"
 
 
 def _decision(row):
@@ -80,7 +84,8 @@ def _banner(view, stale):
     if stale:
         notes.append("Update unavailable. Showing the previous snapshot.")
     if view.issue_count:
-        notes.append(f"{view.issue_count} records failed to load.")
+        noun = "diagnostic" if view.issue_count == 1 else "diagnostics"
+        notes.append(f"{view.issue_count} {noun} in decision or research records.")
     notes.append(
         "Research and decisions are not scoped to a project: all are shown with the project "
         "and features they link to. A citation badge only means the citation resolves, not "
@@ -114,9 +119,10 @@ def render(view: DiscoverView, *, stale: bool = False) -> str:
     research = "".join(map(_research, view.research)) or "<p>No research recorded.</p>"
     html = (
         head
+        + "<main>"
         + _decisions(view)
         + f"<section><h2>Research</h2>{research}{_omitted(view.omitted_research, 'research')}"
-        + "</section></body></html>"
+        + "</section></main></body></html>"
     )
     if len(html.encode()) >= LIMIT:
         return (
