@@ -9,16 +9,16 @@ etat-major progress --workspace workspace --repo checkout --prs prs.json --relea
 
 ## Recorded inputs
 
-Capture the inputs by hand with these GitHub CLI commands in the target repository, or with the proposed capture script described below. The report command reads the two local files offline. Supply `[]` for an empty recording.
+Capture the inputs by hand with these GitHub CLI commands in the target repository, or with the capture script described below. The report command reads the two local files offline. Supply `[]` for an empty recording.
 
 ```sh
 gh pr list --state all --limit 1000 --json number,title,body,state,isDraft,mergedAt,headRefName,reviewDecision,statusCheckRollup,mergeCommit > prs.json
 gh release list --limit 1000 --json tagName,publishedAt > releases.json
 ```
 
-### Capture script (proposed design, not yet implemented)
+### Capture script (implemented)
 
-`scripts/record_github.py` would run the two commands above for the maintainer and write `prs.json` and `releases.json`. It is not part of `src/` and the report command never calls it. The permitted behavior is bounded by the capture-script exception in `AGENTS.md`.
+`scripts/record_github.py` runs the two commands above for the maintainer and writes `prs.json` and `releases.json`. It is not part of `src/` and the report command never calls it. Its behavior is bounded by the capture-script exception in `AGENTS.md`.
 
 - **Arguments.** The two `gh` argument lists above, unchanged, with no `--repo`, no shell and no extra fields. One further fixed command, `gh repo view --json nameWithOwner,url`, is used only to show the resolved target. The script refuses to run if `GH_HOST` or `GH_REPO` is set, or if stdin is not an interactive terminal.
 - **Target.** `gh` runs with its working directory set to a checkout the human names. Its remotes decide which host and repository `gh` queries, and they are untrusted, so the script prints the resolved host and `owner/repo` and waits for the human to confirm before writing anything. It sets `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_TERMINAL_PROMPT=0` and `GIT_OPTIONAL_LOCKS=0`, resolves `gh` to an absolute path first and refuses a relative or `.` entry in `PATH`. The checkout's own Git configuration is treated as the human's, which is why the confirmation step exists. A fake `gh` tests all of this.

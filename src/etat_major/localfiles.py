@@ -104,11 +104,14 @@ def _read_text(
     return text.replace("\r\n", "\n").replace("\r", "\n") if normalize_newlines else text
 
 
-def write_new_text(path: Path, text: str, *, dir_fd: int | None = None) -> None:
+def write_new_text(
+    path: Path, text: str, *, dir_fd: int | None = None, limit_bytes: int = 1024 * 1024
+) -> None:
     """Publish a bounded UTF-8 file exclusively, after writing it in full."""
     data = text.encode("utf-8")
-    if len(data) > 1024 * 1024:
-        raise ValueError(f"{safe(path.name, limit=256)}: file exceeds the 1 MiB limit")
+    if len(data) > limit_bytes:
+        label = f"{limit_bytes // (1024 * 1024)} MiB"
+        raise ValueError(f"{safe(path.name, limit=256)}: file exceeds the {label} limit")
     if dir_fd is None:
         with open_directory(path.parent) as fd:
             _publish(path.name, data, fd)
