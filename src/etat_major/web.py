@@ -56,9 +56,10 @@ def serve_parser(parser: ArgumentParser) -> None:
 def _json_snapshot(view: PlanningView) -> JSONResponse:
     from fastapi.responses import JSONResponse
 
-    payload = asdict(replace(view, _refresh_diagnostics=None, _understand=None))
+    payload = asdict(replace(view, _refresh_diagnostics=None, _understand=None, _discover=None))
     payload.pop("_refresh_diagnostics")
     payload.pop("_understand")
+    payload.pop("_discover")
     for field in ("meute", "manual_review", "execution_links"):
         if payload[field] is None:
             payload.pop(field)

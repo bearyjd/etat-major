@@ -10,6 +10,7 @@ from typing import Literal
 
 from etat_major.components import MAX_PROJECT_ID_LENGTH, ComponentModel, load_components
 from etat_major.components_seed import PROPOSAL_KIND
+from etat_major.discover_view import DiscoverView, build_discover
 from etat_major.evidence import (
     ArchitectureIndexes,
     ProgressEvidence,
@@ -131,6 +132,7 @@ class PlanningView:
     manual_review: ManualReview | None = None
     execution_links: ExecutionLinks | None = None
     _understand: Understand | None = field(default=None, repr=False, compare=False)
+    _discover: DiscoverView | None = field(default=None, repr=False, compare=False)
     _refresh_diagnostics: RefreshDiagnostics | None = field(default=None, repr=False, compare=False)
 
 
@@ -385,6 +387,7 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
         tuple(sources),
         tuple(map(public_issue, (*workspace_issues, *issues))),
         _understand=build(inputs, model, indexes, sources, digests),
+        _discover=build_discover(ws),
         meute=_public_meute(report.meute),
         manual_review=manual,
         execution_links=execution,
