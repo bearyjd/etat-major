@@ -2,7 +2,7 @@
 
 A self-hosted visual product-development workspace. It connects **why** you are building something (research and decisions), **what exists** (how the code works), **what should exist** (features, roadmap, planned architecture) and **how you are getting there** (evidence), so you can move along **Research → Decision → Feature → Design → Code → Evidence** in either direction. It is useful with no agent running.
 
-**Status** — Design docs, a CLI over local and recorded data (`trace`, `decisions`, `index`, `research`, `gradle`, `components`, `floorplan`, `progress`, `workspace`, `serve`), and a read-only Planning and Understand web view served on loopback. Pinned, deterministic Floorplan steps run through the `floorplan` command, and a Trail runner wrapper builds in a disposable copy. Live GitHub access and the Codeman and Meute integrations are pending.
+**Status** — Design docs, a CLI over local and recorded data (`trace`, `decisions`, `index`, `research`, `gradle`, `components`, `floorplan`, `progress`, `workspace`, `serve`), and a read-only Planning and Understand web view served on loopback. Pinned, deterministic Floorplan steps run through the `floorplan` command, and a Trail runner wrapper builds in a disposable copy. Live GitHub access and the session-host and Meute integrations are pending.
 
 Direction: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.md). Plan: [docs/VISUALIZATION-ROADMAP.md](docs/VISUALIZATION-ROADMAP.md). Traceability model: [docs/TRACEABILITY.md](docs/TRACEABILITY.md). Tool choices: [docs/TOOL-EVALUATION.md](docs/TOOL-EVALUATION.md). [docs/SPEC.md](docs/SPEC.md) is the earlier agent-command-center design, partly superseded. Research notes: [docs/RESEARCH.md](docs/RESEARCH.md).
 
@@ -15,7 +15,7 @@ Direction: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.
 
 ## What it is not
 
-Not a terminal, a coding-agent runner, a scheduler or a general project-management tool. Interactive agent sessions belong to [Codeman](https://github.com/Ark0N/Codeman) and unattended runs to [Meute](https://github.com/bearyjd/meute); both are optional and separate. Architecture maps come from [Floorplan](https://github.com/haydenschmitty/floorplan) and function-level structure from Trail, both through replaceable read-only adapters. Code analysis is reused, not rebuilt. External research uses a manual ChatGPT handoff that you review. Durable intent lives in Git as Markdown, YAML and Mermaid.
+Not a terminal, a coding-agent runner, a scheduler or a general project-management tool. Interactive agent sessions belong to the session host ([Codeman](https://github.com/Ark0N/Codeman) is the legacy host) and unattended runs to [Meute](https://github.com/bearyjd/meute); both are optional and separate. Architecture maps come from [Floorplan](https://github.com/haydenschmitty/floorplan) and function-level structure from Trail, both through replaceable read-only adapters. Code analysis is reused, not rebuilt. External research uses a manual ChatGPT handoff that you review. Durable intent lives in Git as Markdown, YAML and Mermaid.
 
 ## Principles
 
