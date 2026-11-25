@@ -387,7 +387,7 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
         tuple(sources),
         tuple(map(public_issue, (*workspace_issues, *issues))),
         _understand=build(inputs, model, indexes, sources, digests),
-        _discover=build_discover(ws),
+        _discover=build_discover(ws, sum(shared.values())),
         meute=_public_meute(report.meute),
         manual_review=manual,
         execution_links=execution,

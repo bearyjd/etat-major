@@ -141,14 +141,21 @@ def _decision_row(ws: Workspace, d: Decision) -> DecisionRow:
     )
 
 
-def build_discover(ws: Workspace) -> DiscoverView:
-    errors = sum(1 for issue in ws.issues if issue.severity == "error")
+def _failed_records(ws: Workspace) -> int:
+    shared = ("decisions", "research", "decision:", "research:")
+    return sum(
+        1 for issue in ws.issues if issue.severity == "error" and issue.path.startswith(shared)
+    )
+
+
+def build_discover(ws: Workspace, filtered_issues: int = 0) -> DiscoverView:
+    """``filtered_issues`` counts decision/research issues the project filter moved out of ws."""
     return DiscoverView(
         tuple(_research_row(ws, r) for r in ws.research[:MAX_RESEARCH]),
         tuple(_decision_row(ws, d) for d in ws.decisions[:MAX_DECISIONS]),
         max(0, len(ws.research) - MAX_RESEARCH),
         max(0, len(ws.decisions) - MAX_DECISIONS),
-        errors + ws.omitted_issues,
+        _failed_records(ws) + filtered_issues,
     )
 
 

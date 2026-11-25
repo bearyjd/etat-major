@@ -81,6 +81,21 @@ Planning and Fleet share a port, the task can open in the saved Fleet tab. Give
 the views distinct service ports when preserving their separate tab identities
 matters.
 
+## Discover page
+
+`GET /discover` is a read-only page of the research and decisions in the
+workspace, including rejected decisions with their rationale and alternatives.
+Research and decisions are not scoped to a project, so all are shown with the
+project and features they link to. Each record shows its own status and
+provenance badges, and each finding is marked `sourced` or `unsourced`. Source
+URLs are plain text, never links. A citation badge only means the citation
+resolves. Review means a person edits the record file. A banner reports how
+many decision or research files failed to load, and says when a rejected
+refresh left the previous snapshot in place. `?q=` filters decisions by text
+(at most 128 printable characters; anything else gives HTTP 400). The
+Planning page links to Discover only when there is something to show. The data
+is not part of `/project.json`.
+
 ## Add the tab
 
 1. On the Codeman server machine, start the loopback service.

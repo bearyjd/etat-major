@@ -118,3 +118,11 @@ def test_planning_view_carries_private_discover_field(workspace_dir):
     assert {d.id for d in view._discover.decisions} == {"0012", "0013"}
     assert "_discover" not in repr(view)
     assert replace(view, _discover=None) == view
+
+
+def test_planning_view_counts_failed_decision_files_the_project_filter_removes(workspace_dir):
+    (workspace_dir / "decisions" / "0099-broken.md").write_text("---\nid: [oops\n---\n")
+    (workspace_dir / "research" / "0098-broken.md").write_text("---\nid: [oops\n---\n")
+    view = load_planning_view(PlanningInputs(workspace_dir, "netlens"))
+    assert view._discover.issue_count == 2
+    assert {d.id for d in view._discover.decisions} == {"0012", "0013"}

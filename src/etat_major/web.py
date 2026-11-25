@@ -117,6 +117,7 @@ class _Snapshots:
     ) -> None:
         self.startup_artifacts = view._understand.artifacts if view._understand else ()
         self.view = view
+        self.stale = False
         self.origin = origin
         self.lock = Lock()
         self.timestamp = _now() if reload is not None else None
@@ -146,7 +147,8 @@ class _Snapshots:
                 candidate = reload()
             except TaskFileError:
                 candidate = None
-            if (reason := _refresh_failure(self.view, candidate)) is not None:
+            self.stale = (reason := _refresh_failure(self.view, candidate)) is not None
+            if reason is not None:
                 self.responses = self._render(
                     f"Update unavailable. Showing the previous snapshot. {reason}"
                 )
@@ -191,6 +193,10 @@ def create_app(
     from etat_major.understand_html import register
 
     register(app, lambda: snapshots.view._understand, _HEADERS)
+
+    from etat_major.discover_html import register as register_discover
+
+    register_discover(app, lambda: snapshots.view._discover, lambda: snapshots.stale, _HEADERS)
 
     @app.get("/project.json")
     def project():

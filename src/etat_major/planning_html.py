@@ -321,6 +321,8 @@ def render(
     )
     progress = _task_section(view, planning_origin)
     inspect = '<a href="./understand">Understand</a>' if view._understand is not None else ""
+    found = view._discover is not None and view._discover.has_data
+    inspect += '<a href="./discover">Discover</a>' if found else ""
     style = _STYLE + _UPDATE_STYLE if status is not None else _STYLE
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
