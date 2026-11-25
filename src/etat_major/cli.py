@@ -10,8 +10,10 @@ import argparse
 import sys
 from dataclasses import replace
 from datetime import date
+from importlib import metadata
 from pathlib import Path
 
+from etat_major import __version__
 from etat_major.cli_json import (
     COMMAND_NAMES,
     decisions_data,
@@ -69,9 +71,18 @@ class _ArgumentParser(argparse.ArgumentParser):
         super().error(safe(detail))
 
 
+def _version() -> str:
+    """Installed package version, or the source tree's ``__version__`` when not installed."""
+    try:
+        return metadata.version("etat-major")
+    except metadata.PackageNotFoundError:
+        return __version__
+
+
 def _parser() -> argparse.ArgumentParser:
     help_options = {"epilog": EXIT_CODES, "formatter_class": argparse.RawDescriptionHelpFormatter}
     parser = _ArgumentParser(prog="etat-major", **help_options)
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_version()}")
     sub = parser.add_subparsers(dest="command", required=True)
     trace = sub.add_parser(
         "trace", help="print the research-to-code trace of a feature", **help_options
