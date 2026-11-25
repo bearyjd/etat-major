@@ -68,6 +68,15 @@ owner. Keep copyable URLs available as the fallback.
 Confirm that Planning still displays the recorded links and the native action
 is disabled.
 
+**Decision (2026-11-24).** Planning keeps its current content security policy
+(`default-src 'none'`, no script) and its copyable links. Native selection is
+tried first as a plain link to Codeman's existing `#session=<id>` deep link,
+with no script on the Planning page. A browser test of the sandboxed Web Tab
+decides whether that works: the tab's sandbox allows popups but not top
+navigation, and a popup inherits the sandbox, so it may not. A hash-pinned
+script and a nomination message handler in Codeman are not approved. Reopen that
+option only if the link test fails and the maintainer chooses it.
+
 ## PR 3 — Authenticated Meute Fleet controls
 
 **Scope.** Introduce a narrow allowlist of explicit operator actions through
@@ -90,5 +99,14 @@ browser checks.
 read-only view. Check that the private Meute link and recorded evidence
 remain available. Record any Meute action already accepted and use Meute's
 own operator controls if intervention is needed.
+
+**Decision (2026-11-24).** The one allowlisted action is `dismiss`. It records a
+single decision on one finding with a required reason and starts nothing.
+`promote`, `resolve`, run start and stop, enqueue and plan start are not
+allowlisted. A read-only check found that `promote` queues work that a scheduled
+run later picks up, and that it has no undo. Meute's per-route allowlist and
+operator authentication must be merged and deployed before État-major adds the
+top-level link. The test item is a disposable finding that is named only in a
+private record.
 
 [Planning pilot](PLANNING.md) · [Current work](NEXT.md)
