@@ -122,6 +122,9 @@ mirror them: `research`, `decisions`, `omitted_research`, `omitted_decisions`,
 sorted, indented two spaces and ends with one newline. As with planning, a
 new key needs a schema update or an `@2` marker; clients must gate on `schema`.
 
+`export understand --json` is specified, not yet implemented: see the
+[Understand export contract](understand-export.md).
+
 ## Stability and input handling
 
 Object keys are sorted. Arrays follow the command's stable order, including
