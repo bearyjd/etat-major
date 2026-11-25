@@ -8,11 +8,15 @@ Nothing under src/ may import or run this script.
 import argparse
 import json
 import os
+import re
+import secrets
+import signal
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from pathlib import Path
-from threading import Timer
+from threading import Event, Timer
 from urllib.parse import urlsplit
 
 from etat_major.evidence_records import load_prs, load_releases
@@ -23,6 +27,7 @@ from etat_major.text_safety import safe
 CAP = 4 * 1024 * 1024
 LIMIT = 1000
 TIMEOUT = 60.0
+REPO_NAME = re.compile(r"[\w.-]+/[\w.-]+")
 ALLOWED = (
     "PATH", "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
     "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "GH_CONFIG_DIR", "LANG", "LC_ALL",
@@ -50,6 +55,12 @@ TARGETS = {"prs.json": (PR_ARGS, load_prs), "releases.json": (RELEASE_ARGS, load
 
 class RecordError(Exception):
     """A refusal or failure, worded without remotes, absolute paths or tokens."""
+
+
+def kill_group(proc: subprocess.Popen) -> None:
+    """Kill gh and anything it started, so no grandchild can hold the pipe open."""
+    with suppress(ProcessLookupError, PermissionError):
+        os.killpg(proc.pid, signal.SIGKILL)
 
 
 def child_env(environ: Mapping[str, str]) -> dict[str, str]:
@@ -84,20 +95,30 @@ def run_gh(
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
     except OSError:
         raise RecordError(f"{label}: cannot start") from None
     expired: list[bool] = []
-    timer = Timer(timeout, lambda: (expired.append(True), proc.kill()))
+    read_done = Event()
+
+    def on_timeout() -> None:
+        # A timer that fires after gh exited and its output was read is not a timeout.
+        if proc.poll() is None or not read_done.is_set():
+            expired.append(True)
+            kill_group(proc)
+
+    timer = Timer(timeout, on_timeout)
     timer.start()
     try:
         data = proc.stdout.read(CAP + 1) if proc.stdout else b""
+        read_done.set()
         if len(data) > CAP:
-            proc.kill()
+            kill_group(proc)
         status = proc.wait()
     finally:
         timer.cancel()
-        proc.kill()
+        kill_group(proc)
         proc.wait()
         if proc.stdout:
             proc.stdout.close()
@@ -113,20 +134,25 @@ def run_gh(
 def describe_target(raw: bytes) -> tuple[str, str]:
     try:
         info = json.loads(raw)
-        return urlsplit(info["url"]).hostname or "", info["nameWithOwner"]
-    except (ValueError, KeyError, TypeError):
+        url, name = info["url"], info["nameWithOwner"]
+        if not (isinstance(url, str) and isinstance(name, str) and REPO_NAME.fullmatch(name)):
+            raise ValueError("unexpected repository description")
+        return urlsplit(url).hostname or "", name
+    except (ValueError, KeyError, TypeError, RecursionError):
         raise RecordError("gh repo view: unexpected output") from None
 
 
 def validate(name: str, data: bytes, out: Path, directory: int) -> int:
     """Check the bytes with the report command's own loader via a private temp file."""
     args, loader = TARGETS[name]
-    temp = f".{name}.check.tmp"
+    temp = f".{name}.{secrets.token_hex(8)}.check.tmp"
     try:
         text = data.decode("utf-8")
         write_new_text(Path(temp), text, dir_fd=directory, limit_bytes=CAP)
-    except (ValueError, OSError):
+    except ValueError:
         raise RecordError(f"{name}: output is not bounded UTF-8 text") from None
+    except OSError:
+        raise RecordError(f"{name}: cannot create the check file") from None
     try:
         return len(loader(out / temp))
     except TaskFileError as exc:
@@ -160,9 +186,12 @@ def record(checkout: Path, out: Path, environ, confirm, timeout: float) -> None:
     if answer != "yes":
         raise RecordError("target not confirmed; nothing was written")
     fetched = {n: run_gh(gh, a, checkout, env, timeout, n) for n, (a, _) in TARGETS.items()}
-    with open_directory(out) as directory:
-        counts = {n: validate(n, data, out, directory) for n, data in fetched.items()}
-        publish(fetched, directory)
+    try:
+        with open_directory(out) as directory:
+            counts = {n: validate(n, data, out, directory) for n, data in fetched.items()}
+            publish(fetched, directory)
+    except OSError:
+        raise RecordError("cannot use the output directory") from None
     for name, count in counts.items():
         if count >= LIMIT:
             print(
@@ -182,6 +211,11 @@ def check_arguments(
             raise RecordError(f"refusing to run with {name} set")
     if not checkout.is_dir() or not out.is_dir():
         raise RecordError("the checkout and the output directory must exist")
+    prefix = Path(out.anchor) if out.anchor else Path()
+    for part in out.parts[1 if out.anchor else 0 :]:
+        prefix = prefix / part
+        if prefix.is_symlink():
+            raise RecordError("the output directory must not be, or sit under, a symbolic link")
     clash = [n for n in TARGETS if os.path.lexists(out / n)]
     if clash:
         raise RecordError(f"{clash[0]} already exists in the output directory")
@@ -206,6 +240,9 @@ def main(
         record(args.checkout.resolve(), args.out, environ, confirm, timeout)
     except RecordError as exc:
         print(f"record_github: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("record_github: interrupted; nothing was written", file=sys.stderr)
         return 2
     return 0
 
