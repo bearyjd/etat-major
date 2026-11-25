@@ -1,9 +1,10 @@
 """Build a sanitized, project-scoped snapshot from local intent and recorded evidence."""
 
 import re
+from argparse import ArgumentParser, Namespace
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
 from typing import Literal
@@ -393,3 +394,58 @@ def load_planning_view(inputs: PlanningInputs) -> PlanningView:
         execution_links=execution,
         _refresh_diagnostics=refresh.snapshot(),
     )
+
+
+def inputs_parser(parser: ArgumentParser) -> None:
+    parser.add_argument("--workspace", type=Path, required=True, help="intent workspace directory")
+    parser.add_argument("--project", required=True, help="project identifier in the workspace")
+    parser.add_argument("--codeman-origin", help="trusted HTTPS origin for session context")
+    for artifact in ("source", "floorplan", "trail"):
+        parser.add_argument(
+            f"--{artifact}-revision", help=f"trusted {artifact} snapshot commit SHA"
+        )
+    for flag, description in (
+        ("immutable-source", "immutable source snapshot directory for excerpts"),
+        ("components", "component YAML (defaults to workspace/components/PROJECT.yaml)"),
+        ("graph", "recorded Floorplan graph"),
+        ("trail", "recorded Trail wiring"),
+        ("repo", "local repository for Git evidence"),
+        ("prs", "recorded pull request JSON"),
+        ("releases", "recorded release JSON"),
+        ("meute", "recorded Meute snapshot YAML"),
+        ("manual-review", "recorded manual Anthropic API review YAML"),
+        ("execution-links", "recorded task execution links YAML"),
+    ):
+        parser.add_argument(f"--{flag}", type=Path, help=description)
+
+
+def inputs_from_args(args: Namespace) -> PlanningInputs:
+    return PlanningInputs(
+        args.workspace,
+        args.project,
+        args.components,
+        args.graph,
+        args.trail,
+        args.repo,
+        args.prs,
+        args.releases,
+        args.meute,
+        args.manual_review,
+        immutable_source=args.immutable_source,
+        source_revision=args.source_revision,
+        floorplan_revision=args.floorplan_revision,
+        trail_revision=args.trail_revision,
+        execution_links=args.execution_links,
+        codeman_origin=args.codeman_origin,
+    )
+
+
+def planning_payload(view: PlanningView) -> dict:
+    payload = asdict(replace(view, _refresh_diagnostics=None, _understand=None, _discover=None))
+    payload.pop("_refresh_diagnostics")
+    payload.pop("_understand")
+    payload.pop("_discover")
+    for field_name in ("meute", "manual_review", "execution_links"):
+        if payload[field_name] is None:
+            payload.pop(field_name)
+    return payload

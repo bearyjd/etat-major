@@ -25,6 +25,7 @@ from etat_major.components import ComponentModel, load_component_directory, load
 from etat_major.components_cli import components_parser, run_components
 from etat_major.evidence import ArchitectureIndexes, load_progress
 from etat_major.evidence_render import progress_data, render_text
+from etat_major.export_cli import export_parser, run_export
 from etat_major.floorplan import load_graph
 from etat_major.floorplan_runner import floorplan_parser, run_floorplan_cli
 from etat_major.gradle_cli import run_gradle
@@ -111,6 +112,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     validate.add_argument("--workspace", type=Path, required=True)
     serve_parser(sub.add_parser("serve", help="serve one read-only Planning view on loopback"))
+    export_parser(sub.add_parser("export", help="print a read-only view as JSON"))
     for command in (trace, index, dlist, progress, validate):
         command.add_argument("--format", choices=("json", "text"), default="text")
     return parser
@@ -343,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
         "components": run_components,
         "floorplan": run_floorplan_cli,
         "serve": run_serve,
+        "export": run_export,
     }
     try:
         return handlers[args.command](args)

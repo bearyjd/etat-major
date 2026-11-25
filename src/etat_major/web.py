@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import asdict, fields, replace
+from dataclasses import fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from secrets import compare_digest, token_urlsafe
 from threading import Lock
 from typing import TYPE_CHECKING
+
+from etat_major.planning_view import inputs_from_args, inputs_parser, planning_payload
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser, Namespace
@@ -30,40 +32,14 @@ _REFRESH_HEADERS = {**_HEADERS, "Referrer-Policy": "no-referrer"}
 
 
 def serve_parser(parser: ArgumentParser) -> None:
-    parser.add_argument("--workspace", type=Path, required=True, help="intent workspace directory")
-    parser.add_argument("--project", required=True, help="project identifier in the workspace")
-    parser.add_argument("--codeman-origin", help="trusted HTTPS origin for session context")
+    inputs_parser(parser)
     parser.add_argument("--port", type=int, default=8765, help="loopback port (default: 8765)")
-    for artifact in ("source", "floorplan", "trail"):
-        parser.add_argument(
-            f"--{artifact}-revision", help=f"trusted {artifact} snapshot commit SHA"
-        )
-    for flag, description in (
-        ("immutable-source", "immutable source snapshot directory for excerpts"),
-        ("components", "component YAML (defaults to workspace/components/PROJECT.yaml)"),
-        ("graph", "recorded Floorplan graph"),
-        ("trail", "recorded Trail wiring"),
-        ("repo", "local repository for Git evidence"),
-        ("prs", "recorded pull request JSON"),
-        ("releases", "recorded release JSON"),
-        ("meute", "recorded Meute snapshot YAML"),
-        ("manual-review", "recorded manual Anthropic API review YAML"),
-        ("execution-links", "recorded task execution links YAML"),
-    ):
-        parser.add_argument(f"--{flag}", type=Path, help=description)
 
 
 def _json_snapshot(view: PlanningView) -> JSONResponse:
     from fastapi.responses import JSONResponse
 
-    payload = asdict(replace(view, _refresh_diagnostics=None, _understand=None, _discover=None))
-    payload.pop("_refresh_diagnostics")
-    payload.pop("_understand")
-    payload.pop("_discover")
-    for field in ("meute", "manual_review", "execution_links"):
-        if payload[field] is None:
-            payload.pop(field)
-    return JSONResponse(payload, headers=_HEADERS)
+    return JSONResponse(planning_payload(view), headers=_HEADERS)
 
 
 def _render_snapshot(
@@ -231,31 +207,12 @@ def _startup_paths(inputs: PlanningInputs) -> PlanningInputs:
 
 
 def run_serve(args: Namespace) -> int:
-    from etat_major.planning_view import PlanningInputs, load_planning_view
+    from etat_major.planning_view import load_planning_view
     from etat_major.taskfile import TaskFileError
 
     if not 1 <= args.port <= 65535:
         raise TaskFileError(Path("serve"), "port", "expected a port from 1 to 65535")
-    inputs = _startup_paths(
-        PlanningInputs(
-            args.workspace,
-            args.project,
-            args.components,
-            args.graph,
-            args.trail,
-            args.repo,
-            args.prs,
-            args.releases,
-            args.meute,
-            args.manual_review,
-            immutable_source=args.immutable_source,
-            source_revision=args.source_revision,
-            floorplan_revision=args.floorplan_revision,
-            trail_revision=args.trail_revision,
-            execution_links=args.execution_links,
-            codeman_origin=args.codeman_origin,
-        )
-    )
+    inputs = _startup_paths(inputs_from_args(args))
     view = load_planning_view(inputs)
     try:
         import uvicorn

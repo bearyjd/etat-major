@@ -31,6 +31,7 @@ OPERATIONS = {
     "progress": "workspace repo prs releases graph trail ?as-of ?meute",
     "workspace validate": "workspace",
     "serve": "workspace project graph trail repo prs releases ?meute",
+    "export planning": "workspace project graph trail repo prs releases ?meute",
     "floorplan scan": "copy source",
     "floorplan build": "copy source",
     "floorplan refresh": "copy source",
@@ -109,7 +110,9 @@ def arguments(name, args, scratch):
         return [*argv, "--out", str(scratch / "brief.md")]
     if name == "components seed":
         argv.extend(["--out", str(scratch / "seed.yaml")])
-    if not name.startswith("floorplan ") and name != "serve":
+    if name == "export planning":
+        argv.append("--json")
+    elif not name.startswith("floorplan ") and name != "serve":
         argv.extend(["--format", "json"])
     return argv
 
@@ -176,7 +179,9 @@ def observe(name, argv, scratch, understand):
         status = cli(argv)
     if status not in (0, 1):
         return {"status": status}
-    if "--format" in argv:
+    if "--json" in argv:
+        result = {"data": json.loads(stdout.getvalue())}
+    elif "--format" in argv:
         result = json.loads(stdout.getvalue())
         if name == "progress":
             with _open_repository(repo) as fd:
