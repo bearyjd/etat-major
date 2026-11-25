@@ -23,13 +23,18 @@ PR_FIELDS = (
 )
 FAKE = """\
 #!{python}
-import json, os, sys, time
+import json, os, subprocess, sys, time
 behavior = json.load(open({behavior!r}))
 record = {{"argv": sys.argv[1:], "env": dict(os.environ), "cwd": os.getcwd()}}
 record["stdin"] = sys.stdin.read()
 with open({log!r}, "a") as log:
     log.write(json.dumps(record) + "\\n")
 time.sleep(behavior.get("sleep", 0))
+if behavior.get("grandchild"):
+    subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
+if behavior.get("swap") and sys.argv[1] == "release":
+    os.rename(behavior["swap"], behavior["swap"] + ".real")
+    os.symlink(behavior["swap"] + ".real", behavior["swap"])
 key = {{"repo": "repo", "pr": "pr", "release": "release"}}[sys.argv[1]]
 sys.stdout.write(behavior[key])
 sys.exit(behavior.get("exit", 0))
@@ -98,7 +103,7 @@ class Setup:
 
     def run(self, script, capsys, *, answer="yes", interactive=True, timeout=30.0, environ=None):
         def confirm(_prompt: str) -> str:
-            if isinstance(answer, Exception):
+            if isinstance(answer, BaseException):
                 raise answer
             return answer
 
@@ -328,3 +333,117 @@ def test_the_script_refuses_to_start_without_a_terminal(setup):
 def test_script_stays_small_and_outside_src():
     lines = textwrap.dedent(SCRIPT.read_text()).splitlines()
     assert len(lines) < 400
+
+
+HOSTILE_REPO = [
+    "[" * 200_000,
+    '{"url": 5, "nameWithOwner": "a/b"}',
+    '{"url": "https://h.example/x", "nameWithOwner": 5}',
+    '{"url": "https://h.example/x", "nameWithOwner": "a/b/c"}',
+    '{"url": "https://h.example/x", "nameWithOwner": "a b/c"}',
+    '{"url": "https://h.example/x", "nameWithOwner": "a/b\\n"}',
+    '{"url": "https://h.example/x"}',
+    "[]",
+    "null",
+]
+
+
+@pytest.mark.parametrize("repo", HOSTILE_REPO, ids=range(len(HOSTILE_REPO)))
+def test_hostile_repo_view_output_is_a_plain_error(script, setup, capsys, repo):
+    s = setup(repo=repo)
+    code, _, err = s.run(script, capsys)
+    assert code == 2
+    assert "gh repo view: unexpected output" in err
+    assert "Traceback" not in err and str(s.out.parent) not in err
+    assert len(s.calls) == 1 and s.written() == []
+
+
+def test_symlinked_output_directory_is_refused_before_gh_runs(script, setup, capsys):
+    s = setup()
+    real = s.out.parent / "real-out"
+    real.mkdir()
+    s.out.rmdir()
+    s.out.symlink_to(real)
+    code, _, err = s.run(script, capsys)
+    assert code == 2 and "symbolic link" in err
+    assert "Traceback" not in err and str(s.out.parent) not in err
+    assert s.calls == [] and os.listdir(real) == []
+
+
+def test_symlinked_parent_of_the_output_directory_is_refused_before_gh_runs(script, setup, capsys):
+    s = setup()
+    link = s.out.parent / "link"
+    link.symlink_to(s.out.parent)
+    s.out = link / "out"
+    code, _, err = s.run(script, capsys)
+    assert code == 2 and "symbolic link" in err
+    assert "Traceback" not in err and str(s.out.parent) not in err
+    assert s.calls == [] and os.listdir(s.out.parent / "out") == []
+
+
+def test_output_directory_swapped_for_a_symlink_mid_run_is_a_plain_error(script, setup, capsys):
+    s = setup()
+    (s.bin.parent / "behavior.json").write_text(json.dumps({**GOOD, "swap": str(s.out)}))
+    code, _, err = s.run(script, capsys)
+    assert code == 2
+    assert "Traceback" not in err and str(s.out.parent) not in err
+    assert os.listdir(s.out) == []
+
+
+def test_a_grandchild_holding_the_pipe_does_not_outlast_the_timeout(script, setup, capsys):
+    s = setup(grandchild=True)
+    started = time.monotonic()
+    code, _, err = s.run(script, capsys, timeout=1.0)
+    assert code == 2 and "timed out" in err
+    assert time.monotonic() - started < 4
+    assert s.written() == []
+
+
+def test_a_timer_firing_after_gh_finished_is_not_a_timeout(script, setup, capsys, monkeypatch):
+    class LateTimer:
+        def __init__(self, _interval, function):
+            self.function = function
+
+        def start(self):
+            pass
+
+        def cancel(self):
+            self.function()
+
+    monkeypatch.setitem(script["run_gh"].__globals__, "Timer", LateTimer)
+    s = setup()
+    code, _, err = s.run(script, capsys)
+    assert code == 0 and "timed out" not in err
+    assert s.written() == ["prs.json", "releases.json"]
+
+
+def test_interrupt_at_the_prompt_is_reported_and_writes_nothing(script, setup, capsys):
+    s = setup()
+    code, _, err = s.run(script, capsys, answer=KeyboardInterrupt())
+    assert code == 2
+    assert "record_github: interrupted; nothing was written" in err
+    assert "Traceback" not in err
+    assert len(s.calls) == 1 and s.written() == []
+
+
+def test_a_stale_check_file_does_not_break_a_run(script, setup, capsys):
+    s = setup()
+    for name in ("prs.json", "releases.json"):
+        (s.out / f".{name}.check.tmp").write_text("stale")
+    code, _, err = s.run(script, capsys)
+    assert code == 0, err
+    assert (s.out / ".prs.json.check.tmp").read_text() == "stale"
+    assert len(s.written()) == 4
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_an_unwritable_output_directory_reports_the_check_file(script, setup, capsys):
+    s = setup()
+    s.out.chmod(0o500)
+    try:
+        code, _, err = s.run(script, capsys)
+    finally:
+        s.out.chmod(0o700)
+    assert code == 2 and "cannot create the check file" in err
+    assert "Traceback" not in err and str(s.out.parent) not in err
+    assert s.written() == []
