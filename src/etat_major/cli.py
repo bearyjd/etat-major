@@ -13,6 +13,7 @@ from datetime import date
 from importlib import metadata
 from pathlib import Path
 
+from etat_major import __version__
 from etat_major.cli_json import (
     COMMAND_NAMES,
     decisions_data,
@@ -71,10 +72,11 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 
 def _version() -> str:
+    """Installed package version, or the source tree's ``__version__`` when not installed."""
     try:
         return metadata.version("etat-major")
     except metadata.PackageNotFoundError:
-        return "0+unknown"
+        return __version__
 
 
 def _parser() -> argparse.ArgumentParser:
