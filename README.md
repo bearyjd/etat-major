@@ -15,7 +15,7 @@ Direction: [docs/VISUALIZATION-ARCHITECTURE.md](docs/VISUALIZATION-ARCHITECTURE.
 
 ## What it is not
 
-Not a terminal, a coding-agent runner, a scheduler or a general project-management tool. Interactive agent sessions belong to the session host (today Paseo; [Codeman](https://github.com/Ark0N/Codeman) is legacy) and unattended runs to [Meute](https://github.com/bearyjd/meute); both are optional and separate. Architecture maps come from [Floorplan](https://github.com/haydenschmitty/floorplan) and function-level structure from Trail, both through replaceable read-only adapters. Code analysis is reused, not rebuilt. External research uses a manual ChatGPT handoff that you review. Durable intent lives in Git as Markdown, YAML and Mermaid.
+Not a terminal, a coding-agent runner, a scheduler or a general project-management tool. Interactive agent sessions belong to the session host ([Codeman](https://github.com/Ark0N/Codeman) is the legacy host) and unattended runs to [Meute](https://github.com/bearyjd/meute); both are optional and separate. Architecture maps come from [Floorplan](https://github.com/haydenschmitty/floorplan) and function-level structure from Trail, both through replaceable read-only adapters. Code analysis is reused, not rebuilt. External research uses a manual ChatGPT handoff that you review. Durable intent lives in Git as Markdown, YAML and Mermaid.
 
 ## Principles
 
