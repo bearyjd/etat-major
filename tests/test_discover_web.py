@@ -81,13 +81,13 @@ def test_failed_record_marker(planning_workspace, client_for):
     (planning_workspace / "decisions" / "0099-broken.md").write_text(BROKEN)
     with client_for(planning_workspace) as client:
         text = client.get("/discover").text
-    assert "1 records failed to load" in text
+    assert "1 diagnostic in decision or research records" in text
     assert "0099-broken" not in text
 
 
 def test_no_failure_marker_when_clean(planning_workspace, client_for):
     with client_for(planning_workspace) as client:
-        assert "failed to load" not in client.get("/discover").text
+        assert "in decision or research records" not in client.get("/discover").text
 
 
 def test_refresh_updates_then_rejected_refresh_says_previous_snapshot(
@@ -104,7 +104,7 @@ def test_refresh_updates_then_rejected_refresh_says_previous_snapshot(
         assert "Showing the previous snapshot" in client.get(refresh).text
         text = client.get("/discover").text
         assert "Showing the previous snapshot" in text
-        assert "hosted service?" in text and "failed to load" not in text
+        assert "hosted service?" in text and "in decision or research records" not in text
         (planning_workspace / "decisions" / "0099-broken.md").unlink()
         client.get(refresh)
         assert "previous snapshot" not in client.get("/discover").text

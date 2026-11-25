@@ -143,9 +143,7 @@ def _decision_row(ws: Workspace, d: Decision) -> DecisionRow:
 
 def _failed_records(ws: Workspace) -> int:
     shared = ("decisions", "research", "decision:", "research:")
-    return sum(
-        1 for issue in ws.issues if issue.severity == "error" and issue.path.startswith(shared)
-    )
+    return sum(1 for issue in ws.issues if issue.path.startswith(shared))
 
 
 def build_discover(ws: Workspace, filtered_issues: int = 0) -> DiscoverView:
