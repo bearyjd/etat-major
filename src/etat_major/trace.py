@@ -118,7 +118,7 @@ def _research_line(ref: Ref, research: ResearchArtifact | None) -> ResearchLine:
     return ResearchLine(ref, True, research.status, research.provenance, research.title, findings)
 
 
-def _cite(ws: Workspace, ref: Ref) -> Cite:
+def cite(ws: Workspace, ref: Ref) -> Cite:
     research = ws.get_research(ref.id)
     if research is None:
         return Cite(ref, "missing")
@@ -131,7 +131,7 @@ def _cite(ws: Workspace, ref: Ref) -> Cite:
 
 
 def _decision_line(ws: Workspace, d: Decision, relation: str) -> DecisionLine:
-    cites = tuple(_cite(ws, r) for r in d.evidence)
+    cites = tuple(cite(ws, r) for r in d.evidence)
     provenance = "human" if d.decided_by == "human" else "none"
     return DecisionLine(
         Ref("decision", d.id), relation, True, d.status, provenance, d.question, cites

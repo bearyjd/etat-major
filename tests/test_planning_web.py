@@ -119,7 +119,7 @@ def test_project_view_embeds_in_opaque_sandbox(planning_workspace, client_for):
         assert len(page.ids) == len(set(page.ids))
         assert all(
             href.startswith(("./refresh?token=", "./understand?component="))
-            or href == "./understand"
+            or href in ("./understand", "./discover")
             or (href.startswith("#") and href[1:] in page.ids)
             for href in page.hrefs
         )

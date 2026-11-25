@@ -60,7 +60,7 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 3: research and feature model
 
-**Status** — Research and feature loaders, relevant decision listing, manual brief/import and derived feature stages are implemented. Interactive decision search and the review UI remain.
+**Status** — Research and feature loaders, relevant decision listing, manual brief/import and derived feature stages are implemented. A read-only Discover page (`GET /discover`, bounded `?q=` filter) lists all decisions and research with status, provenance and citation badges. The review UI and the in-page brief/import handoff panel remain.
 
 - **Depends on:** Slice 1, and Phase 2 for the architecture links.
 - **Build:** full loaders and the lifecycle (Idea to Released, plus Rejected and Postponed); the Decision search ("has this question been decided?"); the manual ChatGPT handoff, that is `research brief` (writes a prompt file after a redaction check) and `research import` (parses a pasted answer into an `unreviewed`, `ai-generated` draft, flags unsourced items, keeps URLs verbatim); the review step that marks an artifact `reviewed`.

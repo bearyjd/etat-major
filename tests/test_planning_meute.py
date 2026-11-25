@@ -52,7 +52,7 @@ def test_planning_shows_meute_evidence_in_sandbox(planning_workspace, client_for
     assert 'name="viewport"' in response.text
     assert 'grid-template-areas: "features" "components" "tasks"' in response.text
     assert all(
-        href == "./understand"
+        href in ("./understand", "./discover")
         or href.startswith(("#", "./understand?component=", "./refresh?token="))
         for href in Page(response.text).hrefs
     )
