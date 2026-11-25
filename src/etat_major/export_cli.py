@@ -7,6 +7,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
+from etat_major.discover_view import discover_payload
 from etat_major.planning_view import (
     inputs_from_args,
     inputs_parser,
@@ -17,21 +18,30 @@ from etat_major.taskfile import TaskFileError
 
 
 def export_parser(parser: ArgumentParser) -> None:
-    target = parser.add_subparsers(dest="action", required=True).add_parser(
-        "planning", help="print the Planning payload served at /project.json"
-    )
-    inputs_parser(target)
-    target.add_argument(
-        "--json", action="store_true", required=True, help="print JSON (the only supported format)"
-    )
+    actions = parser.add_subparsers(dest="action", required=True)
+    for name, help_text in (
+        ("planning", "print the Planning payload served at /project.json"),
+        ("discover", "print the Discover research and decisions payload"),
+    ):
+        target = actions.add_parser(name, help=help_text)
+        inputs_parser(target)
+        target.add_argument(
+            "--json",
+            action="store_true",
+            required=True,
+            help="print JSON (the only supported format)",
+        )
 
 
 def run_export(args: Namespace) -> int:
     try:
-        payload = planning_payload(load_planning_view(inputs_from_args(args)))
+        view = load_planning_view(inputs_from_args(args))
     except TaskFileError as exc:
         if exc.path != Path("serve"):
             raise
-        raise TaskFileError(Path("export planning"), exc.field, exc.message) from None
+        raise TaskFileError(Path(f"export {args.action}"), exc.field, exc.message) from None
+    payload = (
+        discover_payload(view._discover) if args.action == "discover" else planning_payload(view)
+    )
     sys.stdout.write(json.dumps(payload, sort_keys=True, indent=2) + "\n")
     return 0

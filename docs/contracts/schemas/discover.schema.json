@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Discover payload (export discover --json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "research",
+    "decisions",
+    "omitted_research",
+    "omitted_decisions",
+    "issue_count",
+    "query"
+  ],
+  "properties": {
+    "schema": {"const": "etat-major/discover@1"},
+    "version": {"const": 1},
+    "research": {"type": "array", "items": {"$ref": "#/$defs/research"}},
+    "decisions": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+    "omitted_research": {"type": "integer", "minimum": 0},
+    "omitted_decisions": {"type": "integer", "minimum": 0},
+    "issue_count": {"type": "integer", "minimum": 0},
+    "query": {"type": "string"}
+  },
+  "$defs": {
+    "nullableString": {"type": ["string", "null"]},
+    "nullableDate": {"type": ["string", "null"], "format": "date"},
+    "stringList": {"type": "array", "items": {"type": "string"}},
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "source", "source_date", "unsourced"],
+      "properties": {
+        "id": {"type": "string"},
+        "text": {"type": "string"},
+        "source": {"$ref": "#/$defs/nullableString"},
+        "source_date": {"$ref": "#/$defs/nullableDate"},
+        "unsourced": {"type": "boolean"}
+      }
+    },
+    "research": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "status",
+        "provenance",
+        "project",
+        "findings",
+        "omitted_findings",
+        "features"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "status": {"enum": ["unreviewed", "reviewed", "superseded"]},
+        "provenance": {"enum": ["verified", "inferred", "ai-generated", "human"]},
+        "project": {"$ref": "#/$defs/nullableString"},
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+        "omitted_findings": {"type": "integer", "minimum": 0},
+        "features": {"$ref": "#/$defs/stringList"}
+      }
+    },
+    "cite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "state", "status", "provenance"],
+      "properties": {
+        "ref": {"type": "string"},
+        "state": {"enum": ["ok", "unsourced", "missing"]},
+        "status": {"type": "string"},
+        "provenance": {"type": "string"}
+      }
+    },
+    "alternative": {
+      "type": "array",
+      "prefixItems": [{"type": "string"}, {"type": "string"}],
+      "items": false,
+      "minItems": 2
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "question",
+        "status",
+        "decided_on",
+        "chosen",
+        "rationale",
+        "alternatives",
+        "omitted_alternatives",
+        "cites",
+        "omitted_cites",
+        "features"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "question": {"type": "string"},
+        "status": {"enum": ["proposed", "approved", "rejected", "postponed", "superseded"]},
+        "decided_on": {"$ref": "#/$defs/nullableDate"},
+        "chosen": {"$ref": "#/$defs/nullableString"},
+        "rationale": {"$ref": "#/$defs/nullableString"},
+        "alternatives": {"type": "array", "items": {"$ref": "#/$defs/alternative"}},
+        "omitted_alternatives": {"type": "integer", "minimum": 0},
+        "cites": {"type": "array", "items": {"$ref": "#/$defs/cite"}},
+        "omitted_cites": {"type": "integer", "minimum": 0},
+        "features": {"$ref": "#/$defs/stringList"}
+      }
+    }
+  }
+}

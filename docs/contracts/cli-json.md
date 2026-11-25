@@ -95,6 +95,24 @@ A bad recorded input, such as an unreadable `--graph`, can still exit 0: the
 problem is listed in the payload's `issues` instead. Check `issues` before
 trusting the data.
 
+## `export discover --json`
+
+`etat-major export discover --json --workspace DIR --project P` prints the
+Discover view (research and decisions) to stdout. It takes the same input
+flags as `export planning`, needs no web extra, and `--json` is required.
+Errors name `export discover`.
+
+The document is a bare payload with the top-level marker
+`"schema": "etat-major/discover@1"` and `"version": 1`, described by the closed
+[`discover.schema.json`](schemas/discover.schema.json) (Draft 2020-12). It is
+built by `discover_view.discover_payload` from the view dataclasses, so keys
+mirror them: `research`, `decisions`, `omitted_research`, `omitted_decisions`,
+`issue_count` and `query` (always empty in an export). Dates (`source_date`,
+`decided_on`) are ISO 8601 strings or `null`. Decision `alternatives` are
+`[option, why_not]` pairs. Text is already sanitized for display. Output is
+sorted, indented two spaces and ends with one newline. As with planning, a
+new key needs a schema update or an `@2` marker; clients must gate on `schema`.
+
 ## Stability and input handling
 
 Object keys are sorted. Arrays follow the command's stable order, including
