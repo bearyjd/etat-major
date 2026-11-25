@@ -77,6 +77,31 @@ navigation, and a popup inherits the sandbox, so it may not. A hash-pinned
 script and a nomination message handler in Codeman are not approved. Reopen that
 option only if the link test fails and the maintainer chooses it.
 
+**Result of the link test (2026-11-24).** A headless Chromium simulation put a
+copy of the six test links in an iframe with the Web Tab sandbox flags read from
+the Codeman fork (`allow-scripts allow-forms allow-popups allow-downloads
+allow-modals`) and pointed them at a stand-in target. A `_blank` link and
+`window.open` open a new window that inherits the sandbox: its origin is `null`
+and storage throws `SecurityError`, so a real Codeman there could not hold a
+login. `_top` and `_parent` navigation is blocked. A link with no target
+navigates the frame itself, still sandboxed. So a plain `#session=` link cannot
+select a session in the existing Codeman window, and the plain-link option is
+not viable with these flags. Copyable links stay.
+
+Two sandbox changes in Codeman would make a click work, and each widens the
+sandbox for every page in every Web Tab. `allow-popups-to-escape-sandbox` opens a
+working but separate window. `allow-top-navigation-by-user-activation` lets a
+click navigate the whole window to Codeman, which reloads it. Neither is
+approved. The alternative to evaluate is the script and nomination message
+described above, which keeps the sandbox strict. Reopening it is a maintainer
+decision.
+
+This result has limits. It used Chromium only and a stand-in target, not the
+real Codeman deep link, and the flags come from the fork's source, not from a
+running deployment. Confirm the `sandbox` attribute of the Web Tab iframe in the
+deployed Codeman before relying on it. The simulation is kept with the local
+test kit and can be rerun.
+
 ## PR 3 — Authenticated Meute Fleet controls
 
 **Scope.** Introduce a narrow allowlist of explicit operator actions through

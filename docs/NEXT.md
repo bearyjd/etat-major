@@ -17,7 +17,7 @@ Updated 2026-11-23. Keep this file under 60 lines. Working rules are in `AGENTS.
 The [Alto delivery workflow](ALTO-MVP-DELIVERY.md) defines three separate PRs, with explicit rollout scope, acceptance and rollback for each.
 
 1. Verify the exact merged read-only release live on Alto, then switch the pilots one at a time within the authorized scope: NetLens first, then Relais, rolling back a failed pilot. Staging passed; the live switch needs an authenticated Codeman browser (an unauthenticated probe returned HTTP 429). See the [runbook](ALTO-READ-ONLY-RUNBOOK.md).
-2. Add native **Open session** in Codeman. The opaque Planning iframe can nominate an existing session. Selection requires a click in the opted-in Codeman parent's native UI and its access checks. Copyable links stay. Try a plain `#session=` link first, pending a browser test. Require an exact owner match in multi-user mode and return to the exact Planning task.
+2. Add native **Open session** in Codeman. The opaque Planning iframe can nominate an existing session. Selection requires a click in the opted-in Codeman parent's native UI and its access checks. Copyable links stay: a browser simulation showed a plain `#session=` link cannot select a session from the sandboxed tab (see the PR 2 decision). Require an exact owner match in multi-user mode and return to the exact Planning task.
 3. Gate explicit Fleet actions in Meute. The first allowlisted action is `dismiss`. Start with a private authenticated top-level link and verify the actual sandboxed browser against Meute's Host, Fetch Metadata, write Origin and token checks before enabling iframe writes.
 
 An optional Codeman theme is post-MVP.
