@@ -69,10 +69,15 @@ Planning payload to stdout. It accepts the same input flags as `serve`
 (except `--port`) and needs no web extra: it does not import fastapi,
 starlette or uvicorn. `--json` is required and is the only supported format.
 
-The document is the bare payload, not the `data`/`issues` envelope above, and
-carries no `schema` field. It is the same object that `serve` returns at
+The document is the bare payload, not the `data`/`issues` envelope above. It
+carries the top-level marker `"schema": "etat-major/planning@1"`, described by
+[`planning.schema.json`](schemas/planning.schema.json) (JSON Schema Draft
+2020-12). The marker is an additive change: `version` stays `1` and every
+existing key is unchanged, so clients that ignore unknown keys are unaffected.
+Task `state` is the derived board column (`draft`, `ready`, `in-progress`,
+`review`, `done`, `blocked`), not the stored status. It is the same object that `serve` returns at
 `/project.json`, produced by one shared function, so the two cannot drift.
-Top-level keys include `project`, `features`, `components`, `tasks`,
+Top-level keys include `schema`, `project`, `features`, `components`, `tasks`,
 `sources`, `issues` and `version`. The `meute`, `manual_review` and
 `execution_links` keys appear only when those inputs are supplied. Keys are
 sorted, output is indented two spaces and ends with one newline, so the same

@@ -1,7 +1,16 @@
 from test_planning_web import client_for as client_for
 from test_planning_web import planning_workspace as planning_workspace
 
-TOP_KEYS = {"project", "features", "components", "tasks", "sources", "issues", "version"}
+TOP_KEYS = {
+    "schema",
+    "project",
+    "features",
+    "components",
+    "tasks",
+    "sources",
+    "issues",
+    "version",
+}
 
 
 def _keys(value):
