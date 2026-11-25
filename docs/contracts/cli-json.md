@@ -62,6 +62,29 @@ model in a supplied component directory. A single file scopes this validation
 to that model. Ownership ties are warnings and count as unowned paths. Coverage uses distinct
 recorded paths and is 0 percent when the Floorplan file list is empty.
 
+## `export planning --json`
+
+`etat-major export planning --json --workspace DIR --project P` prints the
+Planning payload to stdout. It accepts the same input flags as `serve`
+(except `--port`) and needs no web extra: it does not import fastapi,
+starlette or uvicorn. `--json` is required and is the only supported format.
+
+The document is the bare payload, not the `data`/`issues` envelope above, and
+carries no `schema` field. It is the same object that `serve` returns at
+`/project.json`, produced by one shared function, so the two cannot drift.
+Top-level keys include `project`, `features`, `components`, `tasks`,
+`sources`, `issues` and `version`. The `meute`, `manual_review` and
+`execution_links` keys appear only when those inputs are supplied. Keys are
+sorted, output is indented two spaces and ends with one newline, so the same
+inputs produce identical bytes.
+
+A bad workspace or project prints a file-and-field message on stderr, leaves
+stdout empty and exits 2, with no traceback; the message names
+`export planning`. A missing `--json` is an argument error and also exits 2.
+A bad recorded input, such as an unreadable `--graph`, can still exit 0: the
+problem is listed in the payload's `issues` instead. Check `issues` before
+trusting the data.
+
 ## Stability and input handling
 
 Object keys are sorted. Arrays follow the command's stable order, including
