@@ -3,6 +3,7 @@
 from pathlib import Path
 
 DOC = (Path(__file__).resolve().parents[1] / "docs/contracts/understand-export.md").read_text()
+DOC = " ".join(DOC.split())
 
 
 def test_hostname_claim_is_not_overstated() -> None:
@@ -48,3 +49,37 @@ def test_symbol_counts_define_attribution() -> None:
 def test_kotlin_note_is_backed_by_the_proof_doc() -> None:
     assert "name-matched and inferred" not in DOC
     assert "weak on the measured sample" in DOC
+
+
+def test_narrow_loader_keeps_planning_safeguards() -> None:
+    assert "same project identifier rule as `load_planning_view`" in DOC
+    assert "no records for the configured project" in DOC
+    assert "`public_issue`" in DOC
+
+
+def test_issue_rows_are_sanitized_like_public_issue() -> None:
+    assert "`blocking`" in DOC
+    assert "80 characters" in DOC
+    assert "`_issue_path`" in DOC
+
+
+def test_unmatchable_is_a_subset_of_unowned_and_counts_are_integers() -> None:
+    assert "`unmatchable` is a subset of `unowned`" in DOC
+    assert "percentage_owned" in DOC
+    assert "no float" in DOC
+    assert "`total`" in DOC
+
+
+def test_artifact_flags_and_dedup_rules_are_stated() -> None:
+    assert "caller-supplied" in DOC
+    assert "bind_startup_revisions" in DOC
+    assert "first symbol seen" in DOC
+    assert "`unmatchable_paths`" in DOC
+    assert "across the whole model" in DOC
+
+
+def test_redaction_gaps_are_listed() -> None:
+    assert "bare IP addresses" in DOC
+    assert "`localhost:port`" in DOC
+    assert "email addresses" in DOC
+    assert "[redacted location] location]" in DOC
