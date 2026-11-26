@@ -6,7 +6,7 @@ import re
 import pytest
 
 from etat_major import components, understand_export
-from understand_export_support import errors, export, failure, schema
+from understand_export_support import errors, export, failure, recorded_flags, schema
 
 TOKEN = re.compile(r"u-[0-9a-f]{32}")
 REDACTED = "[redacted location]"
@@ -257,3 +257,11 @@ def test_issue_rows_redact_remote_looking_file_names(workspace_dir, capsys):
     out = export(capsys, workspace_dir)
     assert "scpbox.example:private" not in out
     assert REDACTED in [issue["path"] for issue in json.loads(out)["issues"]]
+
+
+def test_other_projects_diagnostics_are_not_exported(workspace_dir, capsys):
+    other = workspace_dir / "features/other"
+    other.mkdir(parents=True)
+    (other / "0001-SECRETNAME.md").write_text("no frontmatter")
+    out = export(capsys, workspace_dir, *recorded_flags(), "--include-files")
+    assert "SECRETNAME" not in out
