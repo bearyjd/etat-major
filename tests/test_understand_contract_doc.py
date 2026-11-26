@@ -82,4 +82,6 @@ def test_redaction_gaps_are_listed() -> None:
     assert "bare IP addresses" in DOC
     assert "`localhost:port`" in DOC
     assert "email addresses" in DOC
-    assert "[redacted location] location]" in DOC
+    assert "become a single placeholder" in DOC
+    assert "with no separator" in DOC
+    assert "[redacted location] location]" not in DOC

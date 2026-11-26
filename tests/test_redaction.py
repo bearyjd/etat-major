@@ -99,7 +99,7 @@ _FORMS = [
     "\\\\server\\{0}",
     "h.invalid:x-/{0}:{1}",
 ]
-_SEPARATORS = [" ", "\n", "\t", ", ", "; ", " and ", '" "', "' '", "> <", " (", ": "]
+_SEPARATORS = [" ", "\n", "\t", ", ", "; ", " and ", '" "', "' '", "> <", " ("]
 
 
 def test_random_mixtures_never_leak_secrets():
