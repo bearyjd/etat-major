@@ -12,6 +12,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import monotonic, sleep
 
+from etat_major.git_hardening import config_environment
 from etat_major.localfiles import open_directory, open_relative_directory
 from etat_major.taskfile import TaskFileError
 from etat_major.trail import SymbolIndex, load_wiring
@@ -270,11 +271,7 @@ def _environment(home: str, runtime_path: str, root: Path) -> dict[str, str]:
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_ALLOW_PROTOCOL": "",
         "GIT_NO_LAZY_FETCH": "1",
-        "GIT_CONFIG_COUNT": "2",
-        "GIT_CONFIG_KEY_0": "core.fsmonitor",
-        "GIT_CONFIG_VALUE_0": "false",
-        "GIT_CONFIG_KEY_1": "core.hooksPath",
-        "GIT_CONFIG_VALUE_1": os.devnull,
+        **config_environment(),
     }
 
 
