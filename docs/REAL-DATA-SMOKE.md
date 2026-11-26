@@ -51,6 +51,8 @@ The [full NetLens baseline](examples/netlens-real-data-smoke.json) covers all 17
 - Copy `tests/fixtures/demo-workspace` into a temporary workspace. Seed `components/netlens.yaml` there with `components seed`, the NetLens root and its Trail wiring. This model consists of unreviewed proposals. Use `netlens`, `feature:netlens/0031` and `core/network/build.gradle.kts` for the project, feature and map inputs.
 - Use the two recorded JSON files in `tests/fixtures/progress/`, the date `2026-11-23` and a temporary copy of `tests/fixtures/research/sample.md` with the `SOURCE_URL` placeholder replaced by `https://example.org/topic/1`. The intent, answer and GitHub records in this exercise are demonstration inputs. The Git history, scanned files, Gradle declarations, Trail symbols and Floorplan scan come from the named revision.
 
+The `export understand` pin (exit status and schema marker) was added with the command and has not been run on real NetLens data.
+
 ## Data-size and latency observations
 
 Not run. This branch pins stale-input, missing-input and oversize contracts with synthetic tests only. It publishes no data-size or latency measurements from the real NetLens recordings, and no measured large-repository limits. That item from delivery milestone 5 is deferred until a maintainer runs the pinned smoke runner against the recordings and records sizes and timings here, labelled with the revision and the machine class.

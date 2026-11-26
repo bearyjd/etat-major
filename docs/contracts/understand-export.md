@@ -1,10 +1,11 @@
 # Understand export contract
 
-**Status: proposed contract. Nothing here is implemented.** It specifies a
-future `etat-major export understand --json`, the Understand counterpart of
-[`export planning --json`](cli-json.md#export-planning---json). Answers marked
-"recommended" in [Open questions](#open-questions) are proposals for the
-maintainer, not decisions.
+**Status: implemented, with provisional answers.** It specifies
+`etat-major export understand --json`, the Understand counterpart of
+[`export planning --json`](cli-json.md#export-planning---json). The command
+follows the answers marked "recommended" in [Open questions](#open-questions)
+and the [implementation choices](#implementation-choices). Both stay proposals
+until the maintainer decides; neither is a recorded decision.
 
 Sources read to write this contract: `understand.py` (the `Understand` lookup
 and `build`), `understand_html.py` (the `/understand` route), `components.py`
@@ -44,9 +45,9 @@ anything that exists only for browser navigation.
   item 7 of [Excluded](#excluded)).
 - The CLI makes no network or `gh` call, runs no tool and runs no Git. Errors exit 2 with a
   file-and-field message on stderr naming `export understand`, empty stdout.
-- A JSON Schema (`schemas/understand.schema.json`, Draft 2020-12,
-  `additionalProperties: false`) ships with the implementation. A client must
-  reject a `schema` value it does not know.
+- A JSON Schema ([`schemas/understand.schema.json`](schemas/understand.schema.json),
+  Draft 2020-12, `additionalProperties: false`) describes the payload. A client
+  must reject a `schema` value it does not know.
 
 ## Exported fields
 
@@ -215,7 +216,7 @@ Treat decoded strings as untrusted when displaying them.
 The export is bounded independently of the 64 MiB input caps in
 [LIMITS](../LIMITS.md):
 
-| Cap | Proposed value |
+| Cap | Value |
 | --- | --- |
 | Components | 500 (`MAX_COMPONENTS`) |
 | Paths per component | 1000 (`MAX_PATHS`). `components.py` also rejects a model whose paths sum above 1000 across the whole model, so 1000 is a model-wide cap too |
@@ -225,7 +226,8 @@ The export is bounded independently of the 64 MiB input caps in
 | Whole document | 4 MiB. Over the cap exits 2 with a message naming `export understand` and the cap, never a silent cut |
 
 Truncation is always declared in the payload. The caps are constants in one
-module and are pinned by tests when implemented.
+module (the component and path caps stay with the component loader) and are
+pinned by tests.
 
 ## Stability
 
@@ -233,6 +235,39 @@ module and are pinned by tests when implemented.
 changing a key needs `@2`. `version` stays `1` within `@1`. Arrays have a
 stable order (sorted by `id` or path). No timestamps, so identical inputs give
 identical bytes.
+
+## Implementation choices
+
+Shapes the text above leaves open. All are provisional.
+
+- `coverage.inventory` is `available` when at least one artifact is `present`,
+  otherwise `unavailable`. `coverage.artifacts` repeats each `label`, `status`
+  and `freshness`. Both `notes` are always emitted.
+- Component IDs are qualified `project/id` in `files`, `ties` and
+  `symbols.by_component`. Every component and both synthetic groups are keys,
+  even when empty.
+- `ties` is a top-level array of `{path, components}`. It, `files`,
+  `files_truncated` and `symbols.files_without_symbols_paths` appear only with
+  `--include-files`. The 20,000 cap applies to the paths in `files` together,
+  and separately to the files-without-symbols list.
+- A path that fails either the ownership grammar or `planning_path` counts as
+  unmatchable and unowned, and is in no list.
+- A symbol bucket is `{count, kinds, edges}`, with `edges` nested by relation
+  then confidence. File nodes count as symbols and zero counts are omitted.
+- `languages`, `module_scopes` and the `unknown_*` lists are sorted and
+  deduplicated, each string cut at 512 characters. Only the document cap bounds
+  their length.
+- `issues` includes the project's workspace record diagnostics, as planning
+  does. `omitted_issues` is always present. Under the cap the export's own
+  warnings are kept first, then errors.
+- An artifact flag left out adds a warning for `graph` or `trail`. A configured
+  file that is absent already has the loader's error row.
+- With no component model and no project records the command exits 2 even if
+  artifacts exist ([Purpose](#purpose-and-shape) wins over Q7). With records
+  but no model, a recording that is `invalid` counts as existing, so the
+  command exits 0.
+- A read error from another file is reported under `export understand`, with the
+  file name in the message. Argument errors come from the shared CLI parser.
 
 ## Open questions
 

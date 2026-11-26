@@ -26,7 +26,7 @@ An optional Codeman theme is post-MVP.
 
 - The [Understand MVP](UNDERSTAND-MVP.md) is merged. Remaining acceptance: repeat it with a human-reviewed component in a deployed Codeman Web Tab. Browser checks so far were local (phone and desktop widths, simulated opaque Web Tab, seeded component).
 - Milestone 5: freshness, missing-input and oversize behavior is pinned by tests (#26). `scripts/measure_recordings.py` and [LIMITS](LIMITS.md) record small-sample figures from the trimmed recordings. Full NetLens recordings (about 8.8 MB, revision `5188ca6`) were also measured. Behavior near the 64 MiB cap stays unmeasured, so the milestone is only partly done.
-- A future `export understand --json` is specified in the [Understand export contract](contracts/understand-export.md) (proposed; open questions for the maintainer are listed there).
+- `export understand --json` follows the [Understand export contract](contracts/understand-export.md). Its answers and shape choices are provisional until the maintainer decides. It has not been run on full real recordings, and its 4 MiB cap is unmeasured on large ones.
 - Re-run the [real-data smoke runner](REAL-DATA-SMOKE.md) after changes to compare CLI results with pinned expectations.
 
 **Subprocess exception for the runner wrappers only.** Each dedicated wrapper
