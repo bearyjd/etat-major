@@ -272,3 +272,57 @@ def test_loaders_never_lazy_fetch_from_a_promisor(promisor_attack, loader, error
     assert dict(HARDENED_CONFIG)["protocol.allow"] == "never"
     assert git_environment()["GIT_ALLOW_PROTOCOL"] == ""
     assert git_environment()["GIT_NO_LAZY_FETCH"] == "1"
+
+
+# Written out literally: deriving it from git_environment() could never catch a leaked variable.
+ALLOWED_ENV = {
+    "PATH": os.defpath,
+    "LC_ALL": "C",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_OPTIONAL_LOCKS": "0",
+    "GIT_ALLOW_PROTOCOL": "",
+    "GIT_NO_LAZY_FETCH": "1",
+    "GIT_NO_REPLACE_OBJECTS": "1",
+    "GIT_ATTR_NOSYSTEM": "1",
+}
+
+HOSTILE_ENV = {
+    "GIT_DIR": "/nonexistent/git",
+    "GIT_WORK_TREE": "/nonexistent/tree",
+    "GIT_CONFIG_GLOBAL": "/nonexistent/config",
+    "GIT_CONFIG_PARAMETERS": "'core.fsmonitor'='/nonexistent/run'",
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "core.fsmonitor",
+    "GIT_CONFIG_VALUE_0": "/nonexistent/run",
+    "GIT_EXEC_PATH": "/nonexistent/exec",
+    "GIT_SSH_COMMAND": "/nonexistent/ssh",
+    "GIT_EXTERNAL_DIFF": "/nonexistent/diff",
+    "GIT_PAGER": "/nonexistent/pager",
+    "GIT_ALLOW_PROTOCOL": "ext",
+    "GIT_NO_LAZY_FETCH": "0",
+}
+
+
+@pytest.mark.parametrize("loader", [_drive_renames, _drive_evidence])
+def test_hostile_git_variables_never_reach_git(bare_attack, monkeypatch, loader):
+    repo, _ = bare_attack
+    for key, value in HOSTILE_ENV.items():
+        monkeypatch.setenv(key, value)
+    calls = []
+    real = subprocess.Popen
+
+    def spy(command, **kwargs):
+        # Checked before git starts, so a leak fails here and not as a later Git error.
+        env = dict(kwargs["env"])
+        # Only the config guard runs without a repository, so only it has no GIT_DIR.
+        if "config" not in command:
+            assert env.pop("GIT_DIR", "").startswith("/proc/self/fd/")
+        assert env == ALLOWED_ENV
+        calls.append(command)
+        return real(command, **kwargs)
+
+    monkeypatch.setattr(renames.subprocess, "Popen", spy)
+    loader(repo)
+    assert {"config" in command for command in calls} == {True, False}
