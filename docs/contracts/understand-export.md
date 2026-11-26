@@ -190,7 +190,8 @@ Never exported, and the schema forbids them (`additionalProperties: false`):
    passes through), bare IP addresses, `localhost:port` forms or email
    addresses, and the export does not claim to remove them; see Q11.
    Overlapping or touching matches become a single placeholder. Known gaps:
-   a second scp-style remote glued to the first with no separator can leave its
+   a second scp-style remote joined to the first by anything other than
+   whitespace, a quote, `<` or `>` (for example a bare comma) can leave its
    `:path` visible, and a dotless `host:name.git` followed by a colon is not
    detected.
    Paths are always workspace-relative and re-validated with `planning_path`.
