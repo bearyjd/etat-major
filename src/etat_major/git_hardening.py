@@ -1,8 +1,19 @@
 """One definition of how Git is run safely against a repository we do not trust.
 
 A hostile repository config can name programs (`core.fsmonitor`, `core.hooksPath`, pagers, external
-diff drivers, signature verifiers). Every Git call in `src/` takes its environment and per-call
-settings from here, so no call site has to remember extra flags.
+diff drivers, signature verifiers). Git runs in `src/` take their settings from here, which switch
+off the programs configured under the fixed keys listed below. The in-process readers also take
+their environment from `git_environment()`; the tool runners build their own and add
+`config_environment()`.
+
+That is not complete protection. A repository chooses the names of its own `filter.<name>.*`,
+`diff.<name>.textconv` and `diff.<name>.command` drivers, so no fixed `-c` list can disable them.
+Each runner must also keep to one of these rules:
+
+- A runner that reads the repository's own config (`renames`, `evidence_git`) uses `--bare`, runs
+  no command that applies a filter, and passes `--no-ext-diff --no-textconv` to any diff.
+- A runner whose external tool runs Git itself (`trail_runner`, `floorplan_runner`) points
+  `GIT_DIR` at a private scratch directory, so the repository's config is never loaded.
 """
 
 import os
