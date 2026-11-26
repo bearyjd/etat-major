@@ -326,3 +326,25 @@ def test_hostile_git_variables_never_reach_git(bare_attack, monkeypatch, loader)
     monkeypatch.setattr(renames.subprocess, "Popen", spy)
     loader(repo)
     assert {"config" in command for command in calls} == {True, False}
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "--no-pager",
+        f"core.attributesFile={os.devnull}",
+        "log.showSignature=false",
+        "gpg.ssh.program=false",
+        "gpg.x509.program=false",
+        "core.sshCommand=false",
+        "core.askPass=false",
+        "core.alternateRefsCommand=",
+    ],
+)
+def test_each_hardened_argument_is_present(argument):
+    assert argument in GIT_CONFIG_ARGS
+
+
+@pytest.mark.parametrize("name", ["GIT_NO_REPLACE_OBJECTS", "GIT_ATTR_NOSYSTEM"])
+def test_each_hardened_variable_is_present(name):
+    assert git_environment().get(name) == "1"
