@@ -189,13 +189,17 @@ Never exported, and the schema forbids them (`additionalProperties: false`):
    scp-style `host:path` forms. It does not detect bare hostnames in
    human-written prose (a label or summary saying "runs on build-box.lan"
    passes through), bare IP addresses, `localhost:port` forms or email
-   addresses, and the export does not claim to remove them; see Q11.
+   addresses, and the export does not claim to remove them; see Q11. It also
+   does not redact `~user/` forms, schemeless `user@host/path` remotes, paths
+   preceded by an underscore, or the remainder of an absolute path after a
+   space, and it does not detect secrets or tokens in prose.
    Paths are always workspace-relative and re-validated with `planning_path`.
 4. Source excerpts, file bodies and anything read from the scanned repository
    other than paths and recorded symbol metadata.
 5. Raw Floorplan or Trail records, including model-written Floorplan layers,
    blueprints and edge lists. Floorplan is advisory and has no stable contract.
-6. Credentials, environment values and tool output.
+6. No credential or environment value is read by the export; text in
+   recordings or the component model is not scanned for secrets.
 7. Anything unsanitized. Issue rows follow `public_issue`: `path` goes through
    `_issue_path` (a valid `feature:`, `task:` or `milestone:` ref is kept with
    a 256-character limit, anything else passes `planning_path`), `field`
