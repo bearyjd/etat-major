@@ -95,6 +95,36 @@ A bad recorded input, such as an unreadable `--graph`, can still exit 0: the
 problem is listed in the payload's `issues` instead. Check `issues` before
 trusting the data.
 
+## `export discover --json`
+
+`etat-major export discover --json --workspace DIR --project P` prints the
+Discover view (research and decisions) to stdout. It needs no web extra and
+`--json` is required. Errors name `export discover`.
+
+Only `--workspace` and `--project` affect the output. The parser accepts the
+other `export planning` input flags (`--graph`, `--trail`, `--repo`, `--prs`,
+`--releases`, `--meute` and so on), but they are loaded and ignored for
+Discover, and problems with them are not reported because the payload has no
+`issues` list. `issue_count` counts only research and decision records that
+failed to load; run `workspace validate` for the details. As in the `/discover`
+page of the web app, the project must have planning records (features, tasks,
+milestones or components); a project with only research and decisions exits 2
+with `no records for the configured project`.
+
+The document is a bare payload with the top-level marker
+`"schema": "etat-major/discover@1"` and `"version": 1`, described by the closed
+[`discover.schema.json`](schemas/discover.schema.json) (Draft 2020-12). It is
+built by `discover_view.discover_payload` from the view dataclasses, so keys
+mirror them: `research`, `decisions`, `omitted_research`, `omitted_decisions`,
+`issue_count` and `query` (always empty in an export). Dates (`source_date`,
+`decided_on`) are ISO 8601 strings or `null`. Decision `alternatives` are
+`[option, why_not]` pairs. Text is already sanitized for display. Output is
+sorted, indented two spaces and ends with one newline. As with planning, a
+new key needs a schema update or an `@2` marker; clients must gate on `schema`.
+
+`export understand --json` is specified, not yet implemented: see the
+[Understand export contract](understand-export.md).
+
 ## Stability and input handling
 
 Object keys are sorted. Arrays follow the command's stable order, including
