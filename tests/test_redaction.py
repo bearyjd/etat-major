@@ -42,6 +42,8 @@ CORPUS = [
     # Adjacent and overlapping spans.
     ("/a/S1x,/b/S2x", R),
     ("/a/S1x,h.invalid:/b/S2x", R),
+    # A span contained in an earlier one must not shorten the merged span.
+    ("/a/S1x,h.invalid:S2x:S3x", R),
     ("h.invalid:x-/S1x:S2x", R),
     ("h.invalid:x=/srv/S1x", R),
     ("h.invalid:S1x=C:\\S2x", R),
