@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from etat_major import renames
-from etat_major.git_hardening import GIT_CONFIG_ARGS, git_environment
+from etat_major import evidence_git, renames
+from etat_major.git_hardening import GIT_CONFIG_ARGS, HARDENED_CONFIG, git_environment
+from etat_major.taskfile import TaskFileError
 
 BASE_ENV = {"PATH": os.defpath, "HOME": "/nonexistent", "GIT_CONFIG_NOSYSTEM": "1"}
 
@@ -212,8 +213,62 @@ def test_load_renames_runs_no_repository_program(bare_attack):
 
 
 def test_load_git_runs_no_repository_program(bare_attack):
-    from etat_major import evidence_git
-
     repo, marker = bare_attack
     evidence_git.load_git(repo, (), (), frozenset())
     assert not marker.exists()
+
+
+@pytest.fixture
+def promisor_attack(tmp_path):
+    """A partial clone missing a tree, whose promisor remote is an ext:: marker command."""
+    repo = tmp_path / "promisor"
+    (repo / "sub").mkdir(parents=True)
+    _git_out(repo, "init", "-q", "--template=")
+    for message, content in (("one", "a\n"), ("two", "b\n")):
+        (repo / "sub" / "a.txt").write_text(content)
+        _git_out(repo, "add", "-A")
+        _git_out(repo, "commit", "-qm", message)
+    tree = _git_out(repo, "rev-parse", "HEAD:sub")
+    marker = tmp_path / "marker"
+    script = _script(tmp_path / "remote.sh", marker)
+    for key, value in (
+        ("core.repositoryformatversion", "1"),
+        ("extensions.partialClone", "origin"),
+        ("remote.origin.promisor", "true"),
+        ("remote.origin.url", f"ext::{script}"),
+        ("protocol.ext.allow", "always"),
+    ):
+        _git_out(repo, "config", key, value)
+    (repo / ".git" / "objects" / tree[:2] / tree[2:]).unlink()
+    return repo, marker
+
+
+@pytest.mark.parametrize("args", [("ls-tree", "-r", "HEAD"), ("diff", "HEAD~1", "HEAD")])
+def test_promisor_control_runs_remote_command(promisor_attack, args):
+    repo, marker = promisor_attack
+    subprocess.run(  # noqa: S603 - local test repository only
+        ["/usr/bin/git", "--bare", *args], cwd="/", env=_bare_env(repo), check=False
+    )
+    assert marker.exists()
+
+
+def _drive_renames(repo: Path) -> None:
+    renames.load_renames(repo, "HEAD~1", "HEAD")
+
+
+def _drive_evidence(repo: Path) -> None:
+    evidence_git.load_git(repo, (), (), frozenset())
+
+
+@pytest.mark.parametrize(
+    ("loader", "error"),
+    [(_drive_renames, renames.RenameError), (_drive_evidence, TaskFileError)],
+)
+def test_loaders_never_lazy_fetch_from_a_promisor(promisor_attack, loader, error):
+    repo, marker = promisor_attack
+    with pytest.raises(error):
+        loader(repo)
+    assert not marker.exists()
+    assert dict(HARDENED_CONFIG)["protocol.allow"] == "never"
+    assert git_environment()["GIT_ALLOW_PROTOCOL"] == ""
+    assert git_environment()["GIT_NO_LAZY_FETCH"] == "1"
