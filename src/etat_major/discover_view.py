@@ -77,8 +77,9 @@ class DiscoverView:
         return bool(self.research or self.decisions or self.issue_count)
 
 
-def _text(value: str) -> str:
-    return planning_text(value)
+def _text(value: str, *, multiline: bool = False) -> str:
+    # The page has always redacted what the escaped form shows; keep that for the export too.
+    return planning_text(value, multiline=multiline, match_escaped=True)
 
 
 def _feature_labels(ws: Workspace, kind: str, record_id: str, direct) -> tuple[str, ...]:
@@ -96,7 +97,7 @@ def _finding(research: ResearchArtifact, finding) -> FindingRow:
     source = None if finding.source is None else public_source_url(finding.source)
     return FindingRow(
         finding.id,
-        _text(finding.text),
+        _text(finding.text, multiline=True),
         source,
         None if unsourced else dates.get(finding.source),
         unsourced,
@@ -126,14 +127,16 @@ def _cite_row(ws: Workspace, ref) -> CiteRow:
 
 
 def _decision_row(ws: Workspace, d: Decision) -> DecisionRow:
-    alternatives = tuple((_text(a.option), _text(a.why_not)) for a in d.alternatives)
+    alternatives = tuple(
+        (_text(a.option), _text(a.why_not, multiline=True)) for a in d.alternatives
+    )
     return DecisionRow(
         d.id,
         _text(d.question),
         d.status,
         d.decided_on,
-        _text(d.chosen) if d.chosen else None,
-        _text(d.rationale) if d.rationale else None,
+        _text(d.chosen, multiline=True) if d.chosen else None,
+        _text(d.rationale, multiline=True) if d.rationale else None,
         alternatives[:MAX_ALTERNATIVES],
         max(0, len(alternatives) - MAX_ALTERNATIVES),
         tuple(_cite_row(ws, r) for r in d.evidence[:MAX_CITES]),

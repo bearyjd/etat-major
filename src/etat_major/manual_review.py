@@ -15,9 +15,9 @@ from pydantic import (
 
 from etat_major.evidence_records import RecordedRef, RecordedTimestamp, TaskKey
 from etat_major.localfiles import open_directory, read_text_kib
+from etat_major.planning_issues import planning_text
 from etat_major.recorded_yaml import parse_bounded_yaml_mapping
 from etat_major.taskfile import TaskFileError, first_error
-from etat_major.text_safety import public_text, safe
 
 MANUAL_REVIEW_LABEL = "Manual Anthropic API review"
 _SOURCE = Literal["manual-anthropic-api-review"]
@@ -70,5 +70,5 @@ def load_manual_review(path: Path, *, project: str, tasks: set[str]) -> ManualRe
         raise
     if record.task.partition("/")[0] != project or record.task not in tasks:
         raise TaskFileError(path, "task", "expected an existing task in the configured project")
-    outcome = safe(public_text(record.outcome, scp_remotes=True), limit=256)
+    outcome = planning_text(record.outcome, limit=256)
     return ManualReview(**record.model_dump(exclude={"outcome"}), outcome=outcome)

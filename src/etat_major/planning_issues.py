@@ -10,15 +10,30 @@ from unicodedata import normalize
 
 from etat_major.component_paths import component_file_path
 from etat_major.refs import RefError, parse_ref
-from etat_major.text_safety import public_text, safe
+from etat_major.text_safety import public_text, redact_escaped_locations, safe, safe_field
 from etat_major.workspace import Issue
 
 _REFRESH_ERROR_LIMIT = 512
 _PATH_PUNCTUATION = str.maketrans("%#", "__")
 
 
-def planning_text(value: str, *, limit: int = 512, prose: bool = True) -> str:
-    return safe(public_text(value, scp_remotes=prose), limit=limit)
+def planning_text(
+    value: str,
+    *,
+    limit: int = 512,
+    prose: bool = True,
+    multiline: bool = False,
+    match_escaped: bool = False,
+) -> str:
+    """Redact and escape one payload field.
+
+    ``prose`` selects the scp-remote redaction; ``multiline`` keeps line feeds.
+    ``match_escaped`` also redacts matches that only the escaped form shows.
+    """
+    public = public_text(value, scp_remotes=prose)
+    if match_escaped:
+        public = redact_escaped_locations(public)
+    return safe_field(public, multiline=multiline, limit=limit)
 
 
 def planning_path(value: str) -> str:

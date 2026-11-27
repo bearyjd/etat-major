@@ -25,8 +25,8 @@ align-items:start}main>div{min-width:0}@media(min-width:50rem){
 main{grid-template-columns:minmax(14rem,1fr) minmax(0,2fr)}}"""
 
 
-def display(text):
-    return escape(planning_text(text))
+def display(text, *, multiline=False):
+    return escape(planning_text(text, multiline=multiline))
 
 
 def _url(params, anchor=""):
@@ -150,7 +150,8 @@ def _component(nav, key):
                 if s.reviewed_on
                 else "unreviewed"
             )
-            parts.append(f"<p>{display(s.text)}</p><p>{display(s.provenance)} · {review}</p>")
+            text = display(s.text, multiline=True)
+            parts.append(f"<p>{text}</p><p>{display(s.provenance)} · {review}</p>")
     files = nav.view.files.get(key, ())
     return (
         "<section>"
