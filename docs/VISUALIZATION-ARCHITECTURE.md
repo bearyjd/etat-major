@@ -15,8 +15,8 @@ The central relationship is traceable in both directions: **Research → Decisio
 
 ## Non-goals
 
-- Running or supervising coding agents. Codeman owns interactive sessions; Meute owns unattended runs.
-- A scheduler, queue or runner of any kind. The only exception is a later, click-gated hand-off to Codeman or Meute through their own documented interfaces (roadmap Phase 6); État-major starts and queues nothing itself.
+- Running or supervising coding agents. The session host (the tool that owns interactive agent sessions; Codeman is the legacy host) owns interactive sessions; Meute owns unattended runs.
+- A scheduler, queue or runner of any kind. The only exception is a later, click-gated hand-off to the session host or Meute through their own documented interfaces (roadmap Phase 6); État-major starts and queues nothing itself.
 - A terminal or tmux subsystem.
 - Handling Claude or Codex authentication in any way: no subscription proxy, token pooling or account switching.
 - A proprietary planning database. Git is the source of truth for intent, including research and decisions.
@@ -30,7 +30,7 @@ The first SPEC.md described a control plane that supervised agents. That directi
 
 | Earlier plan (SPEC.md / CLAUDE.md) | Status |
 | --- | --- |
-| Control plane that runs sessions, router, runner API | **Superseded.** Codeman and Meute own execution. |
+| Control plane that runs sessions, router, runner API | **Superseded.** The session host (Codeman is the legacy host) and Meute own execution. |
 | Model router, profiles, fallback policy, routing-policy test | **Superseded.** No agent launching here. |
 | Runtime store for sessions, hook events, spend, approvals | **Superseded.** Progress evidence is derived from Git/CI; a rebuildable cache replaces it. |
 | Event schema, adapter interface, runner API contracts | **Superseded** by the four contracts below. |
@@ -50,7 +50,7 @@ The first SPEC.md described a control plane that supervised agents. That directi
 | **Trail** | Parsing code into a function-level symbol graph | Symbol layer of `RepoIndex`, through a versioned adapter. Replaceable. |
 | **ChatGPT** | External research and brainstorming, especially Reddit | Manual handoff only: État-major writes a brief, the human pastes it and brings back the answer for review. |
 | **Git and GitHub** | Durable intent (Markdown, YAML, Mermaid), history, PRs, checks, releases | Source of truth. Read through `git` and recorded `gh` output (see the capture-script exception in `AGENTS.md`). |
-| **Codeman** | Interactive Claude Code and Codex sessions, tmux, mobile terminal, voice, notifications, logins | Separate. Link out; optionally launch a session for an approved task. |
+| **Session host** (Codeman is the legacy host) | Interactive agent sessions. Legacy Codeman: Claude Code and Codex sessions, tmux, mobile terminal, voice, notifications, logins | Separate. Link out; optionally launch a session for an approved task. |
 | **Meute** | Unattended scheduling and execution, run reports | Separate. Read its artifacts; submit approved work only through its own CLI. |
 | **Backlog.md** | A task-file format | Reference only. The spike decided to define our own contract (see `docs/spikes/phase1-spike.md`). |
 
@@ -83,6 +83,8 @@ Findings below come from reading each project's code and docs on 2026-11-21. "Ve
 
 ### Codeman 1.51.1 (MIT)
 
+Codeman is the legacy session host. These findings are about Codeman 1.51.1 only and say nothing about another host.
+
 - **Verified in code and docs:** Node 22, Fastify, tmux, xterm.js PWA. A stable `/api/v1` prefix with an `{success, data}` envelope. `GET /api/sessions` lists sessions. `POST /api/sessions` creates one (`workingDir`, `mode` for the agent CLI, `name`, optional `envOverrides`). There is no initial-prompt field on create; send it with `POST /api/sessions/:id/input`. SSE at `GET /api/events` and a WebSocket terminal exist.
 - **Session links:** the API returns no URL. `/session/:id` serves a single-session window, and the SPA reads a `#session=<id>` fragment. Which of these a phone browser honours is unverified.
 - **Auth:** optional HTTP Basic plus a cookie. No bearer or API-key scheme. With no password configured, nothing is enforced.
@@ -91,7 +93,7 @@ Findings below come from reading each project's code and docs on 2026-11-21. "Ve
 
 ## Data contracts
 
-Four small, tool-neutral contracts. Each is a documented file or JSON shape with a version field. None depends on Trail, Codeman or Meute being installed.
+Four small, tool-neutral contracts. Each is a documented file or JSON shape with a version field. None depends on Trail, a session host or Meute being installed.
 
 Provenance values used throughout: `verified` (a fact derived by a deterministic parse or lookup), `inferred` (heuristic), `ai-generated` (a model wrote it), `human` (a person asserted it). The UI always shows provenance and never upgrades it.
 
@@ -168,11 +170,11 @@ An optional pointer from a task to something running elsewhere:
 task: 0042
 kind: codeman-session            # or meute-job
 ref: <session id or job id>
-url: <deep link, if known>       # Codeman: /session/<id>
+url: <deep link, if known>       # legacy Codeman: /session/<id>
 seen_at: 2026-11-21T12:00:00Z
 ```
 
-The recorded Planning input uses an explicit project-qualified task and derives any Codeman URL from a trusted startup origin. The snapshot records when each pointer was last seen. Live discovery and stale detection require a future integration. [Recorded execution links contract](contracts/execution-links.md)
+The `codeman-session` kind belongs to the legacy session host, Codeman. The recorded Planning input uses an explicit project-qualified task and derives any Codeman URL from a trusted startup origin. The snapshot records when each pointer was last seen. Live discovery and stale detection require a future integration. [Recorded execution links contract](contracts/execution-links.md)
 
 ## The four views
 
@@ -185,7 +187,7 @@ The views share one model and link in both directions: click a module to see the
 
 ## Integration boundaries
 
-- **Codeman:** read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Codeman's own service password, if set, is read at call time from an environment variable named in configuration and never stored. These are not Claude or Codex credentials. Launching is an optional later hand-off, always behind explicit human approval, and État-major never sets `envOverrides` at all: any per-person credential directory is configured in Codeman, outside État-major. Each launch is one explicit human click; nothing is queued or retried.
+- **Session host:** the calls and settings named here are those of the legacy host, Codeman. Read `GET /api/sessions`; open a session through a deep link; launch one for an approved task with `POST /api/sessions` followed by `POST /api/sessions/:id/input`. Codeman's own service password, if set, is read at call time from an environment variable named in configuration and never stored. These are not Claude or Codex credentials. Launching, on any session host, is an optional later hand-off, always behind explicit human approval, and État-major never sets `envOverrides` at all: any per-person credential directory is configured in Codeman, outside État-major. Each launch is one explicit human click; nothing is queued or retried.
 - **Meute:** read `state/log` and `reports/**` directly; submit only through `meute promote` or `meute plan --enqueue`, after human approval. No competing queue.
 - **Git and CI:** `git log` for history, and recorded `gh` output for PRs, reviews, checks and releases, captured by a person with their own `gh` login under the narrow exception in `AGENTS.md`. État-major's core makes no `gh` call and stores no credential.
 - **Floorplan:** read its `graph.json`, `architecture.json` and `plan.json` through a versioned adapter that accepts only known schema strings. Run only its deterministic scripts, on a copy or worktree. It stays independently upgradeable; État-major does not fork it.
@@ -194,9 +196,9 @@ The views share one model and link in both directions: click a module to see the
 
 ## Security and trust
 
-- **First deployment:** a trusted family on one machine, reachable over loopback or a private network such as Tailscale. No public exposure. Codeman's passwordless default is not acceptable beyond loopback; configure its password.
+- **First deployment:** a trusted family on one machine, reachable over loopback or a private network such as Tailscale. No public exposure. The legacy session host's (Codeman's) passwordless default is not acceptable beyond loopback; configure its password.
 - **Credentials:** État-major stores none. It reads no Claude or Codex login files. It never proxies, pools or switches accounts.
-- **Critical open uncertainty:** Codeman's multi-user mode shares one OS account and one subscription login by default, and its voice dictation uses the server's login. Before the second user is added, either run a separate OS user with its own Codeman instance, or verify per-user config directories end to end and confirm account eligibility with Anthropic. Until then, treat a shared Codeman as single-subscription.
+- **Critical open uncertainty:** the legacy session host, Codeman, in multi-user mode shares one OS account and one subscription login by default, and its voice dictation uses the server's login. Credential isolation must be verified for whichever session host is used: do not add a second user until it is verified end to end and account eligibility is confirmed. On Codeman, before the second user is added, either run a separate OS user with its own Codeman instance, or verify per-user config directories end to end and confirm account eligibility with Anthropic. Until then, treat a shared Codeman as single-subscription.
 - **Indexing safety:** `trail build` writes into its target, so index a worktree or copy. Repositories are read-only inputs; État-major never edits indexed source.
 - **Rendering:** Markdown and Mermaid from repositories are untrusted. Sanitize HTML and use Mermaid's strict mode.
 - **Telemetry:** disable Trail telemetry in the adapter's environment.
@@ -206,7 +208,7 @@ The views share one model and link in both directions: click a module to see the
 
 - **Backend:** Python, reusing the merged validator (`pydantic`, `PyYAML`). FastAPI to serve a read-only JSON API and static assets. The derived cache is SQLite or JSON files, rebuildable from Git and the indexer.
 - **Frontend:** a thin, server-rendered UI with HTMX. For the architecture map, start by embedding or linking Floorplan's own generated viewer; add Cytoscape.js only for the overlays and the function-level layer that Floorplan does not provide. Cytoscape.js needs no UI framework, supports compound nodes for module nesting and handles large graphs; React Flow would commit the project to a React single-page app for little gain here. Mermaid renders diagrams client-side.
-- **Mobile:** responsive layout; no native app. The phone terminal is Codeman's job.
+- **Mobile:** responsive layout; no native app. The phone terminal is the session host's job (Codeman is the legacy host).
 - **Before adopting any library,** verify its license in its own repository.
 
 ## Open questions
@@ -214,7 +216,7 @@ The views share one model and link in both directions: click a module to see the
 - Which file extensions the first release supports beyond Python, and whether to enable Trail's optional LSP mode where servers exist.
 - Repository size limits for `wiring.json` and a pagination or on-demand loading strategy for large graphs.
 - Cache format: SQLite or JSON.
-- The Codeman session deep link that works on a phone (`/session/:id` or the `#session=` fragment).
+- The session-host deep link that works on a phone (legacy Codeman: `/session/:id` or the `#session=` fragment).
 - The exact schema of Meute's `inbox.py dump` against live state.
 - Second user's agent CLI and account eligibility, and the credential-isolation approach above.
 - Whether the repo keeps the working title "État-major".

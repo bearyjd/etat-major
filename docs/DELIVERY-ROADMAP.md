@@ -15,6 +15,9 @@ independent review and CI. The NetLens browser proof used seeded components
 and a simulated Codeman proxy. A human-reviewed component and live Codeman
 verification remain open for full Understand acceptance.
 
+Codeman, named below, is the legacy session host. The saved tabs, Web Tab
+behaviour, session opening and upstream findings are specific to it.
+
 ## Milestones and proposed PRs
 
 | Milestone | Proposed PR or delivery step | Depends on | Exit evidence |

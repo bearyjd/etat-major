@@ -3,6 +3,8 @@
 Use `etat-major serve --execution-links FILE` to include recorded handoff
 context for tasks in the configured project. The startup snapshot is a UTF-8
 YAML mapping or JSON object up to 64 KiB with at most 256 rows.
+`codeman-session` is the only session kind. It points to Codeman, the legacy
+session host, so the session reference format and URL below are specific to it.
 
 ```yaml
 version: 1

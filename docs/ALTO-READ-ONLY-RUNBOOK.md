@@ -3,8 +3,10 @@
 Use this runbook for the first [Alto delivery PR](ALTO-MVP-DELIVERY.md).
 Before staging or switching services on Alto, record the approved revision,
 services, tabs, window and rollback
-scope. Keep the run record private. It can contain service identities, paths
-and tab destinations, while credentials and refresh tokens stay out of it.
+scope. The saved tabs, session URLs and `CODEMAN_ORIGIN` in this runbook belong
+to Codeman, the legacy session host, and apply only to it. Keep the run record
+private. It can contain service identities, paths and tab destinations, while
+credentials and refresh tokens stay out of it.
 
 ## Pin the candidate and record the baseline
 

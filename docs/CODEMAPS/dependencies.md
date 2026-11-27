@@ -25,4 +25,4 @@ Floorplan/Trail output is otherwise consumed as recorded files by `floorplan.py`
 - No Gradle, Floorplan model steps, `trail init`, or code from scanned repos; git read-only.
 - Runner exception (docs/NEXT.md): fixed args, no shell, scrubbed env/telemetry off, timeout, output cap, throwaway copy; tests use fake executables.
 - No new dependencies without maintainer approval (web extra approved).
-- Core must work with no Codeman, Meute, live Floorplan or agent.
+- Core must work with no session host, Meute, live Floorplan or agent.

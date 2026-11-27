@@ -7,7 +7,8 @@ rollout are separate decisions. Stage and deploy on Alto only within the scope
 the maintainer explicitly authorizes, including the target revisions, services
 and tabs. Keep machine-specific settings and credentials outside the repository.
 
-Codeman is the operator entry point and owns sessions and their access checks.
+Codeman, the legacy session host, is the operator entry point and owns sessions
+and their access checks. Every Codeman statement in this plan is specific to it.
 Meute owns Inbox, Run, execution and write authentication. État-major owns the
 roadmap, task presentation and recorded evidence. Each service keeps its own
 credentials. The handoffs carry only the task or execution link needed by the
