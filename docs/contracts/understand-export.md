@@ -215,11 +215,17 @@ Never exported, and the schema forbids them (`additionalProperties: false`):
    `planning_path` before it is emitted. `safe_field` escapes like `safe` but
    handles line breaks by the [line-break
    rule](cli-json.md#stability-and-input-handling): `summary` keeps line feeds,
-   every other string is flattened to one line. That covers `label`, `kind`,
-   `summary`, `owner`, issue messages, `languages`, `module_scopes`,
-   `unknown_kinds` and the relation and confidence names. JSON also escapes
-   Unicode formatting characters. There is no drop rule: a string is
-   sanitized and cut, never withheld.
+   every other `planning_text` string is flattened to one line and trimmed.
+   That covers `label`, `kind`, `owner`, issue `field` and `message`,
+   `languages`, `module_scopes`, `unknown_kinds` and the relation and
+   confidence names. Paths are the exception: issue `path`, component `paths`
+   and the `--include-files` lists are never flattened or trimmed. They are
+   escaped with `safe` and cut at 256 characters. An issue `path` that is not
+   a usable path or ref, or a component path that is not usable, becomes
+   `[redacted location]`; the file lists leave such paths out (see
+   [Files](#files)). JSON also escapes Unicode formatting characters. Apart
+   from those file lists, there is no drop rule: a string is sanitized and
+   cut, never withheld.
 
 Treat decoded strings as untrusted when displaying them.
 
