@@ -1,7 +1,7 @@
-# Alto read-only Planning and Fleet runbook
+# Deployment-host read-only Planning and Fleet runbook
 
-Use this runbook for the first [Alto delivery PR](ALTO-MVP-DELIVERY.md).
-Before staging or switching services on Alto, record the approved revision,
+Use this runbook for the first [deployment-host delivery PR](DEPLOYMENT-MVP-DELIVERY.md).
+Before staging or switching services on the deployment host, record the approved revision,
 services, tabs, window and rollback
 scope. The saved tabs, session URLs and `CODEMAN_ORIGIN` in this runbook belong
 to Codeman, the legacy session host, and apply only to it. Keep the run record
@@ -44,7 +44,7 @@ unset PYTHONPATH PYTHONHOME
 (( STAGE_PORT <= 65535 ))
 listeners=$(ss -H -ltn "sport = :$STAGE_PORT")
 [[ -z "$listeners" ]]
-run_dir=$(mktemp -d -- "$STAGING_PARENT/etat-alto.XXXXXX")
+run_dir=$(mktemp -d -- "$STAGING_PARENT/etat-deploy.XXXXXX")
 regular_input() {
   [[ "$1" = /* && -f "$1" && ! -L "$1" && "$(realpath -e -- "$1")" == "$1" ]]
 }
@@ -230,7 +230,7 @@ inputs, logs and snapshots under the approved retention policy.
 Use the authorized service procedure captured in the private run record.
 Switch one pilot at a time. Keep the current loopback port and saved tab
 destinations. Check the running revision, service health, listener, route
-statuses and actual sandboxed Codeman tabs on Alto. Repeat the applicable
+statuses and actual sandboxed Codeman tabs on the deployment host. Repeat the applicable
 read-only evidence, link, refresh and browser checks using unchanged live
 inputs. Record the revision, artifact digest, service and tab identities,
 viewports, outcomes and gaps privately.

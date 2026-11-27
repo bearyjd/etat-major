@@ -1,9 +1,9 @@
-# Alto MVP delivery
+# Deployment-host MVP delivery
 
 Deliver the three slices as separate, reviewable PRs in order. The merged
 read-only Planning stack provides the deployment candidate. Give each PR a pinned baseline, an independent review,
 green CI on its exact head, and a record of the checks run. Merge and live
-rollout are separate decisions. Stage and deploy on Alto only within the scope
+rollout are separate decisions. Stage and deploy on the deployment host only within the scope
 the maintainer explicitly authorizes, including the target revisions, services
 and tabs. Keep machine-specific settings and credentials outside the repository.
 
@@ -16,9 +16,9 @@ destination.
 
 ## PR 1 — Read-only Planning and Fleet deployment
 
-**Scope.** Use the [Alto read-only runbook](ALTO-READ-ONLY-RUNBOOK.md) for
+**Scope.** Use the [deployment-host read-only runbook](DEPLOYMENT-READ-ONLY-RUNBOOK.md) for
 release staging and operator verification of the merged Planning stack. Establish the service and Web Tab baseline before changing it.
-Record the exact merged candidate and the prior verified Alto revision, active
+Record the exact merged candidate and the prior verified deployment-host revision, active
 services, saved tab destinations and rollback target in the operator's private
 run record. The earlier local pilot is rehearsal evidence. Verify the new
 candidate separately.
@@ -61,7 +61,7 @@ Session launch stays outside this PR.
 **Acceptance.** Start from a recorded link on a Planning task. One click
 selects the linked Codeman session and the native return action restores the
 same Planning project and exact task anchor. Verify on desktop and phone
-widths against the authorized Alto baseline. Cover denied requests from
+widths against the authorized deployment-host baseline. Cover denied requests from
 unapproved tabs, missing sessions, unauthenticated operators and a different
 owner. Keep copyable URLs available as the fallback.
 

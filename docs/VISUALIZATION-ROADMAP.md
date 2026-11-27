@@ -86,7 +86,7 @@ The first thing to build, before any web UI. It proves the model.
 
 ## Phase 6: optional integrations and hardening
 
-**Status** — Read-only Planning and Fleet, recorded handoffs and in-memory refresh are implemented. An earlier local Alto pilot exercised those features. Deployment and verification of the current combined release, native existing-session round trips and authenticated Fleet actions remain pending. Portfolio, mobile views and deployment hardening remain planned.
+**Status** — Read-only Planning and Fleet, recorded handoffs and in-memory refresh are implemented. An earlier local deployment-host pilot exercised those features. Deployment and verification of the current combined release, native existing-session round trips and authenticated Fleet actions remain pending. Portfolio, mobile views and deployment hardening remain planned.
 
 - **Depends on:** Phases 2 to 5.
 - **Meute:** display recorded reports as `generated` evidence when the recording identifies an existing project task. Meute owns Inbox, Run, write authentication and execution. Any future live Fleet control must be an allowlisted, explicit operator action authorized by Meute.
@@ -99,7 +99,7 @@ The first thing to build, before any web UI. It proves the model.
 ## Proposed delivery milestones
 
 The [delivery roadmap](DELIVERY-ROADMAP.md) maps these phases to proposed PRs,
-dependencies, acceptance evidence and maintainer approvals. It covers the Alto
+dependencies, acceptance evidence and maintainer approvals. It covers the deployment-host
 rollout, the Understand MVP and the order of the remaining integration work.
 
 ## Dependency order
@@ -108,10 +108,10 @@ Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) →
 
 ## Recommended next steps
 
-Follow the [Alto delivery workflow](ALTO-MVP-DELIVERY.md) in three separate PRs.
+Follow the [deployment-host delivery workflow](DEPLOYMENT-MVP-DELIVERY.md) in three separate PRs.
 
-1. Stage the exact merged read-only release. With explicit rollout scope, deploy and verify it on Alto.
+1. Stage the exact merged read-only release. With explicit rollout scope, deploy and verify it on the deployment host.
 2. Design and implement native **Open session**. Keep the Planning iframe opaque and limited to nominating an existing session. The opted-in parent in Codeman, the legacy session host, rechecks the active frame, access and session owner on an explicit native click. In multi-user mode require an exact owner match. In authenticated single-user mode an ownerless session is eligible. Verify return to the exact Planning task and denial cases at desktop and phone widths.
-3. Keep Fleet actions and execution in Meute. Start with a private authenticated top-level link. Verify Host, Fetch Metadata, write Origin, tokens and explicit operator action on Alto before enabling iframe writes.
+3. Keep Fleet actions and execution in Meute. Start with a private authenticated top-level link. Verify Host, Fetch Metadata, write Origin, tokens and explicit operator action on the deployment host before enabling iframe writes.
 
-The [Understand MVP](UNDERSTAND-MVP.md) can proceed independently of Alto deployment. After the MVP, consider an optional legacy Codeman theme with light and dark modes, accessible contrast and phone-width layouts.
+The [Understand MVP](UNDERSTAND-MVP.md) can proceed independently of the deployment-host rollout. After the MVP, consider an optional legacy Codeman theme with light and dark modes, accessible contrast and phone-width layouts.
