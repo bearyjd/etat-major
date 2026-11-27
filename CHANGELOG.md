@@ -5,7 +5,7 @@ All notable changes to État-major are listed here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) as described under
 [Versioning policy](#versioning-policy).
 
-## [0.2.0] - unreleased
+## [0.2.0] - 2026-11-27
 
 Numbers refer to pull requests.
 
