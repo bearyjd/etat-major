@@ -58,9 +58,12 @@ and block force pushes, so that "the commit is on `main`" also means it was revi
   the tag no longer points to that commit, stops if a release for the tag already exists, and
   creates the GitHub release. It does not create a missing tag.
 
-Runs for the same tag wait for each other and are not cancelled by a newer one. The actions are
-pinned to commit hashes; change a pin only after looking up the commit of the new version tag in
-the action's repository, and update `tests/test_release_workflow.py` with it.
+Runs for the same tag do not overlap. A newer run never cancels the one that is running, but a
+run that is still waiting can be cancelled and replaced by a newer one for the same tag; re-run
+it from the Actions page if it is still wanted.
+
+The actions are pinned to commit hashes; change a pin only after looking up the commit of the new
+version tag in the action's repository, and update `tests/test_release_workflow.py` with it.
 
 ## If `verify` fails
 
