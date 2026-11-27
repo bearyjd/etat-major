@@ -9,9 +9,12 @@ from etat_major.cli import main
 from etat_major.planning_issues import planning_text, public_issue
 from etat_major.text_safety import public_text, safe
 from etat_major.workspace import Issue
+from test_discover_export import _errors as discover_errors
+from test_planning_schema import _errors as planning_errors
 from test_planning_web import client_for as client_for
 from test_planning_web import planning_workspace as planning_workspace
 from test_redaction import _MARKERS, CORPUS
+from understand_export_support import errors as understand_errors
 
 FEATURE = "features/netlens/0031-latency-graph.md"
 TASK = "tasks/netlens/0042-show-latency.md"
@@ -87,6 +90,7 @@ def _export(kind, workspace, capsys, *flags):
 
 
 def _assert_planning(payload):
+    assert planning_errors(payload) == []
     [feature] = payload["features"]
     assert feature["title"] == LINE_OUT
     assert feature["outcome"] == PROSE_OUT
@@ -106,6 +110,7 @@ def test_export_discover_keeps_prose_lines_and_flattens_single_line_fields(
     hostile_workspace, capsys
 ):
     payload = _export("discover", hostile_workspace, capsys)
+    assert discover_errors(payload) == []
     [research] = payload["research"]
     assert research["title"] == LINE_OUT
     assert research["findings"][0]["text"] == PROSE_OUT
@@ -128,6 +133,7 @@ def test_block_and_folded_scalars_reach_the_payload_as_text(planning_workspace, 
 
 def test_export_understand_keeps_summary_lines_and_flattens_labels(hostile_workspace, capsys):
     payload = _export("understand", hostile_workspace, capsys)
+    assert understand_errors(payload) == []
     [component] = payload["components"]
     assert (component["label"], component["kind"], component["owner"]) == (LINE_OUT,) * 3
     assert component["summary"] == PROSE_OUT
