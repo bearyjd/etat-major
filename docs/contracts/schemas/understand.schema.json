@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Understand payload (export understand --json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "project",
+    "artifacts",
+    "coverage",
+    "components",
+    "symbols",
+    "issues",
+    "omitted_issues"
+  ],
+  "dependentRequired": {
+    "files": ["ties", "files_truncated"],
+    "ties": ["files", "files_truncated"],
+    "files_truncated": ["files", "ties"]
+  },
+  "properties": {
+    "schema": {"const": "etat-major/understand@1"},
+    "version": {"const": 1},
+    "project": {"type": "string", "maxLength": 128},
+    "artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/artifact"}, {"properties": {"label": {"const": "Floorplan"}}}]},
+        {"allOf": [{"$ref": "#/$defs/artifact"}, {"properties": {"label": {"const": "Trail"}}}]}
+      ]
+    },
+    "coverage": {"$ref": "#/$defs/coverage"},
+    "components": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/component"}},
+    "symbols": {"$ref": "#/$defs/symbols"},
+    "files": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/groupName"},
+      "required": ["[Unowned files]", "[Tied ownership]"],
+      "additionalProperties": {"$ref": "#/$defs/pathList"}
+    },
+    "ties": {"type": "array", "maxItems": 20000, "items": {"$ref": "#/$defs/tie"}},
+    "files_truncated": {"type": "boolean"},
+    "issues": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/issue"}},
+    "omitted_issues": {"$ref": "#/$defs/count"}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0},
+    "text": {"type": "string", "maxLength": 512},
+    "nullableText": {"type": ["string", "null"], "maxLength": 512},
+    "path": {"type": "string", "maxLength": 256},
+    "textList": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "pathList": {"type": "array", "maxItems": 20000, "items": {"$ref": "#/$defs/path"}},
+    "groupName": {
+      "type": "string",
+      "pattern": "^(\\[Unowned files\\]|\\[Tied ownership\\]|[^\\[\\]/]+/[^\\[\\]]+)$"
+    },
+    "status": {"enum": ["present", "missing", "invalid"]},
+    "freshness": {"enum": ["fresh", "stale", "unknown"]},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "status", "freshness", "revision", "digest"],
+      "properties": {
+        "label": {"enum": ["Floorplan", "Trail"]},
+        "status": {"$ref": "#/$defs/status"},
+        "freshness": {"$ref": "#/$defs/freshness"},
+        "revision": {"type": ["string", "null"], "pattern": "^([a-f0-9]{40}|[a-f0-9]{64})$"},
+        "digest": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "artifactState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "status", "freshness"],
+      "properties": {
+        "label": {"enum": ["Floorplan", "Trail"]},
+        "status": {"$ref": "#/$defs/status"},
+        "freshness": {"$ref": "#/$defs/freshness"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inventory",
+        "owned",
+        "unowned",
+        "tied",
+        "total",
+        "unmatchable_paths",
+        "artifacts",
+        "notes"
+      ],
+      "properties": {
+        "inventory": {"enum": ["available", "unavailable"]},
+        "owned": {"$ref": "#/$defs/count"},
+        "unowned": {"$ref": "#/$defs/count"},
+        "tied": {"$ref": "#/$defs/count"},
+        "total": {"$ref": "#/$defs/count"},
+        "unmatchable_paths": {"$ref": "#/$defs/count"},
+        "artifacts": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/artifactState"}
+        },
+        "notes": {"$ref": "#/$defs/textList"}
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "kind",
+        "parent",
+        "owner",
+        "paths",
+        "summary",
+        "summary_provenance",
+        "provenance",
+        "reviewed",
+        "files",
+        "symbols"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "label": {"$ref": "#/$defs/text"},
+        "kind": {"$ref": "#/$defs/text"},
+        "parent": {"type": ["string", "null"]},
+        "owner": {"$ref": "#/$defs/nullableText"},
+        "paths": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/path"}},
+        "summary": {"$ref": "#/$defs/nullableText"},
+        "summary_provenance": {"enum": ["human", "ai-generated", "inferred", "verified", null]},
+        "provenance": {"enum": ["proposed", "declared"]},
+        "reviewed": {"type": "boolean"},
+        "files": {"$ref": "#/$defs/count"},
+        "symbols": {"$ref": "#/$defs/count"}
+      }
+    },
+    "kindCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {"$ref": "#/$defs/count"},
+        "class": {"$ref": "#/$defs/count"},
+        "function": {"$ref": "#/$defs/count"},
+        "method": {"$ref": "#/$defs/count"},
+        "interface": {"$ref": "#/$defs/count"},
+        "type": {"$ref": "#/$defs/count"},
+        "enum": {"$ref": "#/$defs/count"},
+        "struct": {"$ref": "#/$defs/count"},
+        "trait": {"$ref": "#/$defs/count"},
+        "module": {"$ref": "#/$defs/count"},
+        "constant": {"$ref": "#/$defs/count"},
+        "variable": {"$ref": "#/$defs/count"},
+        "unknown": {"$ref": "#/$defs/count"}
+      }
+    },
+    "confidenceCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extracted": {"$ref": "#/$defs/count"},
+        "lsp_resolved": {"$ref": "#/$defs/count"},
+        "inferred": {"$ref": "#/$defs/count"},
+        "lsp_dispatch": {"$ref": "#/$defs/count"},
+        "unknown": {"$ref": "#/$defs/count"}
+      }
+    },
+    "edgeCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "calls": {"$ref": "#/$defs/confidenceCounts"},
+        "contains": {"$ref": "#/$defs/confidenceCounts"},
+        "imports": {"$ref": "#/$defs/confidenceCounts"},
+        "extends": {"$ref": "#/$defs/confidenceCounts"},
+        "references": {"$ref": "#/$defs/confidenceCounts"},
+        "implements": {"$ref": "#/$defs/confidenceCounts"},
+        "unknown": {"$ref": "#/$defs/confidenceCounts"}
+      }
+    },
+    "relationCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "calls": {"$ref": "#/$defs/count"},
+        "contains": {"$ref": "#/$defs/count"},
+        "imports": {"$ref": "#/$defs/count"},
+        "extends": {"$ref": "#/$defs/count"},
+        "references": {"$ref": "#/$defs/count"},
+        "implements": {"$ref": "#/$defs/count"},
+        "unknown": {"$ref": "#/$defs/count"}
+      }
+    },
+    "bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "kinds", "edges"],
+      "properties": {
+        "count": {"$ref": "#/$defs/count"},
+        "kinds": {"$ref": "#/$defs/kindCounts"},
+        "edges": {"$ref": "#/$defs/edgeCounts"}
+      }
+    },
+    "symbols": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "by_component",
+        "unresolved_source",
+        "unresolved_relations",
+        "unknown_kinds",
+        "unknown_relations",
+        "unknown_confidences",
+        "languages",
+        "module_scopes",
+        "files_without_symbols"
+      ],
+      "properties": {
+        "total": {"$ref": "#/$defs/bucket"},
+        "by_component": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/groupName"},
+          "required": ["[Unowned files]", "[Tied ownership]"],
+          "additionalProperties": {"$ref": "#/$defs/bucket"}
+        },
+        "unresolved_source": {"$ref": "#/$defs/count"},
+        "unresolved_relations": {"$ref": "#/$defs/relationCounts"},
+        "unknown_kinds": {"$ref": "#/$defs/textList"},
+        "unknown_relations": {"$ref": "#/$defs/textList"},
+        "unknown_confidences": {"$ref": "#/$defs/textList"},
+        "languages": {"$ref": "#/$defs/textList"},
+        "module_scopes": {"$ref": "#/$defs/textList"},
+        "files_without_symbols": {"$ref": "#/$defs/count"},
+        "files_without_symbols_paths": {"$ref": "#/$defs/pathList"}
+      }
+    },
+    "tie": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "components"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "components": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "field", "message", "severity", "blocking"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "field": {"type": "string", "maxLength": 80},
+        "message": {"$ref": "#/$defs/text"},
+        "severity": {"enum": ["error", "warning"]},
+        "blocking": {"type": "boolean"}
+      }
+    }
+  }
+}

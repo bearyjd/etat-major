@@ -125,8 +125,29 @@ as a location once line breaks and controls are escaped. Output is
 sorted, indented two spaces and ends with one newline. As with planning, a
 new key needs a schema update or an `@2` marker; clients must gate on `schema`.
 
-`export understand --json` is specified, not yet implemented: see the
-[Understand export contract](understand-export.md).
+## `export understand --json`
+
+`etat-major export understand --json --workspace DIR --project P` prints the
+Understand view: the reviewed components, artifact status and coverage limits,
+a symbol summary and the issues found while reading. It needs no web extra and
+runs no Git or other tool. The only other flags are `--components`, `--graph`,
+`--trail`, `--source-revision`, `--floorplan-revision`, `--trail-revision` and
+`--include-files` (file paths, off by default). Evidence flags such as `--repo`
+or `--prs` are argument errors.
+
+The document is a bare payload with the top-level marker
+`"schema": "etat-major/understand@1"` and `"version": 1`, described by the closed
+[`understand.schema.json`](schemas/understand.schema.json) (Draft 2020-12). The
+[Understand export contract](understand-export.md) defines every field, the
+redactions and what is not redacted, the size caps and the answers that are
+still provisional. Output is sorted, indented two spaces and ends with one
+newline, with no generation time, so the same inputs produce identical bytes.
+
+A missing or invalid recording can still exit 0, listed in `issues`; check
+`issues` and `coverage` before trusting the data. Errors exit 2 with a message
+naming `export understand` and empty stdout: a bad project or revision, no
+records for the project, neither a component model nor a recording, or a
+document over 4 MiB.
 
 ## Stability and input handling
 
