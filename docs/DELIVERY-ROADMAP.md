@@ -1,12 +1,13 @@
 # Delivery roadmap
 
 The maintainer authorized the Understand and real-data smoke work and the
-read-only rollout of `9baf429` to the two existing Alto pilots.
+read-only rollout of `9baf429` to the two existing deployment-host pilots.
 The runbook merged in [PR #21](https://github.com/bearyjd/etat-major/pull/21).
 Isolated staging passed for both pilots. Live acceptance is pending access to
 both saved tabs through the current authenticated Codeman frontend.
 This plan builds on the [visualization phases](VISUALIZATION-ROADMAP.md),
-[Alto delivery workflow](https://github.com/bearyjd/etat-major/blob/9baf429/docs/ALTO-MVP-DELIVERY.md)
+[deployment-host delivery workflow](DEPLOYMENT-MVP-DELIVERY.md)
+([docs at `9baf429`](https://github.com/bearyjd/etat-major/tree/9baf429/docs))
 and [Understand MVP contract](https://github.com/bearyjd/etat-major/blob/9baf429/docs/UNDERSTAND-MVP.md).
 
 The [Understand inspector](https://github.com/bearyjd/etat-major/pull/23) and
@@ -22,15 +23,15 @@ behavior, session opening and upstream findings are specific to it.
 
 | Milestone | Proposed PR or delivery step | Depends on | Exit evidence |
 | --- | --- | --- | --- |
-| 1. Read-only Planning and Fleet on Alto | État-major #21 runbook, followed by the approved live rollout | Merged Planning stack, verified `9baf429` artifact and isolated staging | Each pilot serves the pinned release and passes health, evidence, handoff and refresh checks in its saved Codeman tab at phone and desktop sizes. Capture rollback inputs before switching a pilot. Verify NetLens before switching Relais. |
+| 1. Read-only Planning and Fleet on the deployment host | État-major #21 runbook, followed by the approved live rollout | Merged Planning stack, verified `9baf429` artifact and isolated staging | Each pilot serves the pinned release and passes health, evidence, handoff and refresh checks in its saved Codeman tab at phone and desktop sizes. Capture rollback inputs before switching a pilot. Verify NetLens before switching Relais. |
 | 2. Understand MVP | État-major PR A adds the configured-project inspector and Planning component links | Reviewed component model and recorded Trail and Floorplan adapters. Excerpts also require an immutable source snapshot. | Real NetLens component → file → symbol → caller and callee, recorded confidence, bounded excerpts, pagination and deferred links. Check artifact presence and freshness independently. Verify keyboard and phone navigation in both an ordinary browser and a Codeman Web Tab. |
 | 2. Understand MVP | État-major PR B adds the real-data smoke runner | Existing CLI contracts and maintainer-provided recordings. Add the Understand check after PR A. | A repeatable smoke run exercises every supported CLI command on a pinned real repository and recordings, compares expected counts and provenance where applicable, and fails on drift. Record fixture revisions and expected counts. |
-| 3. Native Codeman session opening | Codeman PR adds opt-in selection of an existing session and return to the exact Planning task. Add a companion État-major PR if the agreed nomination contract requires a producer change. | Milestone 1 and review of the Codeman revision deployed on Alto | An explicit native click selects the existing session. Codeman checks current authentication, the active opted-in frame and exact ownership in multi-user mode. Authenticated single-user mode may select an ownerless session. Verify denials and exact return navigation on phone and desktop. |
+| 3. Native Codeman session opening | Codeman PR adds opt-in selection of an existing session and return to the exact Planning task. Add a companion État-major PR if the agreed nomination contract requires a producer change. | Milestone 1 and review of the Codeman revision deployed on the deployment host | An explicit native click selects the existing session. Codeman checks current authentication, the active opted-in frame and exact ownership in multi-user mode. Authenticated single-user mode may select an ownerless session. Verify denials and exact return navigation on phone and desktop. |
 | 4. Authenticated Fleet controls | Meute and État-major changes as needed to expose one allowlisted action through a private authenticated top-level link | Milestone 3 in the existing delivery order, verified Meute revision and maintainer approval of the action and test item | Meute validates the operator, action and destination and owns the resulting state. Record one successful action on the approved test item and verify denial for unauthenticated operators, unauthorized actions and invalid routing. |
 | 5. Operational hardening and wider use | Separate État-major PRs for freshness and measured large-repo limits, then portfolio or mobile refinements based on pilot findings | Milestone 2 for Understand measurements. Milestones 1, 3 and 4 for integration refinements. | Publish data-size and latency observations from real recordings, stale and missing input behavior, and regression checks. Require verified credential isolation and account eligibility before approving a second user. |
 
-The Alto rollout and Understand are independent tracks. Understand and the CLI
-smoke runner can proceed alongside the Alto sequence. For
+The deployment-host rollout and Understand are independent tracks. Understand and the CLI
+smoke runner can proceed alongside the deployment-host sequence. For
 Understand, keep the first slice server-rendered with paginated lists and the
 existing dependency set. Use the agreed NetLens recording to measure the need
 for a graph before proposing a dependency. A later graph PR requires a pinned
@@ -55,7 +56,7 @@ the approved private Meute link.
 ## Upstream findings that affect delivery
 
 - Codeman's Web Tab **Test** checks upstream reachability. Its sandbox and proxy
-  authentication affect real browser behavior, so the Alto and optional Fleet
+  authentication affect real browser behavior, so the deployment-host and optional Fleet
   iframe gates require a browser check in the saved tab. Record the deployed
   Codeman and Meute revisions privately and verify their behavior there.
   [Codeman Web Tabs](https://github.com/Ark0N/Codeman/blob/master/docs/web-tabs.md)

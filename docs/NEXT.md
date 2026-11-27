@@ -10,13 +10,13 @@ Updated 2026-11-23. Keep this file under 60 lines. Working rules are in `AGENTS.
 - The [Trail runner](contracts/trail-adapter.md#building-a-fresh-local-graph) builds in disposable checkouts and validates `meta.version`. Real-data checks covered both `graft/` and `.trail/cache/`.
 - The [Floorplan runner](FLOORPLAN-RUNNER.md) runs only deterministic `scan`, `build` and `refresh`. A real Android checkout copy retained all 80 authored component IDs across a rename and reported both paths.
 - The read-only [Understand inspector](UNDERSTAND-MVP.md) (#23) shows components, files and symbols with coverage and provenance. The [real-data smoke runner](REAL-DATA-SMOKE.md) (#24) passed all 17 NetLens operations. At #24, CI ran 1,187 tests at 94.92% coverage on Python 3.12.
-- An earlier local Alto pilot verified recorded evidence, snapshot refresh, Fleet and task handoff links. Isolated staging passed for both pilots on `9baf429`, but live services still run earlier releases. The current combined release has yet to be deployed or verified on Alto.
+- An earlier local deployment-host pilot verified recorded evidence, snapshot refresh, Fleet and task handoff links. Isolated staging passed for both pilots on `9baf429`, but live services still run earlier releases. The current combined release has yet to be deployed or verified on the deployment host.
 
-## Alto follow-ons
+## Deployment-host follow-ons
 
-The [Alto delivery workflow](ALTO-MVP-DELIVERY.md) defines three separate PRs, with explicit rollout scope, acceptance and rollback for each.
+The [deployment-host delivery workflow](DEPLOYMENT-MVP-DELIVERY.md) defines three separate PRs, with explicit rollout scope, acceptance and rollback for each.
 
-1. Verify the exact merged read-only release live on Alto, then switch the pilots one at a time within the authorized scope: NetLens first, then Relais, rolling back a failed pilot. Staging passed; the live switch needs an authenticated legacy Codeman browser (an unauthenticated probe returned HTTP 429). See the [runbook](ALTO-READ-ONLY-RUNBOOK.md).
+1. Verify the exact merged read-only release live on the deployment host, then switch the pilots one at a time within the authorized scope: NetLens first, then Relais, rolling back a failed pilot. Staging passed; the live switch needs an authenticated legacy Codeman browser (an unauthenticated probe returned HTTP 429). See the [runbook](DEPLOYMENT-READ-ONLY-RUNBOOK.md).
 2. Add native **Open session** in legacy Codeman. The opaque Planning iframe can nominate an existing session. Selection requires a click in the opted-in Codeman parent's native UI and its access checks. Copyable links stay: a browser simulation showed a plain `#session=` link cannot select a session from the sandboxed tab (see the PR 2 decision). Require an exact owner match in multi-user mode and return to the exact Planning task.
 3. Gate explicit Fleet actions in Meute. The first allowlisted action is `dismiss`. Start with a private authenticated top-level link and verify the actual sandboxed browser against Meute's Host, Fetch Metadata, write Origin and token checks before enabling iframe writes.
 

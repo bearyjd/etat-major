@@ -123,7 +123,7 @@ after replacing the snapshot. Meute's native UI is where you operate jobs.
 
 ## Local verification
 
-For release staging and live Alto checks, see the [read-only runbook](ALTO-READ-ONLY-RUNBOOK.md).
+For release staging and live deployment-host checks, see the [read-only runbook](DEPLOYMENT-READ-ONLY-RUNBOOK.md).
 
 During pilot verification, Chromium rendered the installed wheel from a separate working directory inside
 an iframe at a simulated `/webview/recorded/` prefix. The frame had an opaque
