@@ -70,9 +70,31 @@ _SCP_REMOTE = re.compile(
 )
 
 
+_REDACTED = "[redacted location]"
+# Matching existing placeholders keeps one whole when another span cuts into it.
+_PLACEHOLDER = re.compile(re.escape(_REDACTED))
+
+
+def _redact(value: str, patterns: tuple[re.Pattern[str], ...]) -> str:
+    """Replace each run of overlapping or touching matches with one placeholder."""
+    spans = sorted(match.span() for pattern in patterns for match in pattern.finditer(value))
+    merged: list[tuple[int, int]] = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    parts, kept_from = [], 0
+    for start, end in merged:
+        parts += [value[kept_from:start], _REDACTED]
+        kept_from = end
+    return "".join([*parts, value[kept_from:]])
+
+
 def public_text(value: str, *, scp_remotes: bool = False) -> str:
-    value = _PRIVATE_LOCATION.sub("[redacted location]", value)
-    return _SCP_REMOTE.sub("[redacted location]", value) if scp_remotes else value
+    # Every pattern reads the original text, never another pattern's placeholder.
+    patterns = (_PLACEHOLDER, _PRIVATE_LOCATION)
+    return _redact(value, (*patterns, _SCP_REMOTE) if scp_remotes else patterns)
 
 
 def public_source_url(value: str | None) -> str | None:
