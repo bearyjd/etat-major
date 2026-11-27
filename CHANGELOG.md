@@ -25,12 +25,15 @@ Numbers refer to pull requests.
 
 ### Changed
 
-- Project documents are host-neutral: they speak of a session host, with Codeman as the legacy
-  one. (#40)
+- `CLAUDE.md` and `README.md` are host-neutral: they speak of a session host, with Codeman as
+  the legacy one. No other file changed. (#40)
 - Planning, Discover and Understand pages and payloads follow one line-break rule: prose keeps
   real line feeds, other free text is one line, and other control and formatting characters stay
-  visible as `\uXXXX`. Research briefs write each value on one line. The schema markers stay
-  `@1`. (#49)
+  visible as `\uXXXX`. Research briefs write each value on one line. (#49)
+  This changes the content of string values: before it, line breaks arrived as the literal text
+  `\u000a`. The schema markers stay `@1` because all three first ship in this release, so no
+  release produced the old form. Anything built against an earlier commit of `main` sees the
+  difference. After 0.2.0, such a change to how a value is encoded needs a new marker.
 
 ### Fixed
 
@@ -74,8 +77,10 @@ Web page markup, human-readable text output and Python modules are not part of i
 
 A change is **breaking** when it removes or renames a command or flag, makes a flag required,
 changes what a flag or exit code means, or removes, renames, retypes or redefines a key of a
-JSON document. A breaking change to a JSON document also takes a new marker (`@2` after `@1`).
-A new key that comes with its schema update may keep the marker.
+JSON document. Changing how a string value is encoded redefines its key. A breaking change to a
+JSON document also takes a new marker (`@2` after `@1`). A new key that comes with its schema
+update may keep the marker. These rules compare a release with the one before it; commits
+between releases carry no compatibility promise.
 
 While the major version is 0, breaking changes and new features raise the minor version and
 releases with fixes only raise the patch version. A breaking change is named as such in its
