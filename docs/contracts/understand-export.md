@@ -224,8 +224,9 @@ Never exported, and the schema forbids them (`additionalProperties: false`):
    a usable path or ref, or a component path that is not usable, becomes
    `[redacted location]`; the file lists leave such paths out (see
    [Files](#files)). JSON also escapes Unicode formatting characters. Apart
-   from those file lists, there is no drop rule: a string is sanitized and
-   cut, never withheld.
+   from those file lists, there is no sanitizing drop rule: sanitizing redacts,
+   escapes or cuts a string and never withholds it. The [size
+   caps](#size-caps) and the de-duplication of names apply separately.
 
 Treat decoded strings as untrusted when displaying them.
 

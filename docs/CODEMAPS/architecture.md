@@ -34,6 +34,6 @@ Gradle settings/build scripts ---------> gradle.py (+gradle_parse/_settings/_plu
 
 ## Explicitly NOT present
 - No network or HTTP client calls; no model/API calls; web server listens on 127.0.0.1 only.
-- No agent start, queue or schedule (the session host, legacy Codeman, and Meute own that); no credential handling.
+- No agent start, queue or schedule: the session host (legacy Codeman) and Meute own that. No credential handling.
 - No Gradle execution (scripts are parsed, never run); no `trail init`.
 - Derived state (running/review/verified, drift tiers) computed, never written. Writes only: `research brief|import` (`write_new_text`), `components seed --out`, runner outputs inside the supplied copy.
