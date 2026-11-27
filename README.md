@@ -27,6 +27,10 @@ Not a terminal, a coding-agent runner, a scheduler or a general project-manageme
 
 Read [CLAUDE.md](CLAUDE.md) first. Keep personal paths, hostnames and keys out of the repo.
 
+## Releases
+
+[CHANGELOG.md](CHANGELOG.md) lists the changes in each version and states the versioning policy. [docs/RELEASING.md](docs/RELEASING.md) says how a release is made.
+
 ## License
 
 [AGPL-3.0](LICENSE).
