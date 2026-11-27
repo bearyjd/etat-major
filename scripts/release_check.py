@@ -21,6 +21,13 @@ TAG = re.compile(rf"v({VERSION})")
 HEADING = re.compile(r" {0,3}(#{1,6})(?:[ \t\r]|$)")
 FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
 RELEASE = re.compile(rf"##[ \t]+\[({VERSION})\](.*)")
+COMMENT_START = re.compile(r" {0,3}<!--")
+COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# Lines that render as no words: thematic breaks, setext underlines and link definitions.
+RULE = re.compile(r" {0,3}(?:=+|-+|(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*")
+LINK_DEFINITION = re.compile(
+    r""" {0,3}\[[^\[\]]+\]:[ \t]*(?:<[^<>]*>|\S+)(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^()]*\)))?[ \t]*"""
+)
 DATED = re.compile(r" - ([0-9]{4}-[0-9]{2}-[0-9]{2})")
 INIT = "src/etat_major/__init__.py"
 PYPROJECT = "pyproject.toml"
@@ -66,7 +73,11 @@ def package_version(root: Path) -> str:
 
 
 def _bindings(tree: ast.Module) -> int:
-    """Count every place that assigns, changes, deletes or imports `__version__`."""
+    """Count the places that assign, change, delete, define or import `__version__`.
+
+    Not seen: writes through `globals()`, an `except ... as` name and `import *`. Review has
+    to catch those.
+    """
     nodes = list(ast.walk(tree))
     stored = [
         n
@@ -122,14 +133,18 @@ def _require_date(heading_rest: str, version: str) -> None:
 
 
 def _scan(markdown: str) -> list[tuple[str, int]]:
-    """Pair each line with its heading level, 0 for other lines and for fenced code."""
-    scanned, fence = [], ""
+    """Pair each line with its heading level; 0 for other lines, fenced code and comments."""
+    scanned, fence, comment = [], "", False
     for line in markdown.split("\n"):
         marker = FENCE.match(line)
         level = 0
-        if fence:
+        if comment:
+            comment = "-->" not in line
+        elif fence:
             if marker and marker.group(1).startswith(fence) and not marker.group(2).strip():
                 fence = ""
+        elif COMMENT_START.match(line):
+            comment = "-->" not in line
         elif marker and not (marker.group(1)[0] == "`" and "`" in marker.group(2)):
             fence = marker.group(1)
         else:
@@ -138,7 +153,18 @@ def _scan(markdown: str) -> list[tuple[str, int]]:
         scanned.append((line.removesuffix("\r"), level))
     if fence:
         raise ReleaseError(f"{CHANGELOG}: a code fence is never closed")
+    if comment:
+        raise ReleaseError(f"{CHANGELOG}: a comment is never closed")
     return scanned
+
+
+def _has_words(section: list[tuple[str, int]]) -> bool:
+    """Tell whether anything but headings, comments, rules and link definitions is there."""
+    text = COMMENT.sub("", "\n".join(line for line, level in section if not level))
+    return any(
+        line.strip() and not RULE.fullmatch(line) and not LINK_DEFINITION.fullmatch(line)
+        for line in text.split("\n")
+    )
 
 
 def _releases(lines: list[tuple[str, int]]) -> list[tuple[int, str, str]]:
@@ -164,7 +190,7 @@ def release_notes(changelog: str, version: str) -> str:
     start = index + 1
     end = next((i for i in range(start, len(lines)) if lines[i][1] in (1, 2)), len(lines))
     section = lines[start:end]
-    if not any(line.strip() and not level for line, level in section):
+    if not _has_words(section):
         raise ReleaseError(f"{CHANGELOG}: the {version} section is empty or only headings")
     return "\n".join(line for line, _ in section).strip("\n").rstrip() + "\n"
 

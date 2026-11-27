@@ -224,6 +224,69 @@ def test_windows_line_endings_are_read(script):
     assert script["release_notes"](text, "1.2.2") == "- An older thing.\n"
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "---",
+        "***",
+        "_ _ _",
+        "- - -",
+        "===",
+        "  --  ",
+        "<!-- nothing yet -->",
+        "<!--\n- Draft only.\n-->",
+        "<!-- a --> <!-- b -->",
+        "[0.2.0]: https://example.invalid/v0.2.0",
+        '[docs]: <./a b.md> "Title"',
+        "### Added\n\n---\n\n<!-- soon -->\n\n[a]: b",
+    ],
+    ids=repr,
+)
+def test_a_section_with_nothing_to_read_is_empty(script, body):
+    text = f"## [1.2.3] - 2026-01-31\n\n{body}\n\n## [1.2.2] - 2026-01-01\n\n- Old.\n"
+    with pytest.raises(script["ReleaseError"], match="empty"):
+        script["release_notes"](text, "1.2.3")
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        "<!--\n## not a heading\n# nor this\n-->",
+        "  <!-- opened\n## hidden --> trailing",
+        "<!--\n```\n-->",
+        "```\n<!--\n```",
+        "<!-->",
+        "Mention `<!--` in the middle.",
+        "[Breaking]: removed a flag.",
+        "<!-- note --> Visible words.",
+    ],
+    ids=repr,
+)
+def test_comments_neither_end_nor_empty_the_notes(script, block):
+    text = f"## [1.2.3] - 2026-01-31\n\n{block}\n\n- Last.\n\n## [1.2.2] - 2026-01-01\n"
+    assert script["release_notes"](text, "1.2.3") == f"{block}\n\n- Last.\n"
+
+
+@pytest.mark.parametrize("line", ["<!-- note --> Visible words.", "[Breaking]: removed a flag."])
+def test_readable_text_beside_markup_is_not_empty(script, line):
+    text = f"## [1.2.3] - 2026-01-31\n\n{line}\n"
+    assert script["release_notes"](text, "1.2.3") == f"{line}\n"
+
+
+def test_a_commented_out_release_is_not_one(script, tmp_path):
+    draft = "<!--\n## [9.9.9] - 2026-01-01\n\n- Draft.\n-->\n\n"
+    root = make_repo(tmp_path, changelog=draft + CHANGELOG)
+    assert script["check_release"](root, "v1.2.3") == "### Added\n\n- A thing.\n"
+    with pytest.raises(script["ReleaseError"], match="no section"):
+        script["release_notes"](draft + CHANGELOG, "9.9.9")
+
+
+def test_an_unclosed_comment_is_refused(script):
+    text = "## [1.2.3] - 2026-01-31\n\n- A thing.\n\n<!--\n## [1.2.2] - 2026-01-01\n"
+    with pytest.raises(script["ReleaseError"], match="comment is never closed"):
+        script["release_notes"](text, "1.2.3")
+
+
 @pytest.mark.parametrize("name", ["pyproject.toml", "src/etat_major/__init__.py", "CHANGELOG.md"])
 def test_missing_file_is_refused_without_an_absolute_path(script, tmp_path, name):
     root = make_repo(tmp_path)

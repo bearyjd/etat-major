@@ -14,6 +14,13 @@ WORKFLOWS = ROOT / ".github/workflows"
 BASH = shutil.which("bash")
 GIT = shutil.which("git")
 CHECK = "python scripts/release_check.py"
+PYTHON = "3.12"
+GATES = ['pip install -e ".[dev,web]"', "ruff check .", "ruff format --check .", "pytest"]
+ON_MAIN = """if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+  echo "release check: the tagged commit is not on origin/main" >&2
+  exit 1
+fi
+"""
 # Commit of each tag, read from the action's repository when the pin was made.
 PINS = {
     "actions/checkout": ("11d5960a326750d5838078e36cf38b85af677262", "v4.4.0"),
@@ -87,7 +94,7 @@ def test_nothing_can_skip_or_forgive_a_step(release):
     assert {"if", "continue-on-error", "shell", "defaults"} & set(keys(release)) == set()
 
 
-def test_runs_of_one_tag_do_not_overlap_or_cancel_each_other(release):
+def test_a_running_release_of_a_tag_is_never_cancelled(release):
     assert release["concurrency"] == {
         "group": "release-${{ github.ref }}",
         "cancel-in-progress": False,
@@ -118,17 +125,43 @@ def test_the_write_token_reaches_one_step_only(release):
     assert holders == [run_line(release, "release", "gh release create")]
 
 
-def test_verify_runs_the_ci_gates_with_the_ci_python(release):
-    ci_steps = steps(load("ci.yml"), "test")
-    verify = steps(release, "verify")
-    ci_runs = [step["run"] for step in ci_steps if "run" in step]
-    assert [step["run"] for step in verify if step.get("run") in ci_runs] == ci_runs
+def pinned(name: str) -> str:
+    return f"{name}@{PINS[name][0]}"
 
-    def python(found):
-        return [s["with"]["python-version"] for s in found if "python-version" in s.get("with", {})]
 
-    assert python(verify) == python(ci_steps)
-    assert verify[0]["with"]["fetch-depth"] == 0
+def test_verify_is_exactly_these_steps_in_this_order(release):
+    checkout = {"ref": "${{ github.sha }}", "fetch-depth": 0, "persist-credentials": False}
+    assert steps(release, "verify") == [
+        {"uses": pinned("actions/checkout"), "with": checkout},
+        {"uses": pinned("actions/setup-python"), "with": {"python-version": PYTHON}},
+        {
+            "name": "Require the tag to match the versions and the changelog",
+            "env": {"RELEASE_TAG": "${{ github.ref_name }}"},
+            "run": CHECK,
+        },
+        {"name": "Require the tagged commit to be on main", "run": ON_MAIN},
+        *({"run": gate} for gate in GATES),
+    ]
+
+
+def test_no_job_or_workflow_setting_can_change_a_step(release):
+    # An `env`, `container` or `defaults` entry here would reach the gates unseen.
+    assert set(release) == {"name", True, "permissions", "concurrency", "jobs"}
+    assert set(release["jobs"]["verify"]) == {"runs-on", "steps"}
+    assert set(release["jobs"]["release"]) == {"needs", "runs-on", "permissions", "steps"}
+    assert {job["runs-on"] for job in release["jobs"].values()} == {"ubuntu-latest"}
+
+
+def test_ci_runs_exactly_the_gates():
+    ci = load("ci.yml")
+    assert set(ci) == {"name", True, "permissions", "jobs"}
+    assert set(ci["jobs"]) == {"test"}
+    assert set(ci["jobs"]["test"]) == {"runs-on", "steps"}
+    assert steps(ci, "test") == [
+        {"uses": "actions/checkout@v4"},
+        {"uses": "actions/setup-python@v5", "with": {"python-version": PYTHON, "cache": "pip"}},
+        *({"run": gate} for gate in GATES),
+    ]
 
 
 @pytest.mark.parametrize("job", ["verify", "release"])
