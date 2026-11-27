@@ -165,14 +165,14 @@ UTC date.
 JSON encodes untrusted text as values and escapes control and Unicode
 formatting characters.
 
-The Planning and Discover payloads follow one rule for line breaks. Prose
-(feature `outcome`, component `summary`, finding `text`, decision `chosen`,
-`rationale` and each `why_not`) keeps real line feeds, with CRLF and CR written
-as LF, including the final one that a YAML block scalar carries. Every other
-workspace string is a single line: each run of spacing that holds a tab, CR or
-LF becomes one space and the ends are trimmed. All other control, bidirectional
-and formatting characters, U+0085 and U+2028 among them, and tabs in prose,
-arrive as visible `\uXXXX` text.
+The Planning, Discover and Understand payloads follow one rule for line breaks.
+Prose (feature `outcome`, component `summary`, finding `text`, decision
+`chosen`, `rationale` and each `why_not`) keeps real line feeds, with CRLF and
+CR written as LF, including the final one that a YAML block scalar carries.
+Every other sanitized string is a single line: each run of spacing that holds a
+tab, CR or LF becomes one space and the ends are trimmed. In both kinds, every
+other control, bidirectional and formatting character, U+0085 and U+2028 among
+them, arrives as visible `\uXXXX` text, and so does a tab in prose.
 
 Workspace prose and diagnostics redact filesystem
 locations and remote URLs. Research citations remain URLs in their

@@ -126,6 +126,13 @@ def test_block_and_folded_scalars_reach_the_payload_as_text(planning_workspace, 
     assert outcome == (BLOCK_OUT if style == BLOCK else folded)
 
 
+def test_export_understand_keeps_summary_lines_and_flattens_labels(hostile_workspace, capsys):
+    payload = _export("understand", hostile_workspace, capsys)
+    [component] = payload["components"]
+    assert (component["label"], component["kind"], component["owner"]) == (LINE_OUT,) * 3
+    assert component["summary"] == PROSE_OUT
+
+
 def test_project_json_and_pages_render_lines_as_escaped_text(hostile_workspace, client_for):
     with client_for(hostile_workspace) as client:
         _assert_planning(client.get("/project.json").json())

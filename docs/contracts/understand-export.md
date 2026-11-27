@@ -81,7 +81,7 @@ One row per `Component` in the reviewed model, sorted by `id`:
 | --- | --- | --- |
 | `id`, `label`, `kind`, `parent`, `owner` | `Component` | `id` and `parent` are qualified `project/id`, as in planning. `parent` and `owner` are null when absent |
 | `paths` | `Component.paths` | Workspace-relative globs/prefixes, at most 1000 each |
-| `summary` | `Component.summary.text` | Null when absent. Passed through `planning_text` |
+| `summary` | `Component.summary.text` | Null when absent. Passed through `planning_text` as prose, so it keeps line feeds |
 | `summary_provenance` | `Component.summary.provenance` | `human`, `ai-generated`, `inferred`, `verified`; null when no summary |
 | `provenance` | `kind` equals the seed proposal kind | `proposed` or `declared`, the same values planning uses. A seeded proposal is not reviewed intent |
 | `reviewed` | `Summary.reviewed_by` and `reviewed_on` | Boolean only. Reviewer name and date are not exported (see Q4) |
@@ -211,8 +211,11 @@ Never exported, and the schema forbids them (`additionalProperties: false`):
    defaults to `file` and is cut to 80 characters through `planning_text`, and
    `message` passes `planning_text`. Every string taken from a recorded artifact, object
    keys included, passes `planning_text` (`public_text` with scp remotes,
-   then `safe` with a 512-character limit and an ellipsis cut) or
-   `planning_path` before it is emitted. That covers `label`, `kind`,
+   then `safe_field` with a 512-character limit and an ellipsis cut) or
+   `planning_path` before it is emitted. `safe_field` escapes like `safe` but
+   handles line breaks by the [line-break
+   rule](cli-json.md#stability-and-input-handling): `summary` keeps line feeds,
+   every other string is flattened to one line. That covers `label`, `kind`,
    `summary`, `owner`, issue messages, `languages`, `module_scopes`,
    `unknown_kinds` and the relation and confidence names. JSON also escapes
    Unicode formatting characters. There is no drop rule: a string is
