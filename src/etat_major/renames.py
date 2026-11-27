@@ -11,6 +11,7 @@ from pathlib import Path
 from time import monotonic
 from types import MappingProxyType
 
+from etat_major.git_hardening import GIT_CONFIG_ARGS, git_environment
 from etat_major.localfiles import open_directory, read_text
 from etat_major.text_safety import safe
 
@@ -145,20 +146,10 @@ def _git_result(
     use_repo: bool = True,
     exit_codes: tuple[int, ...] = (0,),
 ) -> tuple[bytes, int]:
-    env = {
-        "PATH": os.defpath,
-        "LC_ALL": "C",
-        "GIT_CONFIG_NOSYSTEM": "1",
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_ALLOW_PROTOCOL": "",
-        "GIT_NO_LAZY_FETCH": "1",
-        "GIT_NO_REPLACE_OBJECTS": "1",
-        "GIT_OPTIONAL_LOCKS": "0",
-        "GIT_ATTR_NOSYSTEM": "1",
-    }
+    env = git_environment()
     if use_repo:
         env["GIT_DIR"] = f"/proc/self/fd/{fd}"
-    command = ("git", "--no-pager", "--bare", "-c", "core.attributesFile=/dev/null", *args)
+    command = ("git", *GIT_CONFIG_ARGS, "--bare", *args)
     with subprocess.Popen(  # noqa: S603 - fixed Git commands, no shell or inherited Git settings
         command,
         cwd="/",

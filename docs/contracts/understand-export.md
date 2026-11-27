@@ -189,10 +189,15 @@ Never exported, and the schema forbids them (`additionalProperties: false`):
    scp-style `host:path` forms. It does not detect bare hostnames in
    human-written prose (a label or summary saying "runs on build-box.lan"
    passes through), bare IP addresses, `localhost:port` forms or email
-   addresses, and the export does not claim to remove them; see Q11. It also
-   does not redact `~user/` forms, schemeless `user@host/path` remotes, paths
-   preceded by an underscore, or the remainder of an absolute path after a
-   space, and it does not detect secrets or tokens in prose.
+   addresses, and the export does not claim to remove them; see Q11.
+   Overlapping or touching matches become a single placeholder. Known gaps:
+   a second scp-style remote joined to the first by anything other than
+   whitespace, a quote, `<` or `>` (for example a bare comma) can leave its
+   `:path` visible, and a dotless `host:name.git` followed by a colon is not
+   detected.
+   It also does not redact `~user/` forms, schemeless `user@host/path`
+   remotes, paths preceded by an underscore, or the remainder of an absolute
+   path after a space, and it does not detect secrets or tokens in prose.
    Paths are always workspace-relative and re-validated with `planning_path`.
 4. Source excerpts, file bodies and anything read from the scanned repository
    other than paths and recorded symbol metadata.
@@ -274,11 +279,6 @@ Shapes the text above leaves open. All are provisional.
   file name in the message. Argument errors come from the shared CLI parser.
 
 ## Open questions
-
-Known existing bug, out of scope here and not fixed by this contract:
-`public_text` can double-redact, for example `host build-box.lan:/srv/x`
-becomes `host [redacted location] location]`. The text is still redacted, only
-malformed. It belongs to `src/` and a separate fix.
 
 | # | Question | Recommended answer |
 | --- | --- | --- |
