@@ -1,0 +1,63 @@
+name: Release
+
+# Runs only for a pushed version tag. A person creates and pushes the tag; see docs/RELEASING.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Require the tag to match the versions and the changelog
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/release_check.py
+      - name: Require the tagged commit to be on main
+        run: |
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "release check: the tagged commit is not on origin/main" >&2
+            exit 1
+          fi
+      - run: pip install -e ".[dev,web]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Extract the release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/release_check.py --notes-out "$RUNNER_TEMP/release-notes.md"
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release check: a release for this tag already exists; not overwriting it" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
