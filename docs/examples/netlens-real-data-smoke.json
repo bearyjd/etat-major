@@ -23,6 +23,7 @@
   "serve": {"status": 0, "data.project.project": "netlens", "data.planning": 200, "data.fleet": 200},
   "export planning": {"status": 0, "data.project": "netlens"},
   "export discover": {"status": 0, "data.schema": "etat-major/discover@1"},
+  "export understand": {"status": 0, "data.schema": "etat-major/understand@1"},
   "floorplan scan": {"status": 0, "data.lines.0": "Recorded floorplan/.cache/scan.json"},
   "floorplan build": {"status": 0, "data.lines.0": "Recorded floorplan/graph.json"},
   "floorplan refresh": {"status": 0, "data.lines.1": "2 of 2 Floorplan node IDs retained"}

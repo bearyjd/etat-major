@@ -33,6 +33,7 @@ OPERATIONS = {
     "serve": "workspace project graph trail repo prs releases ?meute",
     "export planning": "workspace project graph trail repo prs releases ?meute",
     "export discover": "workspace project graph trail repo prs releases ?meute",
+    "export understand": "workspace project graph trail",
     "floorplan scan": "copy source",
     "floorplan build": "copy source",
     "floorplan refresh": "copy source",
