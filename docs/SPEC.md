@@ -2,11 +2,11 @@
 
 Last updated 2026-11-21. Working title. Status: pre-implementation. This file is the earlier agent-command-center design and is partly superseded; see the banner below and VISUALIZATION-ARCHITECTURE.md. It began as a Claude doc whose two diagrams (architecture and roadmap) are not reproduced here; the text below carries the same information.
 
-> **Direction changed (2026-11-21).** The product is now a visual product-development workspace (Discover, Understand, Design & Build, Progress), not an agent command center. See [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md), [TRACEABILITY.md](TRACEABILITY.md), [TOOL-EVALUATION.md](TOOL-EVALUATION.md) and [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md); they win over this file. Sections below carry a **Superseded** or **Kept** note. Superseded text is left for history, not as a plan.
+> **Direction changed (2026-11-21).** The product is now a visual product-development workspace (Discover, Understand, Design & Build, Progress), not an agent command center. See [VISUALIZATION-ARCHITECTURE.md](VISUALIZATION-ARCHITECTURE.md), [TRACEABILITY.md](TRACEABILITY.md), [TOOL-EVALUATION.md](TOOL-EVALUATION.md) and [VISUALIZATION-ROADMAP.md](VISUALIZATION-ROADMAP.md); they win over this file. Sections below carry a **Superseded** or **Kept** note. Superseded text is left for history, not as a plan. Codeman, wherever named below, is now the legacy session host.
 
 ## Vision
 
-> **Partly superseded.** The strategic view and phone access survive as the Build and Progress views and Codeman's terminal. Planning agent, runner and sandboxed execution in "A day with the finished product" are out of scope.
+> **Partly superseded.** The strategic view and phone access survive as the Build and Progress views and the session host's terminal (Codeman is the legacy host). Planning agent, runner and sandboxed execution in "A day with the finished product" are out of scope.
 
 État-major is a self-hosted command center that gives one person, or a small family, a strategic view over a fleet of coding agents running in tmux. It starts from goals (initiatives), not sessions, and shows what is moving, what is stuck and what needs a human decision.
 
@@ -26,7 +26,7 @@ Last updated 2026-11-21. Working title. Status: pre-implementation. This file is
 
 ## North stars
 
-> **Superseded** by the four views and goals in the architecture document. Phone terminal and voice now belong to Codeman; unattended runs to Meute.
+> **Superseded** by the four views and goals in the architecture document. Phone terminal and voice now belong to the session host (Codeman is the legacy host); unattended runs to Meute.
 
 Four requirements every decision is judged against. Items 1 to 3 shape the first releases; item 4 is on the roadmap.
 

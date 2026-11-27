@@ -7,7 +7,7 @@ Rules for every phase:
 - Small, reviewable steps; tests written first for every contract change; coverage 80% or better on new code.
 - A phase ends at its acceptance criteria. The next does not start before they pass.
 - Build the smallest vertical slice first (Slice 1 below), not all phases at once.
-- The core runs with no Codeman, no Meute and no live Floorplan or agent. Integrations come last.
+- The core runs with no session host, no Meute and no live Floorplan or agent. Integrations come last.
 - Nothing here stores or handles Claude or Codex credentials, and nothing sends data to ChatGPT or any model automatically.
 - Reuse, do not rebuild: Floorplan for architecture maps, Trail for symbols, Git for intent.
 
@@ -55,7 +55,7 @@ The first thing to build, before any web UI. It proves the model.
   - First [Understand MVP](UNDERSTAND-MVP.md): the configured project, with a read-only component, file and symbol inspector and coverage from recorded artifacts. The existing web service renders the page from its startup snapshot.
   - Later options: a public read-only JSON API, repository selector and interactive architecture or symbol graph. The MVP uses recorded Floorplan output and executes no Floorplan viewer.
 - **Decide for later slices:** whether viewer links or État-major graph overlays add enough value; confirm library licenses.
-- **MVP done when:** for one repository, you can pick a component, drill to a recorded file and symbol, and see callers and callees with provenance and coverage limits. A matching configured source snapshot can provide a bounded excerpt. The page works on a phone-width screen with no Codeman, Meute or agent running. A general source browser and visual blueprint overlays remain later options.
+- **MVP done when:** for one repository, you can pick a component, drill to a recorded file and symbol, and see callers and callees with provenance and coverage limits. A matching configured source snapshot can provide a bounded excerpt. The page works on a phone-width screen with no session host, Meute or agent running. A general source browser and visual blueprint overlays remain later options.
 - **Not promised:** `references`, `implements` or `lsp_*` edges (not observed), call edges for languages without full-fidelity support, or a module graph beyond directories and imports.
 
 ## Phase 3: research and feature model
@@ -90,10 +90,10 @@ The first thing to build, before any web UI. It proves the model.
 
 - **Depends on:** Phases 2 to 5.
 - **Meute:** display recorded reports as `generated` evidence when the recording identifies an existing project task. Meute owns Inbox, Run, write authentication and execution. Any future live Fleet control must be an allowlisted, explicit operator action authorized by Meute.
-- **Codeman:** show recorded session links and let the opted-in native parent UI select an existing session after an explicit click and its access checks. Session launch is post-MVP. État-major never sets `envOverrides`.
-- **Planning appearance in Codeman (after the MVP):** add an optional theme setting that follows Codeman's colors, typography, and spacing in light and dark modes. Render it through État-major's own styles so it works inside the sandboxed Web Tab. Check contrast and phone-width layouts.
+- **Codeman (legacy session host):** show recorded session links and let the opted-in native parent UI select an existing session after an explicit click and its access checks. Session launch is post-MVP. État-major never sets `envOverrides`.
+- **Planning appearance in legacy Codeman (after the MVP):** add an optional theme setting that follows Codeman's colors, typography, and spacing in light and dark modes. Render it through État-major's own styles so it works inside the sandboxed Web Tab. Check contrast and phone-width layouts.
 - **Cross-repository portfolio and mobile refinement.**
-- **Hardening:** large-repository limits, incremental reindex, freshness alerts, and the credential-isolation check for a second user (separate OS users with separate Codeman instances, or verified per-user config directories, plus account-eligibility confirmation with Anthropic).
+- **Hardening:** large-repository limits, incremental reindex, freshness alerts, and the credential-isolation check for a second user, for whichever session host is used (on legacy Codeman: separate OS users with separate Codeman instances, or verified per-user config directories), plus account-eligibility confirmation with Anthropic.
 - **Done when:** with all services stopped nothing else changes; with them running a task shows its ExecutionLink; no second queue or terminal exists; a large-repository run is documented; the isolation check result (pass, or fail with the reason) is recorded and the second user is added only on a pass.
 
 ## Proposed delivery milestones
@@ -111,7 +111,7 @@ Phase 1 → Slice 1 → Phase 2 and Phase 3 (Phase 3 uses Phase 2 for links) →
 Follow the [Alto delivery workflow](ALTO-MVP-DELIVERY.md) in three separate PRs.
 
 1. Stage the exact merged read-only release. With explicit rollout scope, deploy and verify it on Alto.
-2. Design and implement native **Open session**. Keep the Planning iframe opaque and limited to nominating an existing session. The opted-in Codeman parent rechecks the active frame, access and session owner on an explicit native click. In multi-user mode require an exact owner match. In authenticated single-user mode an ownerless session is eligible. Verify return to the exact Planning task and denial cases at desktop and phone widths.
+2. Design and implement native **Open session**. Keep the Planning iframe opaque and limited to nominating an existing session. The opted-in parent in Codeman, the legacy session host, rechecks the active frame, access and session owner on an explicit native click. In multi-user mode require an exact owner match. In authenticated single-user mode an ownerless session is eligible. Verify return to the exact Planning task and denial cases at desktop and phone widths.
 3. Keep Fleet actions and execution in Meute. Start with a private authenticated top-level link. Verify Host, Fetch Metadata, write Origin, tokens and explicit operator action on Alto before enabling iframe writes.
 
-The [Understand MVP](UNDERSTAND-MVP.md) can proceed independently of Alto deployment. After the MVP, consider an optional Codeman theme with light and dark modes, accessible contrast and phone-width layouts.
+The [Understand MVP](UNDERSTAND-MVP.md) can proceed independently of Alto deployment. After the MVP, consider an optional legacy Codeman theme with light and dark modes, accessible contrast and phone-width layouts.

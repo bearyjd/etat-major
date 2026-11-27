@@ -174,8 +174,10 @@ tab, CR or LF becomes one space and the ends are trimmed. In both kinds, every
 other control, bidirectional and formatting character, U+0085 and U+2028 among
 them, arrives as visible `\uXXXX` text, and so does a tab in prose. Paths
 (component `paths`, issue `path` and Understand file lists) are the exception:
-they are never flattened or trimmed, only escaped, or replaced by
-`[redacted location]` when they are not a usable path or ref.
+they are never flattened or trimmed, only escaped. A component path that is not
+usable, or an issue path that is not a usable path or ref, becomes
+`[redacted location]`. The Understand file lists leave an unusable path out; it
+is counted in `unmatchable_paths`.
 
 Workspace prose and diagnostics redact filesystem
 locations and remote URLs. Research citations remain URLs in their

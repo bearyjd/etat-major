@@ -107,7 +107,7 @@ absolute path or remote.
   callee using touch or pointer and keyboard navigation. Confirm visible focus,
   working anchors, bounded source display, no page-wide horizontal scrolling,
   and no browser requests to other origins. Repeat in an ordinary browser and
-  in the optional sandboxed Codeman Web Tab.
+  in the optional sandboxed Web Tab of Codeman, the legacy session host.
 - Exercise a file, symbol and call target beyond the first page. Verify direct
   links to deferred targets, stable distinct anchors for similar typed IDs,
   and counts and navigation at the list limit. Submit unknown or mismatched
