@@ -2,6 +2,8 @@
 
 Compiled 2026-11-21 from Reddit threads (searched by ChatGPT, not independently re-verified) plus GitHub and web searches. Treat every item as a candidate to test. Evidence labels: **firsthand** (a user describing their own use), **author** (the tool's author describing it), **unverified** (could not confirm).
 
+Codeman, listed below, is now the legacy session host. What is recorded about it applies to Codeman only, as of the dates given.
+
 Three distinctions drive the design:
 
 - Session persistence is not task autonomy. tmux keeps a process alive after a phone disconnects; it does not resolve permission prompts, exhausted quotas or failing tests.

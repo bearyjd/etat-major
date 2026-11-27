@@ -5,6 +5,9 @@ Features link to the components and tasks explicitly named in the workspace.
 Component rows show repository-relative ownership declarations and parent links.
 The board status and evidence rungs use the same rules as the CLI.
 
+Codeman is the legacy session host. The Web Tab setup, `--codeman-origin` and
+session URLs described here are specific to it.
+
 ## Run locally
 
 Install the optional web extra from a local checkout or wheel. The core CLI
