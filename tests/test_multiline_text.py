@@ -5,9 +5,10 @@ import re
 
 import pytest
 
+from etat_major import discover_html, discover_view
 from etat_major.cli import main
 from etat_major.planning_issues import planning_text, public_issue
-from etat_major.text_safety import public_text, safe
+from etat_major.text_safety import public_text, redact_escaped_locations, safe
 from etat_major.workspace import Issue
 from test_discover_export import _errors as discover_errors
 from test_planning_schema import _errors as planning_errors
@@ -250,3 +251,34 @@ def test_research_brief_checks_the_joined_line_for_secrets(workspace_dir, tmp_pa
     assert main([*args, "--out", str(out)]) == 2
     assert "outcome" in capsys.readouterr().err
     assert not out.exists()
+
+
+@pytest.mark.parametrize("multiline", [False, True])
+def test_discover_redacts_a_remote_split_across_lines(multiline):
+    shown = discover_view._text("git@h.invalid:\norg/S1x.git", multiline=multiline)
+    for text in (shown, discover_html._t(shown)):
+        assert "h.invalid" not in text and "S1x" not in text
+
+
+def test_discover_export_redacts_a_remote_split_across_lines(planning_workspace, capsys):
+    _set(planning_workspace, DECISION, "rationale", r'"git@h.invalid:\norg/S1x.git"')
+    payload = _export("discover", planning_workspace, capsys)
+    decision = next(d for d in payload["decisions"] if d["id"] == "0012")
+    assert decision["rationale"] == "[redacted location]"
+    assert "h.invalid" not in json.dumps(payload)
+
+
+def test_a_match_in_the_escaped_form_covers_its_last_character():
+    assert redact_escaped_locations("Note:\nread/S1xZ") == "[redacted location]"
+
+
+def test_manual_review_outcome_redacts_an_scp_remote(planning_workspace, tmp_path, capsys):
+    review = tmp_path / "manual.yaml"
+    review.write_text(
+        "version: 1\nsource: manual-anthropic-api-review\ntask: netlens/0042\n"
+        'ref: reports/review.md\nrecorded_at: "2026-11-22T14:00:00Z"\n'
+        'outcome: "see box.invalid:org/S1x.git"\n'
+        f"commit: '{'c' * 40}'\nreport_sha256: '{'a' * 64}'\n"
+    )
+    payload = _export("planning", planning_workspace, capsys, "--manual-review", review)
+    assert payload["manual_review"]["outcome"] == "see [redacted location]"

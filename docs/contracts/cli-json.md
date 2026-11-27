@@ -169,10 +169,13 @@ The Planning, Discover and Understand payloads follow one rule for line breaks.
 Prose (feature `outcome`, component `summary`, finding `text`, decision
 `chosen`, `rationale` and each `why_not`) keeps real line feeds, with CRLF and
 CR written as LF, including the final one that a YAML block scalar carries.
-Every other sanitized string is a single line: each run of spacing that holds a
+Every other free-text string is a single line: each run of spacing that holds a
 tab, CR or LF becomes one space and the ends are trimmed. In both kinds, every
 other control, bidirectional and formatting character, U+0085 and U+2028 among
-them, arrives as visible `\uXXXX` text, and so does a tab in prose.
+them, arrives as visible `\uXXXX` text, and so does a tab in prose. Paths
+(component `paths`, issue `path` and Understand file lists) are the exception:
+they are never flattened or trimmed, only escaped, or replaced by
+`[redacted location]` when they are not a usable path or ref.
 
 Workspace prose and diagnostics redact filesystem
 locations and remote URLs. Research citations remain URLs in their
