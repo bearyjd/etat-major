@@ -110,11 +110,6 @@ def test_last_section_ends_at_end_of_file(script):
     assert script["release_notes"](CHANGELOG, "1.2.2") == "- An older thing.\n"
 
 
-def test_section_ends_at_any_second_level_heading(script):
-    text = "## [1.2.3] - 2026-01-31\n\n- A thing.\n\n## Policy\n\nNot notes.\n"
-    assert script["release_notes"](text, "1.2.3") == "- A thing.\n"
-
-
 @pytest.mark.parametrize(
     ("changes", "tag", "named"),
     [
@@ -131,6 +126,22 @@ def test_section_ends_at_any_second_level_heading(script):
         ({"version": '1.2.3"\n__version__ = "1.2.3'}, "v1.2.3", "__version__"),
         ({"version": '1.2.3" + "'}, "v1.2.3", "__version__"),
         ({"version": '1.2.3" ('}, "v1.2.3", "src/etat_major/__init__.py"),
+        ({"version": '1.2.3"\nif True:\n    __version__ = "9'}, "v1.2.3", "__version__"),
+        ({"version": '1.2.3"\n__version__ += "x'}, "v1.2.3", "__version__"),
+        ({"version": '1.2.3"\n__version__: str = "9'}, "v1.2.3", "__version__"),
+        ({"version": '1.2.3"\ndel __version__\nx = "'}, "v1.2.3", "__version__"),
+        ({"version": '1.2.3"\nfrom os import sep as __version__\nx = "'}, "v1.2.3", "__version__"),
+        ({"version": '1.2.3"\nfor __version__ in "9":\n    x = "'}, "v1.2.3", "__version__"),
+        ({"version": '1.2.3"\ndef __version__():\n    return "9'}, "v1.2.3", "__version__"),
+        ({"pyproject": 'project = "x"\n'}, "v1.2.3", "pyproject.toml"),
+        ({"pyproject": "[project]\ndynamic = 1\n"}, "v1.2.3", "pyproject.toml"),
+        ({"pyproject": 'tool = "x"\n[project]\ndynamic = ["version"]\n'}, "v1.2.3", "pyproject"),
+        ({"pyproject": DYNAMIC.replace('dynamic = ["version"]\n', "")}, "v1.2.3", "pyproject.toml"),
+        (
+            {"pyproject": DYNAMIC.replace('["version"]', '["readme"]')},
+            "v1.2.3",
+            "pyproject.toml",
+        ),
         ({"changelog": "# Changelog\n"}, "v1.2.3", "CHANGELOG.md"),
         (
             {"changelog": "## [1.2.4] - 2026-02-01\n\n- Newer.\n\n" + CHANGELOG},
@@ -160,11 +171,57 @@ def test_static_pyproject_version_is_accepted_when_equal(script, tmp_path):
         ("## [1.2.3] - 20260131\n\n- A thing.\n", "date"),
         ("## [1.2.3] - 2026-01-31\n\n## [1.2.2] - 2026-01-01\n\n- Old.\n", "empty"),
         (CHANGELOG + "\n## [1.2.3] - 2026-01-31\n\n- Again.\n", "more than one"),
+        ("## [1.2.3] - 2026-01-31 draft\n\n- A thing.\n", "date"),
+        ("## [1.2.3] - 2026-01-31x\n\n- A thing.\n", "date"),
+        ("## [1.2.3] - 2026-01-31\n\n### Added\n\n#### More\n", "empty"),
+        ("## [1.2.3] - 2026-01-31\n\n- A thing.\n\n```\nopen\n", "never closed"),
+        ("Write `## [1.2.3] - 2026-01-31` above.\n\n- A thing.\n", "no section"),
+        ("## About ## [1.2.3] - 2026-01-31\n\n- A thing.\n", "no section"),
+        ("```\n## [1.2.3] - 2026-01-31\n- An example.\n```\n", "no section"),
     ],
 )
 def test_unusable_changelog_section_is_refused(script, changelog, message):
     with pytest.raises(script["ReleaseError"], match=message):
         script["release_notes"](changelog, "1.2.3")
+
+
+@pytest.mark.parametrize(
+    "block",
+    [
+        "```\n## not a heading\n# nor this\n```",
+        "~~~text\n## not a heading\n~~~",
+        "````\n```\n## still fenced\n````",
+        "```\n~~~\n## still fenced\n```",
+        "```\n``` not a closer\n## still fenced\n```",
+        "- Item:\n\n  ```sh\n## still fenced\n  ```",
+        "    ## indented code",
+        "##not-a-heading",
+        "Text with ## in the middle.",
+        "``` a`b\n- not a fence",
+    ],
+)
+def test_text_that_is_not_a_heading_stays_in_the_notes(script, block):
+    text = f"## [1.2.3] - 2026-01-31\n\n{block}\n\n- Last.\n\n## [1.2.2] - 2026-01-01\n"
+    assert script["release_notes"](text, "1.2.3") == f"{block}\n\n- Last.\n"
+
+
+@pytest.mark.parametrize(
+    "heading", ["# Policy", "  ## Policy", "   # Policy", "##\tPolicy", "##", "#"], ids=repr
+)
+def test_section_ends_at_any_first_or_second_level_heading(script, heading):
+    text = f"## [1.2.3] - 2026-01-31\n\n- A thing.\n\n{heading}\n\nNot notes.\n"
+    assert script["release_notes"](text, "1.2.3") == "- A thing.\n"
+
+
+def test_mentions_and_examples_of_a_heading_are_not_releases(script, tmp_path):
+    preamble = "Head a section `## [9.9.9] - 2026-01-01`.\n\n```\n## [9.9.9] - 2026-01-01\n```\n\n"
+    root = make_repo(tmp_path, changelog=preamble + CHANGELOG)
+    assert script["check_release"](root, "v1.2.3") == "### Added\n\n- A thing.\n"
+
+
+def test_windows_line_endings_are_read(script):
+    text = CHANGELOG.replace("\n", "\r\n")
+    assert script["release_notes"](text, "1.2.2") == "- An older thing.\n"
 
 
 @pytest.mark.parametrize("name", ["pyproject.toml", "src/etat_major/__init__.py", "CHANGELOG.md"])
@@ -191,6 +248,14 @@ def test_script_fails_closed(tmp_path, tag):
     assert done.stderr.startswith("release check: ")
     assert "Traceback" not in done.stderr and len(done.stderr.splitlines()) == 1
     assert done.stdout == "" and not notes.exists()
+
+
+def test_script_refuses_a_malformed_pyproject_without_a_traceback(tmp_path):
+    root = make_repo(tmp_path / "repo", pyproject='project = "x"\n')
+    done = run_script(root, "v1.2.3", tmp_path / "notes.md")
+    assert done.returncode == 1
+    assert done.stderr.startswith("release check: pyproject.toml: ")
+    assert "Traceback" not in done.stderr
 
 
 def test_script_reports_an_unwritable_notes_file(tmp_path):

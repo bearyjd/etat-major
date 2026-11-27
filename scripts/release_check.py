@@ -17,8 +17,10 @@ from pathlib import Path
 NUMBER = r"(?:0|[1-9][0-9]*)"
 VERSION = rf"{NUMBER}\.{NUMBER}\.{NUMBER}"
 TAG = re.compile(rf"v({VERSION})")
-SECTION = re.compile(r"^## ", re.MULTILINE)
-RELEASE = re.compile(rf"^## \[({VERSION})\](.*)$", re.MULTILINE)
+# CommonMark: an ATX heading or a code fence may be indented by up to three spaces.
+HEADING = re.compile(r" {0,3}(#{1,6})(?:[ \t\r]|$)")
+FENCE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
+RELEASE = re.compile(rf"##[ \t]+\[({VERSION})\](.*)")
 DATED = re.compile(r" - ([0-9]{4}-[0-9]{2}-[0-9]{2})")
 INIT = "src/etat_major/__init__.py"
 PYPROJECT = "pyproject.toml"
@@ -46,20 +48,47 @@ def _read(root: Path, name: str) -> str:
 
 
 def package_version(root: Path) -> str:
-    """Return the single literal `__version__` of the package, without importing it."""
+    """Return the package's `__version__`, bound once to a literal, without importing it."""
     try:
         tree = ast.parse(_read(root, INIT))
     except (SyntaxError, ValueError):
         raise ReleaseError(f"{INIT}: does not parse") from None
-    values = [
-        node.value
+    literals = [
+        node.value.value
         for node in tree.body
         if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Constant)
         and any(isinstance(t, ast.Name) and t.id == "__version__" for t in node.targets)
     ]
-    if len(values) != 1 or not isinstance(values[0], ast.Constant):
-        raise ReleaseError(f"{INIT}: expected one literal __version__ assignment")
-    return str(values[0].value)
+    if _bindings(tree) != 1 or len(literals) != 1:
+        raise ReleaseError(f"{INIT}: expected one literal __version__ assignment and no other")
+    return str(literals[0])
+
+
+def _bindings(tree: ast.Module) -> int:
+    """Count every place that assigns, changes, deletes or imports `__version__`."""
+    nodes = list(ast.walk(tree))
+    stored = [
+        n
+        for n in nodes
+        if isinstance(n, ast.Name) and n.id == "__version__" and not isinstance(n.ctx, ast.Load)
+    ]
+    imported = [
+        n for n in nodes if isinstance(n, ast.alias) and "__version__" in (n.name, n.asname)
+    ]
+    defined = [
+        n
+        for n in nodes
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        and n.name == "__version__"
+    ]
+    return len(stored) + len(imported) + len(defined)
+
+
+def _lookup(value: object, *keys: str) -> object:
+    for key in keys:
+        value = value.get(key) if isinstance(value, dict) else None
+    return value
 
 
 def pyproject_version(root: Path, package: str) -> str:
@@ -68,11 +97,14 @@ def pyproject_version(root: Path, package: str) -> str:
         data = tomllib.loads(_read(root, PYPROJECT))
     except tomllib.TOMLDecodeError:
         raise ReleaseError(f"{PYPROJECT}: does not parse") from None
-    project = data.get("project", {})
+    project = data.get("project")
+    if not isinstance(project, dict):
+        raise ReleaseError(f"{PYPROJECT}: project is not a table")
     if "version" in project:
         return str(project["version"])
-    dynamic = data.get("tool", {}).get("setuptools", {}).get("dynamic", {}).get("version")
-    if "version" in project.get("dynamic", []) and dynamic == {"attr": VERSION_ATTR}:
+    listed = project.get("dynamic")
+    source = _lookup(data, "tool", "setuptools", "dynamic", "version")
+    if isinstance(listed, list) and "version" in listed and source == {"attr": VERSION_ATTR}:
         return package
     raise ReleaseError(f"{PYPROJECT}: version is neither static nor read from {VERSION_ATTR}")
 
@@ -89,19 +121,52 @@ def _require_date(heading_rest: str, version: str) -> None:
         ) from None
 
 
+def _scan(markdown: str) -> list[tuple[str, int]]:
+    """Pair each line with its heading level, 0 for other lines and for fenced code."""
+    scanned, fence = [], ""
+    for line in markdown.split("\n"):
+        marker = FENCE.match(line)
+        level = 0
+        if fence:
+            if marker and marker.group(1).startswith(fence) and not marker.group(2).strip():
+                fence = ""
+        elif marker and not (marker.group(1)[0] == "`" and "`" in marker.group(2)):
+            fence = marker.group(1)
+        else:
+            heading = HEADING.match(line)
+            level = len(heading.group(1)) if heading else 0
+        scanned.append((line.removesuffix("\r"), level))
+    if fence:
+        raise ReleaseError(f"{CHANGELOG}: a code fence is never closed")
+    return scanned
+
+
+def _releases(lines: list[tuple[str, int]]) -> list[tuple[int, str, str]]:
+    """Return the line index, version and heading remainder of each release section."""
+    found = []
+    for index, (line, level) in enumerate(lines):
+        match = RELEASE.match(line.strip()) if level == 2 else None
+        if match:
+            found.append((index, match.group(1), match.group(2)))
+    return found
+
+
 def release_notes(changelog: str, version: str) -> str:
     """Return the body of the dated changelog section for a version."""
-    found = [match for match in RELEASE.finditer(changelog) if match.group(1) == version]
+    lines = _scan(changelog)
+    found = [release for release in _releases(lines) if release[1] == version]
     if not found:
         raise ReleaseError(f"{CHANGELOG}: no section for {version}")
     if len(found) > 1:
         raise ReleaseError(f"{CHANGELOG}: more than one section for {version}")
-    _require_date(found[0].group(2), version)
-    following = SECTION.search(changelog, found[0].end())
-    body = changelog[found[0].end() : following.start() if following else None].strip()
-    if not body:
-        raise ReleaseError(f"{CHANGELOG}: the {version} section is empty")
-    return body + "\n"
+    index, _, rest = found[0]
+    _require_date(rest, version)
+    start = index + 1
+    end = next((i for i in range(start, len(lines)) if lines[i][1] in (1, 2)), len(lines))
+    section = lines[start:end]
+    if not any(line.strip() and not level for line, level in section):
+        raise ReleaseError(f"{CHANGELOG}: the {version} section is empty or only headings")
+    return "\n".join(line for line, _ in section).strip("\n").rstrip() + "\n"
 
 
 def check_release(root: Path, tag: str) -> str:
@@ -114,8 +179,7 @@ def check_release(root: Path, tag: str) -> str:
             raise ReleaseError(f"{name}: version {ascii(stated)} does not match tag v{version}")
     changelog = _read(root, CHANGELOG)
     notes = release_notes(changelog, version)
-    top = RELEASE.search(changelog)
-    if top is None or top.group(1) != version:
+    if _releases(_scan(changelog))[0][1] != version:
         raise ReleaseError(f"{CHANGELOG}: the top release section is not {version}")
     return notes
 
