@@ -10,7 +10,7 @@ from etat_major.localfiles import open_directory, write_new_text
 from etat_major.records import Feature, load_feature
 from etat_major.refs import Ref, RefError, parse_ref
 from etat_major.taskfile import TaskFileError
-from etat_major.text_safety import safe
+from etat_major.text_safety import safe_field
 from etat_major.workspace import _entries, _IssueLog
 
 _DIAGNOSTIC = Path("research brief")
@@ -119,12 +119,13 @@ def _load_feature(workspace: Path, ref: Ref) -> tuple[Path, Feature]:
 
 
 def _checked(path: Path, field: str, value: str) -> str:
-    escaped = safe(value)
-    if _contains_sensitive(value):
+    # One line per value: a line break would start new Markdown structure in the brief.
+    line = safe_field(value)
+    if _contains_sensitive(value) or _contains_sensitive(line):
         raise TaskFileError(
             _diagnostic_name(path), field, "redaction check found sensitive content in brief"
         )
-    return escape(escaped, quote=False)
+    return escape(line, quote=False)
 
 
 def _render(path: Path, feature: Feature) -> str:

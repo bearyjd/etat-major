@@ -221,7 +221,7 @@ def _feature_row(
         planning_text(feature.title),
         feature.status,
         state,
-        planning_text(feature.outcome) if feature.outcome else None,
+        planning_text(feature.outcome, multiline=True) if feature.outcome else None,
         tuple(
             dict.fromkeys(
                 f"{ref.project}/{ref.id}" for ref in feature.tasks if ref.project == feature.project
@@ -255,7 +255,7 @@ def _component_rows(model: ComponentModel | None) -> tuple[ComponentRow, ...]:
             f"{model.project}/{row.parent}" if row.parent else None,
             "proposed" if row.kind == PROPOSAL_KIND else "declared",
             planning_text(row.owner) if row.owner else None,
-            planning_text(row.summary.text) if row.summary else None,
+            planning_text(row.summary.text, multiline=True) if row.summary else None,
             row.summary.provenance if row.summary else None,
             bool(row.summary and row.summary.reviewed_on),
         )

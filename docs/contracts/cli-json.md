@@ -118,7 +118,10 @@ built by `discover_view.discover_payload` from the view dataclasses, so keys
 mirror them: `research`, `decisions`, `omitted_research`, `omitted_decisions`,
 `issue_count` and `query` (always empty in an export). Dates (`source_date`,
 `decided_on`) are ISO 8601 strings or `null`. Decision `alternatives` are
-`[option, why_not]` pairs. Text is already sanitized for display. Output is
+`[option, why_not]` pairs. Text is already sanitized for display (see the
+line-break rule under [Stability and input
+handling](#stability-and-input-handling)); Discover also redacts what would read
+as a location once line breaks and controls are escaped. Output is
 sorted, indented two spaces and ends with one newline. As with planning, a
 new key needs a schema update or an `@2` marker; clients must gate on `schema`.
 
@@ -160,7 +163,21 @@ evaluates overdue milestones against that date and echoes it in
 UTC date.
 
 JSON encodes untrusted text as values and escapes control and Unicode
-formatting characters. Workspace prose and diagnostics redact filesystem
+formatting characters.
+
+The Planning, Discover and Understand payloads follow one rule for line breaks.
+Prose (feature `outcome`, component `summary`, finding `text`, decision
+`chosen`, `rationale` and each `why_not`) keeps real line feeds, with CRLF and
+CR written as LF, including the final one that a YAML block scalar carries.
+Every other free-text string is a single line: each run of spacing that holds a
+tab, CR or LF becomes one space and the ends are trimmed. In both kinds, every
+other control, bidirectional and formatting character, U+0085 and U+2028 among
+them, arrives as visible `\uXXXX` text, and so does a tab in prose. Paths
+(component `paths`, issue `path` and Understand file lists) are the exception:
+they are never flattened or trimmed, only escaped, or replaced by
+`[redacted location]` when they are not a usable path or ref.
+
+Workspace prose and diagnostics redact filesystem
 locations and remote URLs. Research citations remain URLs in their
 dedicated source fields, and index route paths remain HTTP paths. Treat
 decoded strings as untrusted when displaying them.

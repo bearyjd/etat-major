@@ -18,7 +18,8 @@ font-size:.875rem}.notice{border-left:.3rem solid #945300;padding-left:.6rem}"""
 
 
 def _t(text):
-    return escape(planning_text(text))
+    # The view has already flattened single-line fields; keep the line feeds in prose.
+    return escape(planning_text(text, multiline=True))
 
 
 def _badges(*values):
